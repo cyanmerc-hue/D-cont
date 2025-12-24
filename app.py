@@ -812,28 +812,7 @@ def groups_by_amount(amount):
 @app.route('/group/<int:group_id>')
 @require_customer
 def group_preview(group_id):
-    username = session['username']
-    conn = get_db()
-    c = conn.cursor()
-    c.execute('SELECT id, name, description, monthly_amount, COALESCE(max_members, 10), COALESCE(receiver_name, \'\'), COALESCE(receiver_upi, \'\') FROM groups WHERE id=?', (group_id,))
-    row = c.fetchone()
-    if not row:
-        conn.close()
-        abort(404)
-    group = {
-        'id': row[0],
-        'name': row[1],
-        'description': row[2],
-        'monthly_amount': row[3],
-        'max_members': int(row[4] or 10),
-        'receiver_name': row[5] or '',
-        'receiver_upi': row[6] or '',
-    }
-    c.execute('SELECT COUNT(1) FROM group_members WHERE group_id=? AND status=\'joined\'', (group_id,))
-    joined_members = int((c.fetchone() or [0])[0] or 0)
-    conn.close()
-    status = 'Active' if joined_members >= group['max_members'] else 'Formation'
-    return render_template('group_details.html', group=group, joined_members=joined_members, status=status, active_tab='groups')
+    return redirect(url_for('groups_tab'))
 
 
 @app.route('/add-upi', methods=['GET', 'POST'])
