@@ -28,6 +28,17 @@
       <div style="font-size:18px; font-weight:bold; color:#222;">{{ 'Yes' if app_fee_paid else 'No' }}</div>
     </div>
 
+    <div style="margin-top:12px; background:#fff; border:1px solid #e8eef0; border-radius:10px; padding:14px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+        <div>
+          <div style="color:#555; font-size:0.95em;">Trust Score</div>
+          <div style="font-size:18px; font-weight:bold; color:#222;">{{ trust_score }} • {{ trust_score|trust_band }}</div>
+        </div>
+        <span class="{{ trust_score|trust_badge_class }}">{{ trust_score|trust_band }}</span>
+      </div>
+      <div style="color:#777; font-size:0.95em; margin-top:6px;">Tip: pay on time to increase your score.</div>
+    </div>
+
     <form method="POST" action="/profile" enctype="multipart/form-data" style="margin-top:14px; border:1px solid #e8eef0; border-radius:10px; padding:14px;">
       <label style="display:block; color:#555; font-size:0.95em;">Full Name</label>
       <input name="full_name" type="text" value="{{ full_name }}" style="width:100%; padding:10px; border-radius:8px; border:1px solid #cfd8dc;" />

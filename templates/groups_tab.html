@@ -37,6 +37,21 @@
               {% if g.description %}<div style="color:#444; margin-top:8px;">{{ g.description }}</div>{% endif %}
               <div style="color:#555; margin-top:8px;"><strong>Receiver name:</strong> {% if g.receiver_name %}{{ g.receiver_name }}{% else %}<span style="color:#999;">Not set</span>{% endif %}</div>
               <div style="color:#555; margin-top:4px;"><strong>Receiver UPI:</strong> {% if g.receiver_upi %}{{ g.receiver_upi }}{% else %}<span style="color:#999;">Not set</span>{% endif %}</div>
+
+              <div style="margin-top:12px; color:#222; font-weight:bold;">Members</div>
+              {% if g.members and g.members|length > 0 %}
+                <div style="margin-top:8px; display:flex; flex-direction:column; gap:8px;">
+                  {% for m in g.members %}
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; border:1px solid #e8eef0; border-radius:10px; padding:10px; background:#fff;">
+                      <div style="color:#222;">{{ m.full_name or m.username }}</div>
+                      <span class="{{ m.trust_score|trust_badge_class }}">{{ m.trust_score|trust_band }}</span>
+                    </div>
+                  {% endfor %}
+                </div>
+              {% else %}
+                <div style="margin-top:8px; color:#777;">Members list unavailable.</div>
+              {% endif %}
+
               <a href="/payments" style="display:inline-block; margin-top:10px; background:#2D9CDB; color:#fff; padding:8px 12px; border-radius:8px; text-decoration:none;">Go to Payments</a>
             </details>
           </li>

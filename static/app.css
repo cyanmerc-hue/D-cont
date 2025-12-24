@@ -304,6 +304,12 @@ h3 {
   color: var(--warning);
 }
 
+.badgeDanger {
+  border-color: rgba(220, 38, 38, 0.25);
+  background: rgba(220, 38, 38, 0.08);
+  color: var(--danger);
+}
+
 .kpi {
   display: flex;
   flex-direction: column;

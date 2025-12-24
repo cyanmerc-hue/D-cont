@@ -37,7 +37,10 @@
             </div>
             <div style="border:1px solid #e8eef0; border-radius:10px; padding:14px;">
                 <div style="color:#555;">Trust score</div>
-                <div style="font-weight:700;">{{ user.trust_score }}</div>
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+                    <div style="font-weight:700;">{{ user.trust_score }} • {{ user.trust_score|trust_band }}</div>
+                    <span class="{{ user.trust_score|trust_badge_class }}">{{ user.trust_score|trust_band }}</span>
+                </div>
             </div>
             <div style="border:1px solid #e8eef0; border-radius:10px; padding:14px;">
                 <div style="color:#555;">App fee paid</div>
@@ -47,6 +50,41 @@
                 <div style="color:#555;">Future groups</div>
                 <div style="font-weight:700;">{{ 'Frozen' if user.join_blocked else 'Allowed' }}</div>
             </div>
+        </div>
+
+        <div style="margin-top:14px; border:1px solid #e8eef0; border-radius:10px; padding:14px;">
+            <div style="font-weight:700; color:#222;">Trust score breakdown</div>
+            <div style="margin-top:10px; display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:10px;">
+                <div style="border:1px solid #eef3f5; border-radius:10px; padding:12px;">
+                    <div style="color:#777; font-size:0.95em;">On-time verified</div>
+                    <div style="font-weight:800;">{{ trust_breakdown.on_time_verified or 0 }}</div>
+                </div>
+                <div style="border:1px solid #eef3f5; border-radius:10px; padding:12px;">
+                    <div style="color:#777; font-size:0.95em;">Late verified</div>
+                    <div style="font-weight:800;">{{ trust_breakdown.late_verified or 0 }}</div>
+                </div>
+                <div style="border:1px solid #eef3f5; border-radius:10px; padding:12px;">
+                    <div style="color:#777; font-size:0.95em;">Missed</div>
+                    <div style="font-weight:800;">{{ trust_breakdown.missed or 0 }}</div>
+                </div>
+                <div style="border:1px solid #eef3f5; border-radius:10px; padding:12px;">
+                    <div style="color:#777; font-size:0.95em;">Rejected UTR</div>
+                    <div style="font-weight:800;">{{ trust_breakdown.rejected or 0 }}</div>
+                </div>
+                <div style="border:1px solid #eef3f5; border-radius:10px; padding:12px;">
+                    <div style="color:#777; font-size:0.95em;">Completed groups</div>
+                    <div style="font-weight:800;">{{ trust_breakdown.completed_groups or 0 }}</div>
+                </div>
+                <div style="border:1px solid #eef3f5; border-radius:10px; padding:12px;">
+                    <div style="color:#777; font-size:0.95em;">Deposit verified</div>
+                    <div style="font-weight:800;">{{ trust_breakdown.deposit_verified or 0 }}</div>
+                </div>
+                <div style="border:1px solid #eef3f5; border-radius:10px; padding:12px;">
+                    <div style="color:#777; font-size:0.95em;">Default after payout</div>
+                    <div style="font-weight:800;">{{ trust_breakdown.default_after_payout or 0 }}</div>
+                </div>
+            </div>
+            <div style="margin-top:10px; color:#777; font-size:0.95em;">Grace window: {{ trust_breakdown.grace_days or 2 }} day(s).</div>
         </div>
 
         <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;">
@@ -60,13 +98,81 @@
                 <input type="hidden" name="username" value="{{ user.username }}">
                 <button type="submit" style="background:#fff; color:#b42318; border:1px solid #b42318; padding:8px 12px; border-radius:8px; cursor:pointer;">{{ 'Unfreeze future' if user.join_blocked else 'Freeze future' }}</button>
             </form>
-
-            <form method="post" action="/owner/users/update_trust" style="margin:0; display:flex; gap:8px; align-items:center;">
-                <input type="hidden" name="username" value="{{ user.username }}">
-                <input name="trust_score" type="number" min="0" max="100" value="{{ user.trust_score }}" style="width:90px; padding:8px; border-radius:8px; border:1px solid #ccc;">
-                <button type="submit" style="background:#eaf6fb; color:#2D9CDB; border:1px solid #2D9CDB; padding:8px 12px; border-radius:8px; cursor:pointer;">Update trust</button>
-            </form>
         </div>
+
+        <div style="margin-top:14px; border:1px solid #e8eef0; border-radius:10px; padding:14px;">
+            <div style="font-weight:700; color:#222;">Record trust event (auto updates score)</div>
+            <form method="post" action="/owner/users/add_trust_event" style="margin-top:10px; display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:10px;">
+                <input type="hidden" name="username" value="{{ user.username }}">
+
+                <div>
+                    <div style="color:#555; font-size:0.95em;">Event</div>
+                    <select name="event_type" style="width:100%; padding:10px; border-radius:8px; border:1px solid #cfd8dc;">
+                        <option value="contribution_verified">Verified contribution</option>
+                        <option value="contribution_rejected">Rejected/duplicate UTR</option>
+                        <option value="payment_missed">Missed payment</option>
+                        <option value="default_after_payout">Default after payout</option>
+                        <option value="deposit_verified">Deposit verified</option>
+                        <option value="group_completed">Group cycle completed</option>
+                    </select>
+                </div>
+
+                <div>
+                    <div style="color:#555; font-size:0.95em;">Due date (YYYY-MM-DD)</div>
+                    <input name="due_date" type="text" placeholder="2025-12-05" style="width:100%; padding:10px; border-radius:8px; border:1px solid #cfd8dc;" />
+                </div>
+
+                <div>
+                    <div style="color:#555; font-size:0.95em;">Verified date (YYYY-MM-DD)</div>
+                    <input name="verified_at" type="text" placeholder="{{ (trust_events[0].created_at if trust_events and trust_events|length>0 else '') }}" style="width:100%; padding:10px; border-radius:8px; border:1px solid #cfd8dc;" />
+                </div>
+
+                <div>
+                    <div style="color:#555; font-size:0.95em;">Group ID (optional)</div>
+                    <input name="group_id" type="text" placeholder="" style="width:100%; padding:10px; border-radius:8px; border:1px solid #cfd8dc;" />
+                </div>
+
+                <div style="grid-column: 1 / -1;">
+                    <div style="color:#555; font-size:0.95em;">Note (optional)</div>
+                    <input name="note" type="text" placeholder="e.g., UTR verified by receiver" style="width:100%; padding:10px; border-radius:8px; border:1px solid #cfd8dc;" />
+                </div>
+
+                <div style="grid-column: 1 / -1;">
+                    <button type="submit" style="background:#2D9CDB; color:#fff; border:none; padding:10px 14px; border-radius:8px; cursor:pointer;">Add event</button>
+                </div>
+            </form>
+            <div style="margin-top:8px; color:#777; font-size:0.95em;">For “Verified contribution”, due date is required. Late/missed is calculated using the grace window.</div>
+        </div>
+
+        <h3 style="margin-top:22px;">Trust history</h3>
+        {% if trust_events and trust_events|length > 0 %}
+            <div style="overflow-x:auto;">
+                <table style="width:100%; border-collapse: collapse; min-width: 760px;">
+                    <thead>
+                        <tr>
+                            <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Type</th>
+                            <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Due</th>
+                            <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Verified</th>
+                            <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Group</th>
+                            <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Note</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for e in trust_events %}
+                        <tr>
+                            <td style="padding:8px; border-bottom:1px solid #f2f2f2;">{{ e.type }}</td>
+                            <td style="padding:8px; border-bottom:1px solid #f2f2f2;">{{ e.due_date }}</td>
+                            <td style="padding:8px; border-bottom:1px solid #f2f2f2;">{{ e.verified_at }}</td>
+                            <td style="padding:8px; border-bottom:1px solid #f2f2f2;">{{ e.group_id }}</td>
+                            <td style="padding:8px; border-bottom:1px solid #f2f2f2;">{{ e.note }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div style="color:#777;">No trust events recorded yet.</div>
+        {% endif %}
 
         <h3 style="margin-top:22px;">Groups</h3>
         {% if groups and groups|length > 0 %}

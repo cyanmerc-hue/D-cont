@@ -11,6 +11,7 @@ from urllib.parse import quote
 import smtplib
 from email.message import EmailMessage
 import re
+from datetime import datetime
 
 app = Flask(__name__)
 # In production (Render/Heroku/etc.), set SECRET_KEY as an environment variable.
@@ -238,6 +239,185 @@ def status_hint(status: str) -> str:
     return ''
 
 
+def trust_band(score: int) -> str:
+    try:
+        s = int(score)
+    except (TypeError, ValueError):
+        s = 50
+    if s >= 80:
+        return 'Excellent'
+    if s >= 60:
+        return 'Good'
+    if s >= 40:
+        return 'Risky'
+    return 'High risk'
+
+
+def trust_badge_class(score: int) -> str:
+    band = trust_band(score)
+    if band == 'Excellent':
+        return 'badge badgeSuccess'
+    if band == 'Risky':
+        return 'badge badgeWarn'
+    if band == 'High risk':
+        return 'badge badgeDanger'
+    return 'badge'
+
+
+@app.template_filter('trust_band')
+def jinja_trust_band_filter(value):
+    return trust_band(value)
+
+
+@app.template_filter('trust_badge_class')
+def jinja_trust_badge_class_filter(value):
+    return trust_badge_class(value)
+
+
+def _parse_iso_date(value: str):
+    v = (value or '').strip()
+    if not v:
+        return None
+    try:
+        return datetime.strptime(v, '%Y-%m-%d').date()
+    except ValueError:
+        return None
+
+
+def _today_iso() -> str:
+    return date.today().isoformat()
+
+
+def _get_trust_grace_days() -> int:
+    raw = (get_setting('trust_grace_days', '2') or '2').strip()
+    try:
+        g = int(raw)
+    except ValueError:
+        g = 2
+    return max(0, min(14, g))
+
+
+def calculate_trust_from_history(username: str) -> dict:
+    """History-based (Option A) Trust Score.
+
+    Event types supported:
+    - contribution_verified: uses due_date + verified_at to classify on-time/late/missed
+    - contribution_rejected
+    - payment_missed
+    - default_after_payout
+    - deposit_verified
+    - group_completed
+    """
+    username = (username or '').strip()
+    if not username:
+        return {'score': 50, 'breakdown': {}, 'events': []}
+
+    grace_days = _get_trust_grace_days()
+
+    conn = get_db()
+    c = conn.cursor()
+    try:
+        c.execute(
+            """
+            SELECT id, event_type, group_id, due_date, verified_at, created_at, note
+            FROM trust_events
+            WHERE username=?
+            ORDER BY id DESC
+            """,
+            (username,),
+        )
+        rows = c.fetchall()
+    except sqlite3.OperationalError:
+        rows = []
+    conn.close()
+
+    on_time = 0
+    late = 0
+    missed = 0
+    rejected = 0
+    completed_groups = 0
+    deposit_verified = 0
+    default_after_payout = 0
+
+    events = []
+    for r in rows:
+        event_id, event_type, group_id, due_date, verified_at, created_at, note = r
+        event_type = (event_type or '').strip().lower()
+        due = _parse_iso_date(due_date)
+        verified = _parse_iso_date(verified_at)
+
+        if event_type == 'contribution_verified':
+            if due and verified:
+                if verified <= due:
+                    on_time += 1
+                else:
+                    # After due date is late; after grace is missed too.
+                    late += 1
+                    if (verified - due).days > grace_days:
+                        missed += 1
+            else:
+                # If dates are missing, treat as late (minimal positive, avoids abuse)
+                late += 1
+        elif event_type == 'contribution_rejected':
+            rejected += 1
+        elif event_type == 'payment_missed':
+            missed += 1
+        elif event_type == 'default_after_payout':
+            default_after_payout += 1
+        elif event_type == 'deposit_verified':
+            deposit_verified += 1
+        elif event_type == 'group_completed':
+            completed_groups += 1
+
+        events.append(
+            {
+                'id': int(event_id),
+                'type': event_type,
+                'group_id': group_id,
+                'due_date': (due_date or ''),
+                'verified_at': (verified_at or ''),
+                'created_at': (created_at or ''),
+                'note': (note or ''),
+            }
+        )
+
+    score = 50
+    score += 3 * on_time
+    score += 1 * late
+    score += 5 * completed_groups
+    score += 2 * deposit_verified
+    score -= 8 * missed
+    score -= 15 * default_after_payout
+    score -= 3 * rejected
+    score = max(0, min(100, int(score)))
+
+    breakdown = {
+        'on_time_verified': on_time,
+        'late_verified': late,
+        'missed': missed,
+        'rejected': rejected,
+        'completed_groups': completed_groups,
+        'deposit_verified': deposit_verified,
+        'default_after_payout': default_after_payout,
+        'grace_days': grace_days,
+    }
+    return {'score': score, 'breakdown': breakdown, 'events': events}
+
+
+def recalculate_and_store_trust(username: str) -> dict:
+    result = calculate_trust_from_history(username)
+    score = int(result.get('score', 50))
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        c.execute('UPDATE users SET trust_score=? WHERE username=?', (score, username))
+        conn.commit()
+        conn.close()
+    except sqlite3.OperationalError:
+        pass
+    return result
+
+
 @app.template_filter('status_label')
 def jinja_status_label_filter(value):
     return status_label(value)
@@ -456,18 +636,20 @@ def _normalize_mobile_digits(raw: str) -> str:
 @require_customer
 def profile():
     username = session['username']
+    recalculate_and_store_trust(username)
     conn = get_db()
     c = conn.cursor()
     c.execute(
-        'SELECT full_name, mobile, upi_id, app_fee_paid, aadhaar_doc, pan_doc, passport_doc FROM users WHERE username=?',
+        'SELECT full_name, mobile, upi_id, app_fee_paid, aadhaar_doc, pan_doc, passport_doc, COALESCE(trust_score,50) FROM users WHERE username=?',
         (username,),
     )
     row = c.fetchone()
     full_name = mobile = upi_id = None
     aadhaar_doc = pan_doc = passport_doc = None
     app_fee_paid = 0
+    trust_score = 50
     if row:
-        full_name, mobile, upi_id, app_fee_paid, aadhaar_doc, pan_doc, passport_doc = row
+        full_name, mobile, upi_id, app_fee_paid, aadhaar_doc, pan_doc, passport_doc, trust_score = row
     if request.method == 'POST':
         full_name = (request.form.get('full_name') or '').strip()
         upi_id = (request.form.get('upi_id') or '').strip()
@@ -509,8 +691,37 @@ def profile():
         aadhaar_doc=aadhaar_doc or '',
         pan_doc=pan_doc or '',
         passport_doc=passport_doc or '',
+        trust_score=int(trust_score if trust_score is not None else 50),
         active_tab='profile',
     )
+
+
+def _fetch_group_members_with_trust(group_id: int):
+    conn = get_db()
+    c = conn.cursor()
+    try:
+        c.execute(
+            """
+            SELECT u.username, COALESCE(u.full_name,''), COALESCE(u.trust_score,50)
+            FROM group_members gm
+            JOIN users u ON u.username = gm.username
+            WHERE gm.group_id=? AND gm.status='joined'
+            ORDER BY u.id ASC
+            """,
+            (group_id,),
+        )
+        rows = c.fetchall()
+    except sqlite3.OperationalError:
+        rows = []
+    conn.close()
+
+    members = []
+    for username, full_name, trust_score in rows:
+        # Keep scores fresh (group sizes are small)
+        details = recalculate_and_store_trust(username)
+        score = int(details.get('score', trust_score if trust_score is not None else 50))
+        members.append({'username': username, 'full_name': full_name or '', 'trust_score': score})
+    return members
 
 
 @app.route('/profile/doc/<doc_type>')
@@ -561,6 +772,20 @@ def init_db():
     )''')
     c.execute('''CREATE TABLE IF NOT EXISTS groups (id INTEGER PRIMARY KEY, name TEXT, description TEXT, monthly_amount INTEGER)''')
     c.execute('''CREATE TABLE IF NOT EXISTS group_members (id INTEGER PRIMARY KEY, group_id INTEGER, username TEXT, status TEXT)''')
+
+    # Trust score history (Option A: recompute from events)
+    c.execute(
+        '''CREATE TABLE IF NOT EXISTS trust_events (
+            id INTEGER PRIMARY KEY,
+            username TEXT,
+            event_type TEXT,
+            group_id INTEGER,
+            due_date TEXT,
+            verified_at TEXT,
+            created_at TEXT,
+            note TEXT
+        )'''
+    )
 
     # Ensure groups table has monthly_amount column (auto-migration)
     c.execute("PRAGMA table_info(groups)")
@@ -906,6 +1131,7 @@ def owner_users():
 @admin_required
 def owner_user_profile(username):
     username = (username or '').strip()
+    trust_details = recalculate_and_store_trust(username)
     conn = get_db()
     c = conn.cursor()
     c.execute(
@@ -956,11 +1182,18 @@ def owner_user_profile(username):
         'role': row[4] or 'customer',
         'is_active': int(row[5] or 1),
         'join_blocked': int(row[6] or 0),
-        'trust_score': int(row[7] if row[7] is not None else 50),
+        'trust_score': int(trust_details.get('score', row[7] if row[7] is not None else 50)),
         'app_fee_paid': int(row[8] or 0),
         'upi_id': row[9] or '',
     }
-    return render_template('owner_user_profile.html', active_owner_tab='users', user=user, groups=groups)
+    return render_template(
+        'owner_user_profile.html',
+        active_owner_tab='users',
+        user=user,
+        groups=groups,
+        trust_breakdown=trust_details.get('breakdown', {}),
+        trust_events=(trust_details.get('events', [])[:25]),
+    )
 
 
 @app.route('/owner/users/toggle_join_block', methods=['POST'])
@@ -997,20 +1230,50 @@ def owner_toggle_join_block():
 @app.route('/owner/users/update_trust', methods=['POST'])
 @admin_required
 def owner_update_trust():
-    target_username = (request.form.get('username') or '').strip()
-    trust_raw = (request.form.get('trust_score') or '').strip()
-    try:
-        trust = int(trust_raw)
-    except ValueError:
-        trust = 50
-    trust = max(0, min(100, trust))
+    flash('Trust Score is automatic now (history-based). Manual overrides are disabled.')
+    return redirect(url_for('owner_users'))
 
+
+@app.route('/owner/users/add_trust_event', methods=['POST'])
+@admin_required
+def owner_add_trust_event():
+    target_username = (request.form.get('username') or '').strip()
+    event_type = (request.form.get('event_type') or '').strip().lower()
+    due_date = (request.form.get('due_date') or '').strip()
+    verified_at = (request.form.get('verified_at') or '').strip()
+    note = (request.form.get('note') or '').strip()
+    group_id_raw = (request.form.get('group_id') or '').strip()
+    try:
+        group_id = int(group_id_raw) if group_id_raw else None
+    except ValueError:
+        group_id = None
+
+    allowed = {
+        'contribution_verified',
+        'contribution_rejected',
+        'payment_missed',
+        'default_after_payout',
+        'deposit_verified',
+        'group_completed',
+    }
     if not target_username:
         flash('Missing username.')
         return redirect(url_for('owner_users'))
-    if target_username == session.get('username'):
-        flash('You cannot change your own trust score.')
-        return redirect(url_for('owner_users'))
+    if event_type not in allowed:
+        flash('Invalid event type.')
+        return redirect(url_for('owner_user_profile', username=target_username))
+    if event_type == 'contribution_verified':
+        if not _parse_iso_date(due_date):
+            flash('For verified contributions, due date is required (YYYY-MM-DD).')
+            return redirect(url_for('owner_user_profile', username=target_username))
+        if not _parse_iso_date(verified_at):
+            verified_at = _today_iso()
+    else:
+        # Other events can omit dates
+        if verified_at and not _parse_iso_date(verified_at):
+            verified_at = ''
+        if due_date and not _parse_iso_date(due_date):
+            due_date = ''
 
     conn = get_db()
     c = conn.cursor()
@@ -1025,11 +1288,16 @@ def owner_update_trust():
         flash('Admin users cannot be modified here.')
         return redirect(url_for('owner_users'))
 
-    c.execute('UPDATE users SET trust_score=? WHERE username=?', (trust, target_username))
+    c.execute(
+        'INSERT INTO trust_events (username, event_type, group_id, due_date, verified_at, created_at, note) VALUES (?,?,?,?,?,?,?)',
+        (target_username, event_type, group_id, due_date, verified_at, _today_iso(), note),
+    )
     conn.commit()
     conn.close()
-    flash('Trust score updated.')
-    return redirect(url_for('owner_users'))
+
+    recalculate_and_store_trust(target_username)
+    flash('Trust event recorded. Score updated.')
+    return redirect(url_for('owner_user_profile', username=target_username))
 
 
 @app.route('/owner/groups')
@@ -1420,6 +1688,12 @@ def home_tab():
 def groups_tab():
     username = session['username']
     my_groups = _fetch_my_groups(username)
+    for g in my_groups:
+        try:
+            gid = int(g.get('id') or 0)
+        except (TypeError, ValueError):
+            gid = 0
+        g['members'] = _fetch_group_members_with_trust(gid) if gid > 0 else []
     available_groups = _fetch_available_groups(username)
     user = get_user_row(username) or {}
 
