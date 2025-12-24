@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Add UPI - D-cont</title>
+</head>
+<body style="font-family: Arial, Helvetica, sans-serif; background: #f7fbfc; margin: 0; padding: 0;">
+    <div style="background: #fff; box-shadow: 0 2px 8px #e0e0e0; padding: 16px 0 8px 0; text-align: center;">
+      <img src="/static/logo.png" onerror="this.onerror=null;this.src='/static/logo.svg';" alt="D-cont Logo" style="height:60px;"/>
+    </div>
+
+    <div style="max-width: 520px; margin: 28px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px #e0e0e0; padding: 28px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+        <h2 style="color:#2D9CDB; margin-top:0; margin-bottom:0;">Add your UPI ID</h2>
+        <a href="/chat" style="color:#2D9CDB; text-decoration:none;">Help</a>
+      </div>
+
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            <ul>
+            {% for message in messages %}
+              <li>{{ message }}</li>
+            {% endfor %}
+            </ul>
+          {% endif %}
+        {% endwith %}
+
+        <form method="post" action="/add-upi?next={{ next_url }}">
+            <label style="display:block; font-weight:bold; color:#2D9CDB;">UPI ID</label>
+            <input type="text" name="upi_id" placeholder="example@upi" value="{{ user.upi_id or '' }}" style="width:100%; padding:10px; margin:8px 0 16px; border-radius:8px; border:1px solid #ccc;" required>
+            <button type="submit" style="width:100%; background:#2D9CDB; color:#fff; border:none; padding:12px 16px; border-radius:8px; cursor:pointer;">Save</button>
+        </form>
+
+          <div style="margin-top:12px; background:#eaf6fb; border-radius:10px; padding:12px; border:1px solid #2D9CDB; color:#222; line-height:1.5;">
+            We will never ask for your OTP or UPI PIN.
+          </div>
+
+        <div style="margin-top:14px; text-align:center;">
+            <a href="{{ next_url }}" style="color:#2D9CDB; text-decoration:none;">Cancel</a>
+        </div>
+
+        <div style="margin-top:16px; padding-top:14px; border-top:1px solid #eef3f5; display:flex; justify-content:center; gap:12px;">
+          <span style="color:#555;">Need help?</span>
+          <a href="/chat" style="color:#2D9CDB; text-decoration:none;">Chat</a>
+          <a href="{{ support_whatsapp_url }}" target="_blank" rel="noopener" style="color:#2D9CDB; text-decoration:none;">WhatsApp</a>
+        </div>
+    </div>
+</body>
+</html>

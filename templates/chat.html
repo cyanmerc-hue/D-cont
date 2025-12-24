@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chat - D-cont</title>
+</head>
+<body style="font-family: Arial, Helvetica, sans-serif; background: #f7fbfc; margin: 0; padding: 0;">
+    <div style="background: #fff; box-shadow: 0 2px 8px #e0e0e0; padding: 16px 0 8px 0; text-align: center;">
+        <img src="/static/logo.png" onerror="this.onerror=null;this.src='/static/logo.svg';" alt="D-cont Logo" style="height:60px;"/>
+    </div>
+
+    <div style="max-width: 720px; margin: 18px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px #e0e0e0; padding: 18px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+            <h2 style="color:#2D9CDB; margin:0;">D-CONT Bot</h2>
+            <a href="/home" style="color:#2D9CDB; text-decoration:none;">Back</a>
+        </div>
+
+        <div style="margin-top:12px; background:#eaf6fb; border-radius:10px; padding:12px; border:1px solid #2D9CDB;">
+            <strong>Trust:</strong> D-CONT never holds money. Payments happen directly between members.
+        </div>
+
+        <div style="margin-top:12px; background:#fff; border:1px solid #e8eef0; border-radius:10px; padding:12px; height: 360px; overflow:auto;">
+            {% for m in history %}
+                {% if m.from == 'user' %}
+                    <div style="display:flex; justify-content:flex-end; margin:8px 0;">
+                        <div style="max-width: 78%; background:#2D9CDB; color:#fff; padding:10px 12px; border-radius:10px;">{{ m.text }}</div>
+                    </div>
+                {% else %}
+                    <div style="display:flex; justify-content:flex-start; margin:8px 0;">
+                        <div style="max-width: 78%; background:#eaf6fb; color:#222; padding:10px 12px; border-radius:10px; border:1px solid #2D9CDB;">{{ m.text }}</div>
+                    </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+
+        {% if intent_link and intent_link_label %}
+            <div style="margin-top:10px;">
+                <a href="{{ intent_link }}" style="display:inline-block; background:#2D9CDB; color:#fff; padding:8px 14px; border-radius:8px; text-decoration:none;">{{ intent_link_label }}</a>
+            </div>
+        {% endif %}
+
+        {% if whatsapp_url %}
+            <div style="margin-top:12px; background:#fff; border:1px solid #e8eef0; border-radius:10px; padding:12px;">
+                <a href="{{ whatsapp_url }}" target="_blank" rel="noopener" style="display:inline-block; background:#2D9CDB; color:#fff; padding:10px 16px; border-radius:8px; text-decoration:none;">Chat on WhatsApp</a>
+                <div style="margin-top:10px; color:#555; font-size:0.95em; line-height:1.4;">
+                    We won’t ask for OTP, UPI PIN, or bank details in chat.
+                </div>
+            </div>
+        {% endif %}
+
+        <div style="margin-top:12px;">
+            <div style="display:flex; flex-wrap:wrap; gap:8px;">
+                {% for q in quick_replies %}
+                    <form method="post" style="margin:0;">
+                        <input type="hidden" name="message" value="{{ q }}">
+                        <button type="submit" style="background:#eaf6fb; color:#2D9CDB; border:1px solid #2D9CDB; padding:6px 10px; border-radius:999px; cursor:pointer;">{{ q }}</button>
+                    </form>
+                {% endfor %}
+            </div>
+        </div>
+
+        <form method="post" style="margin-top:12px; display:flex; gap:8px;">
+            <input type="text" name="message" placeholder="Type your question…" style="flex:1; padding:10px; border-radius:10px; border:1px solid #ccc;">
+            <button type="submit" style="background:#2D9CDB; color:#fff; border:none; padding:10px 16px; border-radius:10px; cursor:pointer;">Send</button>
+        </form>
+
+        <div style="margin-top:16px; padding-top:14px; border-top:1px solid #eef3f5; display:flex; justify-content:center; gap:12px;">
+            <span style="color:#555;">Need help?</span>
+            <a href="/chat" style="color:#2D9CDB; text-decoration:none;">Chat</a>
+            <a href="{{ support_whatsapp_url }}" target="_blank" rel="noopener" style="color:#2D9CDB; text-decoration:none;">WhatsApp</a>
+        </div>
+    </div>
+</body>
+</html>

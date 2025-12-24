@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Dashboard - D-cont</title>
+</head>
+<body style="font-family: Arial, Helvetica, sans-serif; background: #f7fbfc; margin: 0; padding: 0;">
+    <div style="background: #fff; box-shadow: 0 2px 8px #e0e0e0; padding: 16px 0 8px 0; text-align: center;">
+        <img src="/static/logo.png" onerror="this.onerror=null;this.src='/static/logo.svg';" alt="D-cont Logo" style="height:60px; margin-bottom: 0;"/>
+    </div>
+    <div style="max-width: 600px; margin: 32px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px #e0e0e0; padding: 32px;">
+        <h2 style="color: #2D9CDB;">Welcome, {{ username }}!</h2>
+        <div style="float:right; display:flex; gap:8px;">
+            {% if is_admin %}
+                <a href="/admin" style="color:#2D9CDB; background:#eaf6fb; padding:6px 16px; border-radius:6px; text-decoration:none; border:1px solid #2D9CDB;">Admin</a>
+            {% endif %}
+            <a href="/profile" style="color:#2D9CDB; background:#eaf6fb; padding:6px 16px; border-radius:6px; text-decoration:none; border:1px solid #2D9CDB;">Profile</a>
+            <a href="/logout" style="color:#fff; background:#2D9CDB; padding:6px 16px; border-radius:6px; text-decoration:none;">Logout</a>
+        </div>
+        <div style="clear:both;"></div>
+
+        <h3 style="margin-top: 26px; color: #222;">Your Contribution Groups</h3>
+        {% set any_joined = false %}
+        {% for group in groups %}
+            {% if group['joined'] %}
+                {% set any_joined = true %}
+            {% endif %}
+        {% endfor %}
+
+        {% if any_joined %}
+            <ul style="list-style:none; padding:0;">
+            {% for group in groups %}
+                {% if group['joined'] %}
+                <li style="margin-bottom: 16px; background: #eaf6fb; border-radius: 8px; padding: 16px; box-shadow: 0 1px 4px #e0e0e0;">
+                    <strong style="font-size: 1.1em; color: #2D9CDB;">{{ group['name'] }}</strong><br>
+                    {% if group['monthly_amount'] %}
+                        <span style="color: #222;"><strong>Your monthly contribution:</strong> ₹{{ group['monthly_amount'] }}</span><br>
+                    {% endif %}
+                    <span style="color: #444;">{{ group['description'] }}</span><br>
+                </li>
+                {% endif %}
+            {% endfor %}
+            </ul>
+        {% else %}
+            <p style="color:#555;">You have not joined any group yet.</p>
+        {% endif %}
+
+        <h3 style="margin-top: 26px; color: #222;">Available Groups</h3>
+        {% set any_available = false %}
+        {% for group in groups %}
+            {% if not group['joined'] %}
+                {% set any_available = true %}
+            {% endif %}
+        {% endfor %}
+
+        {% if any_available %}
+            <ul style="list-style:none; padding:0;">
+            {% for group in groups %}
+                {% if not group['joined'] %}
+                <li style="margin-bottom: 16px; background: #fff; border: 1px solid #e8eef0; border-radius: 8px; padding: 16px; box-shadow: 0 1px 4px #f0f0f0;">
+                    <strong style="font-size: 1.1em; color: #2D9CDB;">{{ group['name'] }}</strong><br>
+                    {% if group['monthly_amount'] %}
+                        <span style="color: #222;"><strong>Contribution:</strong> ₹{{ group['monthly_amount'] }} / month</span><br>
+                    {% endif %}
+                    <span style="color: #444;">{{ group['description'] }}</span><br>
+                    <form method="post" action="/join_group" style="margin-top:10px;">
+                        <input type="hidden" name="group_id" value="{{ group['id'] }}">
+                        <input type="submit" value="Join Group" style="background:#2D9CDB; color:#fff; border:none; padding:6px 16px; border-radius:6px; cursor:pointer;">
+                    </form>
+                </li>
+                {% endif %}
+            {% endfor %}
+            </ul>
+        {% else %}
+            <p style="color:#555;">No available groups right now.</p>
+        {% endif %}
+    </div>
+</body>
+</html>

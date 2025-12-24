@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Setup - D-cont</title>
+</head>
+<body style="font-family: Arial, Helvetica, sans-serif; background: #f7fbfc; margin: 0; padding: 0;">
+    <div style="background: #fff; box-shadow: 0 2px 8px #e0e0e0; padding: 16px 0 8px 0; text-align: center;">
+        <img src="/static/logo.png" onerror="this.onerror=null;this.src='/static/logo.svg';" alt="D-cont Logo" style="height:60px;"/>
+    </div>
+
+    <div style="max-width: 520px; margin: 28px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px #e0e0e0; padding: 28px;">
+        <h2 style="color:#2D9CDB; margin-top:0;">Basic setup</h2>
+
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            <ul>
+            {% for message in messages %}
+              <li>{{ message }}</li>
+            {% endfor %}
+            </ul>
+          {% endif %}
+        {% endwith %}
+
+        <form method="post">
+            <label style="display:block; font-weight:bold; color:#2D9CDB;">Full Name *</label>
+            <input type="text" name="full_name" value="{{ (user.full_name if user else '') or '' }}" required style="width:100%; padding:10px; margin:8px 0 14px; border-radius:8px; border:1px solid #ccc;">
+
+            <label style="display:block; font-weight:bold; color:#2D9CDB;">Preferred Language *</label>
+            <select name="language" required style="width:100%; padding:10px; margin:8px 0 14px; border-radius:8px; border:1px solid #ccc;">
+                <option value="">Select</option>
+                <option value="English" {% if user and user.language == 'English' %}selected{% endif %}>English</option>
+                <option value="Hindi" {% if user and user.language == 'Hindi' %}selected{% endif %}>Hindi</option>
+                <option value="Hinglish" {% if user and user.language == 'Hinglish' %}selected{% endif %}>Hinglish</option>
+            </select>
+
+            <label style="display:block; font-weight:bold; color:#2D9CDB;">City / State (optional)</label>
+            <input type="text" name="city_state" value="{{ (user.city_state if user else '') or '' }}" style="width:100%; padding:10px; margin:8px 0 14px; border-radius:8px; border:1px solid #ccc;">
+
+            <label style="display:block; font-weight:bold; color:#2D9CDB;">Email (optional)</label>
+            <input type="email" name="email" value="{{ (user.email if user else '') or '' }}" style="width:100%; padding:10px; margin:8px 0 18px; border-radius:8px; border:1px solid #ccc;">
+
+            <button type="submit" style="width:100%; background:#2D9CDB; color:#fff; border:none; padding:12px 16px; border-radius:8px; cursor:pointer;">Finish</button>
+        </form>
+
+        <div style="margin-top:14px; text-align:center;">
+            <a href="/how-it-works" style="color:#2D9CDB; text-decoration:none;">Back</a>
+        </div>
+
+        <div style="margin-top:16px; padding-top:14px; border-top:1px solid #eef3f5; display:flex; justify-content:center; gap:12px;">
+            <span style="color:#555;">Need help?</span>
+            <a href="/chat" style="color:#2D9CDB; text-decoration:none;">Chat</a>
+            <a href="{{ support_whatsapp_url }}" target="_blank" rel="noopener" style="color:#2D9CDB; text-decoration:none;">WhatsApp</a>
+        </div>
+    </div>
+</body>
+</html>

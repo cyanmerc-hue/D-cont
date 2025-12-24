@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Request Sent - D-cont</title>
+</head>
+<body style="font-family: Arial, Helvetica, sans-serif; background: #f7fbfc; margin: 0; padding: 0;">
+    <div style="background: #fff; box-shadow: 0 2px 8px #e0e0e0; padding: 16px 0 8px 0; text-align: center;">
+        <img src="/static/logo.png" onerror="this.onerror=null;this.src='/static/logo.svg';" alt="D-cont Logo" style="height:60px;"/>
+    </div>
+
+    <div style="max-width: 520px; margin: 28px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px #e0e0e0; padding: 28px; text-align:center;">
+        <h2 style="color:#2D9CDB; margin-top:0;">Request sent</h2>
+        <p style="color:#222; line-height:1.6; margin:0;"><strong>{{ group.name }}</strong></p>
+        <p style="color:#444; line-height:1.6; margin:10px 0 0 0;">Monthly contribution: <strong>₹{{ group.monthly_amount }}</strong></p>
+
+        <div style="margin-top:16px; background:#eaf6fb; border-radius:10px; padding:14px; border:1px solid #2D9CDB; text-align:left;">
+            <p style="margin:0; color:#222; line-height:1.5;"><strong>Status:</strong> {{ (member_status or 'pending')|status_label }}</p>
+            <p style="margin:10px 0 0 0; color:#222; line-height:1.5;">{{ (member_status or 'pending')|status_hint }}</p>
+        </div>
+
+        <a href="/home" style="display:inline-block; margin-top:18px; background:#2D9CDB; color:#fff; padding:10px 16px; border-radius:8px; text-decoration:none;">Go to Home</a>
+        <div style="margin-top:12px;">
+            <a href="/chat" style="display:inline-block; background:#eaf6fb; color:#2D9CDB; padding:10px 16px; border-radius:8px; text-decoration:none; border:1px solid #2D9CDB;">Get help</a>
+            <a href="{{ support_whatsapp_url }}" target="_blank" rel="noopener" style="display:inline-block; margin-left:8px; background:#eaf6fb; color:#2D9CDB; padding:10px 16px; border-radius:8px; text-decoration:none; border:1px solid #2D9CDB;">WhatsApp</a>
+        </div>
+
+        <div style="margin-top:16px; padding-top:14px; border-top:1px solid #eef3f5; display:flex; justify-content:center; gap:12px;">
+            <span style="color:#555;">Need help?</span>
+            <a href="/chat" style="color:#2D9CDB; text-decoration:none;">Chat</a>
+            <a href="{{ support_whatsapp_url }}" target="_blank" rel="noopener" style="color:#2D9CDB; text-decoration:none;">WhatsApp</a>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin - D-cont</title>
+</head>
+<body style="font-family: Arial, Helvetica, sans-serif; background: #f7fbfc; margin: 0; padding: 0;">
+    <div style="background: #fff; box-shadow: 0 2px 8px #e0e0e0; padding: 16px 0 8px 0; text-align: center;">
+        <img src="/static/logo.png" onerror="this.onerror=null;this.src='/static/logo.svg';" alt="D-cont Logo" style="height:60px; margin-bottom: 0;"/>
+    </div>
+
+    <div style="max-width: 950px; margin: 24px auto 48px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px #e0e0e0; padding: 28px; color: #222;">
+        <div style="display:flex; justify-content: space-between; align-items:center; gap: 12px;">
+            <h2 style="margin:0; color:#2D9CDB;">Admin Panel</h2>
+            <div style="display:flex; gap: 8px;">
+                <a href="/dashboard" style="color:#2D9CDB; background:#eaf6fb; padding:6px 16px; border-radius:6px; text-decoration:none; border:1px solid #2D9CDB;">Dashboard</a>
+                <a href="/logout" style="color:#fff; background:#2D9CDB; padding:6px 16px; border-radius:6px; text-decoration:none;">Logout</a>
+            </div>
+        </div>
+
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            <ul>
+            {% for message in messages %}
+              <li>{{ message }}</li>
+            {% endfor %}
+            </ul>
+          {% endif %}
+        {% endwith %}
+
+        <h3 style="margin-top: 24px;">Join Requests</h3>
+        {% if join_requests and join_requests|length > 0 %}
+            <table style="width:100%; border-collapse: collapse;">
+                <thead>
+                    <tr>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">User</th>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Mobile</th>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">UPI</th>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Group</th>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Amount</th>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Status</th>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for r in join_requests %}
+                    <tr>
+                        <td style="padding:8px; border-bottom:1px solid #f2f2f2;">{{ r['full_name'] or r['username'] }}</td>
+                        <td style="padding:8px; border-bottom:1px solid #f2f2f2;">{{ r['mobile'] }}</td>
+                        <td style="padding:8px; border-bottom:1px solid #f2f2f2;">{{ r['upi_id'] }}</td>
+                        <td style="padding:8px; border-bottom:1px solid #f2f2f2;">{{ r['group_name'] }}</td>
+                        <td style="padding:8px; border-bottom:1px solid #f2f2f2;">₹{{ r['monthly_amount'] }}</td>
+                        <td style="padding:8px; border-bottom:1px solid #f2f2f2;"><strong>{{ r['status'] }}</strong></td>
+                        <td style="padding:8px; border-bottom:1px solid #f2f2f2;">
+                            <div style="display:flex; gap:8px;">
+                                <form method="post" action="/admin/update_membership_status" style="margin:0;">
+                                    <input type="hidden" name="membership_id" value="{{ r['membership_id'] }}">
+                                    <input type="hidden" name="status" value="joined">
+                                    <button type="submit" style="background:#2D9CDB; color:#fff; border:none; padding:6px 12px; border-radius:6px; cursor:pointer;">Approve</button>
+                                </form>
+                                <form method="post" action="/admin/update_membership_status" style="margin:0;">
+                                    <input type="hidden" name="membership_id" value="{{ r['membership_id'] }}">
+                                    <input type="hidden" name="status" value="rejected">
+                                    <button type="submit" style="background:#eaf6fb; color:#2D9CDB; border:1px solid #2D9CDB; padding:6px 12px; border-radius:6px; cursor:pointer;">Reject</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p style="color:#555;">No pending join requests.</p>
+        {% endif %}
+
+        <h3 style="margin-top: 24px;">Groups</h3>
+        {% if groups %}
+            <table style="width:100%; border-collapse: collapse;">
+                <thead>
+                    <tr>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Name</th>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Description</th>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Monthly Amount (₹)</th>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for g in groups %}
+                    <tr>
+                        <form method="post" action="/admin/update_group">
+                            <td style="padding:8px; border-bottom:1px solid #f2f2f2;">
+                                <input type="hidden" name="group_id" value="{{ g['id'] }}">
+                                <input type="text" name="name" value="{{ g['name'] }}" style="width: 100%; padding:6px; border-radius:6px; border:1px solid #ccc;">
+                            </td>
+                            <td style="padding:8px; border-bottom:1px solid #f2f2f2;">
+                                <input type="text" name="description" value="{{ g['description'] }}" style="width: 100%; padding:6px; border-radius:6px; border:1px solid #ccc;">
+                            </td>
+                            <td style="padding:8px; border-bottom:1px solid #f2f2f2;">
+                                <input type="number" min="0" name="monthly_amount" value="{{ g['monthly_amount'] or 0 }}" style="width: 140px; padding:6px; border-radius:6px; border:1px solid #ccc;">
+                            </td>
+                            <td style="padding:8px; border-bottom:1px solid #f2f2f2;">
+                                <button type="submit" style="background:#2D9CDB; color:#fff; border:none; padding:6px 16px; border-radius:6px; cursor:pointer;">Save</button>
+                            </td>
+                        </form>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p>No groups found.</p>
+        {% endif %}
+
+        <h3 style="margin-top: 24px;">Users</h3>
+        {% if users %}
+            <table style="width:100%; border-collapse: collapse;">
+                <thead>
+                    <tr>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Username</th>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Full Name</th>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Mobile</th>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Role</th>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Status</th>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for u in users %}
+                    <tr>
+                        <td style="padding:8px; border-bottom:1px solid #f2f2f2;">{{ u['username'] }}</td>
+                        <td style="padding:8px; border-bottom:1px solid #f2f2f2;">{{ u['full_name'] or '' }}</td>
+                        <td style="padding:8px; border-bottom:1px solid #f2f2f2;">{{ u['mobile'] or '' }}</td>
+                        <td style="padding:8px; border-bottom:1px solid #f2f2f2;">{{ u['role'] or 'customer' }}</td>
+                        <td style="padding:8px; border-bottom:1px solid #f2f2f2;">
+                            {% if u['is_active'] %}
+                                <span style="color:#1b7f3a; font-weight:700;">Active</span>
+                            {% else %}
+                                <span style="color:#b42318; font-weight:700;">Blocked</span>
+                            {% endif %}
+                        </td>
+                        <td style="padding:8px; border-bottom:1px solid #f2f2f2;">
+                            {% if (u['role'] or 'customer') == 'admin' %}
+                                <span style="color:#777;">—</span>
+                            {% else %}
+                                {% if u['is_active'] %}
+                                    <form method="post" action="/admin/toggle_user_active" style="margin:0;">
+                                        <input type="hidden" name="username" value="{{ u['username'] }}">
+                                        <input type="hidden" name="action" value="block">
+                                        <button type="submit" style="background:#eaf6fb; color:#2D9CDB; border:1px solid #2D9CDB; padding:6px 12px; border-radius:6px; cursor:pointer;">Block</button>
+                                    </form>
+                                {% else %}
+                                    <form method="post" action="/admin/toggle_user_active" style="margin:0;">
+                                        <input type="hidden" name="username" value="{{ u['username'] }}">
+                                        <input type="hidden" name="action" value="unblock">
+                                        <button type="submit" style="background:#2D9CDB; color:#fff; border:none; padding:6px 12px; border-radius:6px; cursor:pointer;">Unblock</button>
+                                    </form>
+                                {% endif %}
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p>No users found.</p>
+        {% endif %}
+
+        <div style="margin-top: 18px;">
+            <p style="color:#555; font-size: 0.95em;">Note: This is a demo admin panel. For production, add stronger auth and audit logs.</p>
+        </div>
+    </div>
+</body>
+</html>

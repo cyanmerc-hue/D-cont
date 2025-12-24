@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Groups - ₹{{ amount }} - D-cont</title>
+</head>
+<body style="font-family: Arial, Helvetica, sans-serif; background: #f7fbfc; margin: 0; padding: 0;">
+    <div style="background: #fff; box-shadow: 0 2px 8px #e0e0e0; padding: 16px 0 8px 0; text-align: center;">
+        <img src="/static/logo.png" onerror="this.onerror=null;this.src='/static/logo.svg';" alt="D-cont Logo" style="height:60px;"/>
+    </div>
+
+    <div style="max-width: 600px; margin: 28px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px #e0e0e0; padding: 28px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+            <h2 style="color:#2D9CDB; margin:0;">₹{{ amount }} / month groups</h2>
+            <div style="display:flex; gap:10px; align-items:center;">
+                <a href="/chat" style="color:#2D9CDB; text-decoration:none;">Help</a>
+                <a href="/home" style="color:#2D9CDB; text-decoration:none;">Back</a>
+            </div>
+        </div>
+
+        {% if groups and groups|length > 0 %}
+            <ul style="list-style:none; padding:0; margin-top:18px;">
+            {% for g in groups %}
+                <li style="margin-bottom: 12px; background: #fff; border: 1px solid #e8eef0; border-radius: 10px; padding: 14px; box-shadow: 0 1px 4px #f0f0f0;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+                        <div>
+                            <div style="font-weight:bold; color:#2D9CDB;">{{ g.name }}</div>
+                            <div style="color:#444;">{{ g.description }}</div>
+                        </div>
+                        <div style="text-align:right; min-width:120px;">
+                            {% if g.member_status %}
+                                <div style="font-weight:bold; color:#222;">{{ g.member_status|status_label }}</div>
+                                <a href="/group/{{ g.id }}" style="color:#2D9CDB; text-decoration:none;">View</a>
+                            {% else %}
+                                <a href="/group/{{ g.id }}" style="background:#2D9CDB; color:#fff; padding:8px 14px; border-radius:8px; text-decoration:none; display:inline-block;">Preview</a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </li>
+            {% endfor %}
+            </ul>
+        {% else %}
+            <p style="color:#555; margin-top:18px;">No groups available for this amount right now.</p>
+            <a href="/chat" style="display:inline-block; margin-top:10px; background:#2D9CDB; color:#fff; padding:10px 14px; border-radius:8px; text-decoration:none;">Chat with D-CONT Bot</a>
+            <a href="{{ support_whatsapp_url }}" target="_blank" rel="noopener" style="display:inline-block; margin-top:10px; background:#eaf6fb; color:#2D9CDB; padding:10px 14px; border-radius:8px; text-decoration:none; border:1px solid #2D9CDB;">Chat on WhatsApp</a>
+        {% endif %}
+
+        <div style="margin-top:16px; padding-top:14px; border-top:1px solid #eef3f5; display:flex; justify-content:center; gap:12px;">
+            <span style="color:#555;">Need help?</span>
+            <a href="/chat" style="color:#2D9CDB; text-decoration:none;">Chat</a>
+            <a href="{{ support_whatsapp_url }}" target="_blank" rel="noopener" style="color:#2D9CDB; text-decoration:none;">WhatsApp</a>
+        </div>
+    </div>
+</body>
+</html>

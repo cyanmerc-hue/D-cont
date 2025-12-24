@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Local database and uploads (do not commit)
+users.db
+static/uploads/
+
+# OS
+.DS_Store
+Thumbs.db
