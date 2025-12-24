@@ -7,6 +7,15 @@
   --text: #222;
   --muted: #555;
   --soft: #eaf6fb;
+
+  /* “Pro theme” aliases (kept within existing palette) */
+  --card: var(--surface);
+  --primary-weak: var(--soft);
+  --success: #16A34A;
+  --warning: #D97706;
+  --danger: #DC2626;
+  --radius: 16px;
+  --shadow-pro: 0 8px 24px rgba(15, 23, 42, 0.08);
 }
 
 * {
@@ -59,6 +68,11 @@ body.app-body::before {
   padding: 0 14px;
 }
 
+/* Optional wider container (fintech-style) */
+.container-pro {
+  max-width: 980px;
+}
+
 .container-wide {
   max-width: 1100px;
 }
@@ -68,6 +82,14 @@ body.app-body::before {
   border-radius: 12px;
   box-shadow: 0 2px 12px var(--shadow);
   padding: 22px;
+}
+
+/* Pro-style card (border + softer shadow) */
+.card-pro {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-pro);
 }
 
 .card-lg {
@@ -104,6 +126,27 @@ h3 {
   color: var(--muted);
 }
 
+.small {
+  font-size: 12px;
+}
+
+.hr {
+  height: 1px;
+  background: var(--border);
+  margin: 14px 0;
+}
+
+.row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.col {
+  flex: 1;
+  min-width: 280px;
+}
+
 .btn-row {
   display: flex;
   gap: 10px;
@@ -121,6 +164,19 @@ h3 {
   border-radius: 8px;
   cursor: pointer;
   text-decoration: none;
+}
+
+/* React snippet compatibility: .btnPrimary/.btnGhost */
+.btnPrimary {
+  background: var(--primary);
+  border: 1px solid var(--primary);
+  color: #fff;
+}
+
+.btnGhost {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
 }
 
 .btn-sm {
@@ -160,6 +216,94 @@ h3 {
   position: sticky;
   top: 0;
   z-index: 10;
+}
+
+/* React snippet compatibility: .topbar/.topbarInner */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: rgba(247, 251, 252, 0.85);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+}
+
+.topbarInner {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+}
+
+.logoMark {
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  background: var(--primary);
+  display: grid;
+  place-items: center;
+  color: white;
+  font-weight: 900;
+}
+
+.pill {
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: white;
+  color: var(--muted);
+}
+
+.badgeSuccess {
+  border-color: rgba(22, 163, 74, 0.25);
+  background: rgba(22, 163, 74, 0.08);
+  color: var(--success);
+}
+
+.badgeWarn {
+  border-color: rgba(217, 119, 6, 0.25);
+  background: rgba(217, 119, 6, 0.08);
+  color: var(--warning);
+}
+
+.kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.kpiValue {
+  font-size: 26px;
+  font-weight: 900;
+}
+
+.kpiLabel {
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .nav-inner {
