@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: d-cont-web
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    autoDeployTrigger: commit
+    disk:
+      name: app-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DCONT_DATABASE_PATH
+        value: /var/data/users.db
+      - key: DCONT_UPLOAD_FOLDER
+        value: /var/data/uploads
+      - key: DCONT_ADMIN_USERNAME
+        sync: false
+      - key: DCONT_ADMIN_PASSWORD
+        sync: false
+      - key: DCONT_ADMIN_MOBILE
+        sync: false
