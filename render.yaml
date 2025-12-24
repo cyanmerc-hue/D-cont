@@ -1,15 +1,14 @@
 services:
   - type: web
     name: d-cont-web
-    runtime: python
-    plan: starter
+    env: python
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app
-    autoDeployTrigger: commit
+    autoDeploy: true
     disk:
       name: app-data
       mountPath: /var/data
-      sizeGB: 1
+      sizeGB: 10
     envVars:
       - key: SECRET_KEY
         generateValue: true
