@@ -2,6 +2,7 @@
 <html>
 <head>
     <title>Profile - D-cont</title>
+    <link rel="stylesheet" href="/static/app.css">
     <style>
         .profile-container { max-width: 400px; margin: 40px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px #e0e0e0; padding: 32px; }
         .profile-photo { width: 120px; height: 120px; border-radius: 50%; object-fit: cover; border: 2px solid #2D9CDB; margin-bottom: 16px; }
@@ -10,51 +11,59 @@
         .profile-btn { background: #2D9CDB; color: #fff; border: none; padding: 10px 24px; border-radius: 6px; cursor: pointer; }
     </style>
 </head>
-<body class="app-body" style="font-family: Arial, Helvetica, sans-serif; background: #f7fbfc; margin: 0; padding: 0;">
-    <link rel="stylesheet" href="/static/app.css">
+<body class="app-body">
+    <div class="app-header">
+        <img src="/static/logo.png" onerror="this.onerror=null;this.src='/static/logo.svg';" alt="D-cont Logo" class="app-logo"/>
+    </div>
+
     <div class="profile-container">
-<body class="app-body" style="font-family: Arial, Helvetica, sans-serif; background: #f7fbfc; margin: 0; padding: 0;">
-            <img src="/static/logo.png" onerror="this.onerror=null;this.src='/static/logo.svg';" alt="D-cont Logo" style="height:60px;"/>
-        </div>
         <h2 style="text-align:center; color:#2D9CDB;">Your Profile</h2>
-                {% with messages = get_flashed_messages() %}
-                    {% if messages %}
-                        <ul>
-                        {% for message in messages %}
-                            <li>{{ message }}</li>
-                        {% endfor %}
-                        </ul>
-                    {% endif %}
-                {% endwith %}
+
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <ul>
+                {% for message in messages %}
+                    <li>{{ message }}</li>
+                {% endfor %}
+                </ul>
+            {% endif %}
+        {% endwith %}
+
         {% if photo_url %}
             <img src="{{ photo_url }}" alt="Profile Photo" class="profile-photo">
         {% else %}
             <img src="/static/default-profile.svg" alt="Profile Photo" class="profile-photo">
         {% endif %}
+
         <form method="post" enctype="multipart/form-data">
-                        <label class="profile-label">Mobile Number</label>
-                        <input type="text" name="mobile" class="profile-input" value="{{ mobile or '' }}" required>
+            <label class="profile-label">Mobile Number</label>
+            <input type="text" name="mobile" class="profile-input" value="{{ mobile or '' }}" required>
+
             <label class="profile-label">Full Name</label>
             <input type="text" name="full_name" class="profile-input" value="{{ full_name or '' }}" required>
+
             <label class="profile-label">Email</label>
             <input type="email" name="email" class="profile-input" value="{{ email or '' }}" required>
-                        <label class="profile-label">Preferred Language</label>
-                        <select name="language" class="profile-input" required>
-                                <option value="English" {% if language == 'English' %}selected{% endif %}>English</option>
-                                <option value="Hindi" {% if language == 'Hindi' %}selected{% endif %}>Hindi</option>
-                                <option value="Hinglish" {% if language == 'Hinglish' %}selected{% endif %}>Hinglish</option>
-                        </select>
-                        <label class="profile-label">City / State (optional)</label>
-                        <input type="text" name="city_state" class="profile-input" value="{{ city_state or '' }}">
+
+            <label class="profile-label">Preferred Language</label>
+            <select name="language" class="profile-input" required>
+                <option value="English" {% if language == 'English' %}selected{% endif %}>English</option>
+                <option value="Hindi" {% if language == 'Hindi' %}selected{% endif %}>Hindi</option>
+                <option value="Hinglish" {% if language == 'Hinglish' %}selected{% endif %}>Hinglish</option>
+            </select>
+
+            <label class="profile-label">City / State (optional)</label>
+            <input type="text" name="city_state" class="profile-input" value="{{ city_state or '' }}">
+
             <label class="profile-label">Profile Photo</label>
             <input type="file" name="photo" class="profile-input" accept="image/*">
+
             <button type="submit" class="profile-btn">Save Profile</button>
         </form>
+
         <div style="text-align:center; margin-top:16px;">
             <a href="{% if session.get('role') == 'admin' %}/dashboard{% else %}/home{% endif %}" style="color:#2D9CDB; text-decoration:none;">&larr; Back</a>
         </div>
-
-        
     </div>
 </body>
 </html>
