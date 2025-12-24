@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Groups - D-cont</title>
+</head>
+<body style="font-family: Arial, Helvetica, sans-serif; background: #f7fbfc; margin: 0; padding: 0;">
+  <div style="background: #fff; box-shadow: 0 2px 8px #e0e0e0; padding: 16px 0 8px 0; text-align: center;">
+    <img src="/static/logo.png" onerror="this.onerror=null;this.src='/static/logo.svg';" alt="D-cont Logo" style="height:60px;"/>
+  </div>
+
+  <div style="max-width: 600px; margin: 22px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px #e0e0e0; padding: 22px;">
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div style="margin-bottom:12px; background:#eaf6fb; border:1px solid #2D9CDB; padding:10px 12px; border-radius:10px; color:#222;">
+          {{ messages[0] }}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <h2 style="color:#2D9CDB; margin:0;">Groups</h2>
+
+    <h3 style="margin-top:18px; color:#222;">My Groups</h3>
+    {% if my_groups and my_groups|length > 0 %}
+      <ul style="list-style:none; padding:0; margin:0;">
+        {% for g in my_groups %}
+          <li style="margin-bottom: 12px; background: #eaf6fb; border-radius: 10px; padding: 14px; box-shadow: 0 1px 4px #e0e0e0;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
+              <div>
+                <div style="font-weight:bold; color:#2D9CDB;">{{ g.name }}</div>
+                <div style="color:#222;"><strong>₹{{ g.monthly_amount }}</strong> / month</div>
+                {% if g.description %}<div style="color:#444; margin-top:4px;">{{ g.description }}</div>{% endif %}
+                <div style="color:#555; margin-top:6px; font-size:0.95em;"><strong>Status:</strong> {{ g.status }} · <strong>Members:</strong> {{ g.joined_members }}/{{ g.max_members }}</div>
+              </div>
+              <div style="min-width:90px; text-align:right;">
+                <a href="/group/{{ g.id }}" style="color:#2D9CDB; text-decoration:none;">View</a>
+              </div>
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <div style="color:#555;">You haven’t joined any group yet.</div>
+    {% endif %}
+
+    <h3 style="margin-top:22px; color:#222;">Create a Group</h3>
+    {% if not upi_id %}
+      <div style="margin-top:8px; background:#fff; border:1px solid #e8eef0; border-radius:10px; padding:14px;">
+        <div style="font-weight:bold; color:#222;">UPI required</div>
+        <div style="color:#555; margin-top:6px;">Add your UPI ID in Profile before creating a group.</div>
+        <a href="/profile" style="display:inline-block; margin-top:10px; background:#2D9CDB; color:#fff; padding:10px 14px; border-radius:8px; text-decoration:none;">Go to Profile</a>
+      </div>
+    {% else %}
+      <form method="POST" action="/groups/create" style="margin-top:10px; border:1px solid #e8eef0; border-radius:10px; padding:14px;">
+        <div style="display:flex; gap:10px;">
+          <div style="flex:1;">
+            <label style="display:block; color:#555; font-size:0.95em;">Monthly Amount (₹)</label>
+            <input name="monthly_amount" type="number" min="1" required style="width:100%; padding:10px; border-radius:8px; border:1px solid #cfd8dc;" />
+          </div>
+          <div style="flex:1;">
+            <label style="display:block; color:#555; font-size:0.95em;">Max Members</label>
+            <input name="max_members" type="number" min="1" value="10" style="width:100%; padding:10px; border-radius:8px; border:1px solid #cfd8dc;" />
+          </div>
+        </div>
+        <div style="margin-top:10px;">
+          <label style="display:block; color:#555; font-size:0.95em;">Group Name</label>
+          <input name="name" type="text" placeholder="e.g., D-CONT ₹500" style="width:100%; padding:10px; border-radius:8px; border:1px solid #cfd8dc;" />
+        </div>
+        <div style="margin-top:10px;">
+          <label style="display:block; color:#555; font-size:0.95em;">Description (optional)</label>
+          <input name="description" type="text" placeholder="Short description" style="width:100%; padding:10px; border-radius:8px; border:1px solid #cfd8dc;" />
+        </div>
+        <button type="submit" style="margin-top:12px; width:100%; background:#2D9CDB; color:#fff; border:none; padding:10px 14px; border-radius:8px; cursor:pointer;">Create & Join</button>
+      </form>
+    {% endif %}
+
+    <h3 style="margin-top:22px; color:#222;">Join a Group</h3>
+    {% if available_groups and available_groups|length > 0 %}
+      <ul style="list-style:none; padding:0; margin:0;">
+        {% for g in available_groups %}
+          <li style="margin-bottom: 12px; background: #fff; border-radius: 10px; padding: 14px; border:1px solid #e8eef0;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
+              <div>
+                <div style="font-weight:bold; color:#2D9CDB;">{{ g.name }}</div>
+                <div style="color:#222;"><strong>₹{{ g.monthly_amount }}</strong> / month</div>
+                {% if g.description %}<div style="color:#444; margin-top:4px;">{{ g.description }}</div>{% endif %}
+                <div style="color:#555; margin-top:6px; font-size:0.95em;"><strong>Members:</strong> {{ g.joined_members }}/{{ g.max_members }}</div>
+              </div>
+              <div style="min-width:110px; text-align:right;">
+                <form method="POST" action="/groups/join" style="margin:0;">
+                  <input type="hidden" name="group_id" value="{{ g.id }}" />
+                  <button type="submit" style="background:#2D9CDB; color:#fff; border:none; padding:8px 12px; border-radius:8px; cursor:pointer;">Join</button>
+                </form>
+                <div style="margin-top:8px;"><a href="/group/{{ g.id }}" style="color:#2D9CDB; text-decoration:none;">View</a></div>
+              </div>
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <div style="color:#555;">No groups available to join right now.</div>
+    {% endif %}
+  </div>
+
+  {% include '_tab_nav.html' %}
+</body>
+</html>

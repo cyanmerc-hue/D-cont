@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Payments - D-cont</title>
+</head>
+<body style="font-family: Arial, Helvetica, sans-serif; background: #f7fbfc; margin: 0; padding: 0;">
+  <div style="background: #fff; box-shadow: 0 2px 8px #e0e0e0; padding: 16px 0 8px 0; text-align: center;">
+    <img src="/static/logo.png" onerror="this.onerror=null;this.src='/static/logo.svg';" alt="D-cont Logo" style="height:60px;"/>
+  </div>
+
+  <div style="max-width: 600px; margin: 22px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px #e0e0e0; padding: 22px;">
+    <h2 style="color:#2D9CDB; margin:0;">Payments</h2>
+
+    <div style="margin-top:14px; background:#eaf6fb; border-radius:10px; padding:14px; border:1px solid #2D9CDB;">
+      <div style="color:#222;"><strong>Your UPI:</strong> {% if upi_id %}{{ upi_id }}{% else %}<span style="color:#555;">Not set</span>{% endif %}</div>
+      {% if not upi_id %}
+        <a href="/profile" style="display:inline-block; margin-top:10px; background:#2D9CDB; color:#fff; padding:10px 14px; border-radius:8px; text-decoration:none;">Add UPI in Profile</a>
+      {% endif %}
+    </div>
+
+    <h3 style="margin-top:18px; color:#222;">Who to Pay</h3>
+    {% if pay_to and pay_to|length > 0 %}
+      <ul style="list-style:none; padding:0; margin:0;">
+        {% for item in pay_to %}
+          <li style="margin-bottom: 12px; background: #fff; border-radius: 10px; padding: 14px; border:1px solid #e8eef0;">
+            <div style="font-weight:bold; color:#2D9CDB;">{{ item.group.name }}</div>
+            <div style="color:#222;"><strong>₹{{ item.amount }}</strong> / month</div>
+            <div style="color:#555; margin-top:6px;"><strong>Receiver:</strong> {{ item.receiver_name }}</div>
+            <div style="color:#555; margin-top:4px;"><strong>UPI:</strong> {% if item.receiver_upi %}{{ item.receiver_upi }}{% else %}<span style="color:#999;">Not set</span>{% endif %}</div>
+
+            {% if item.pay_url %}
+              <a href="{{ item.pay_url }}" style="display:inline-block; margin-top:10px; background:#2D9CDB; color:#fff; padding:10px 14px; border-radius:8px; text-decoration:none;">Pay via UPI</a>
+            {% else %}
+              <div style="margin-top:10px; color:#999;">Payment link unavailable (receiver UPI not set).</div>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <div style="color:#555;">Join a group to see payment instructions.</div>
+      <a href="/groups" style="display:inline-block; margin-top:10px; background:#2D9CDB; color:#fff; padding:10px 14px; border-radius:8px; text-decoration:none;">Go to Groups</a>
+    {% endif %}
+  </div>
+
+  {% include '_tab_nav.html' %}
+</body>
+</html>

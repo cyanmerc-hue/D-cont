@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Home - D-cont</title>
+</head>
+<body style="font-family: Arial, Helvetica, sans-serif; background: #f7fbfc; margin: 0; padding: 0;">
+  <div style="background: #fff; box-shadow: 0 2px 8px #e0e0e0; padding: 16px 0 8px 0; text-align: center;">
+    <img src="/static/logo.png" onerror="this.onerror=null;this.src='/static/logo.svg';" alt="D-cont Logo" style="height:60px;"/>
+  </div>
+
+  <div style="max-width: 600px; margin: 22px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px #e0e0e0; padding: 22px;">
+    <h2 style="color:#2D9CDB; margin:0;">Hi, {{ full_name }}!</h2>
+
+    <div style="margin-top:14px; background:#eaf6fb; border-radius:10px; padding:14px; border:1px solid #2D9CDB;">
+      <p style="margin:0; color:#222; line-height:1.5;"><strong>Non-custodial:</strong> D-cont does not hold money. You contribute directly via your UPI.</p>
+    </div>
+
+    {% if not has_groups %}
+      <div style="margin-top:16px; border:1px solid #e8eef0; border-radius:10px; padding:14px;">
+        <div style="font-weight:bold; color:#222;">What should I do right now?</div>
+        <div style="color:#555; margin-top:6px;">Create a group or join an existing one.</div>
+        <div style="display:flex; gap:10px; margin-top:12px;">
+          <a href="/groups" style="flex:1; text-align:center; background:#2D9CDB; color:#fff; padding:10px 12px; border-radius:8px; text-decoration:none;">Create Group</a>
+          <a href="/groups" style="flex:1; text-align:center; background:#eaf6fb; color:#2D9CDB; padding:10px 12px; border-radius:8px; text-decoration:none; border:1px solid #2D9CDB;">Join Group</a>
+        </div>
+      </div>
+    {% else %}
+      <div style="margin-top:16px; border:1px solid #e8eef0; border-radius:10px; padding:14px;">
+        <div style="font-weight:bold; color:#222;">Your groups status</div>
+        <div style="display:flex; gap:12px; margin-top:10px;">
+          <div style="flex:1; background:#fff; border:1px solid #e8eef0; border-radius:10px; padding:12px;">
+            <div style="color:#555;">Active Groups</div>
+            <div style="font-size:22px; font-weight:bold; color:#222;">{{ active_count }}</div>
+          </div>
+          <div style="flex:1; background:#fff; border:1px solid #e8eef0; border-radius:10px; padding:12px;">
+            <div style="color:#555;">Formation Groups</div>
+            <div style="font-size:22px; font-weight:bold; color:#222;">{{ formation_count }}</div>
+          </div>
+        </div>
+        <div style="display:flex; gap:10px; margin-top:12px;">
+          <a href="/groups" style="flex:1; text-align:center; background:#2D9CDB; color:#fff; padding:10px 12px; border-radius:8px; text-decoration:none;">Go to Groups</a>
+          <a href="/payments" style="flex:1; text-align:center; background:#eaf6fb; color:#2D9CDB; padding:10px 12px; border-radius:8px; text-decoration:none; border:1px solid #2D9CDB;">Go to Payments</a>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+
+  {% include '_tab_nav.html' %}
+</body>
+</html>

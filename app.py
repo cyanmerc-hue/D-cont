@@ -31,7 +31,6 @@ ADMIN_MOBILE = os.environ.get('DCONT_ADMIN_MOBILE', '9999999999')
 WHATSAPP_SUPPORT_NUMBER = '917506680031'  # +91 7506680031
 
 ALLOWED_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "webp", "gif"}
-ALLOWED_DOCUMENT_EXTENSIONS = {"png", "jpg", "jpeg", "webp", "gif", "pdf"}
 
 BOT_QUICK_REPLIES = [
     "What is D-CONT?",
@@ -261,6 +260,7 @@ USER_COLUMNS = {
     "role": "TEXT",
     "upi_id": "TEXT",
     "onboarding_completed": "INTEGER",
+    "app_fee_paid": "INTEGER",
     "is_active": "INTEGER",
 }
 
@@ -362,7 +362,7 @@ def require_customer(fn):
     return wrapper
 
 
-def join_group_with_status(group_id, username, status="pending"):
+def join_group_with_status(group_id, username, status="joined"):
     conn = get_db()
     c = conn.cursor()
     c.execute('SELECT id, status FROM group_members WHERE group_id=? AND username=?', (group_id, username))
@@ -375,74 +375,26 @@ def join_group_with_status(group_id, username, status="pending"):
     conn.commit()
     conn.close()
     return status
-def save_profile_photo(file, username):
-    if not file or not file.filename:
-        return None
-
-    original = secure_filename(file.filename)
-    if '.' not in original:
-        return None
-
-    ext = original.rsplit('.', 1)[-1].lower()
-    if ext not in ALLOWED_IMAGE_EXTENSIONS:
-        return None
-
-    filename = f"{secure_filename(username)}_{uuid.uuid4().hex}.{ext}"
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    file.save(filepath)
-
-    # Store relative path from /static so it can be served by Flask's static handler
-    return f"uploads/{filename}"
-
-
-def save_document_file(file, uploader_username: str) -> tuple[str | None, str | None]:
-    if not file or not file.filename:
-        return None, None
-
-    original = secure_filename(file.filename)
-    if '.' not in original:
-        return None, None
-
-    ext = original.rsplit('.', 1)[-1].lower()
-    if ext not in ALLOWED_DOCUMENT_EXTENSIONS:
-        return None, None
-
-    docs_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'docs')
-    os.makedirs(docs_dir, exist_ok=True)
-    filename = f"{secure_filename(uploader_username)}_{uuid.uuid4().hex}.{ext}"
-    filepath = os.path.join(docs_dir, filename)
-    file.save(filepath)
-    # Stored under /static/uploads/docs/<filename>
-    return f"uploads/docs/{filename}", original
 @app.route('/profile', methods=['GET', 'POST'])
-@login_required
+@require_customer
 def profile():
     username = session['username']
     conn = get_db()
     c = conn.cursor()
-    c.execute('SELECT full_name, email, mobile, language, city_state, photo FROM users WHERE username=?', (username,))
+    c.execute('SELECT full_name, mobile, upi_id, app_fee_paid FROM users WHERE username=?', (username,))
     row = c.fetchone()
-    full_name = email = mobile = language = city_state = photo = None
+    full_name = mobile = upi_id = None
+    app_fee_paid = 0
     if row:
-        full_name, email, mobile, language, city_state, photo = row
+        full_name, mobile, upi_id, app_fee_paid = row
     if request.method == 'POST':
-        full_name = request.form.get('full_name')
-        email = request.form.get('email')
-        mobile = request.form.get('mobile')
-        language = request.form.get('language')
-        city_state = request.form.get('city_state')
-        photo_file = request.files.get('photo')
-        photo_url = photo
-        if photo_file and photo_file.filename:
-            photo_url = save_profile_photo(photo_file, username)
-        c.execute('''UPDATE users SET full_name=?, email=?, mobile=?, language=?, city_state=?, photo=? WHERE username=?''',
-                  (full_name, email, mobile, language, city_state, photo_url, username))
+        full_name = (request.form.get('full_name') or '').strip()
+        upi_id = (request.form.get('upi_id') or '').strip()
+        c.execute('UPDATE users SET full_name=?, upi_id=? WHERE username=?', (full_name, upi_id, username))
         conn.commit()
         flash('Profile updated!')
-        photo = photo_url
     conn.close()
-    photo_url = f"/static/{photo}" if photo else "/static/default-profile.svg"
-    return render_template('profile.html', full_name=full_name, email=email, mobile=mobile, language=language, city_state=city_state, photo_url=photo_url)
+    return render_template('profile_tab.html', full_name=full_name or '', mobile=mobile or '', upi_id=upi_id or '', app_fee_paid=int(app_fee_paid or 0), active_tab='profile')
 
 def get_db():
     conn = sqlite3.connect(DATABASE)
@@ -458,23 +410,20 @@ def init_db():
     )''')
     c.execute('''CREATE TABLE IF NOT EXISTS groups (id INTEGER PRIMARY KEY, name TEXT, description TEXT, monthly_amount INTEGER)''')
     c.execute('''CREATE TABLE IF NOT EXISTS group_members (id INTEGER PRIMARY KEY, group_id INTEGER, username TEXT, status TEXT)''')
-    c.execute(
-        '''CREATE TABLE IF NOT EXISTS documents (
-            id INTEGER PRIMARY KEY,
-            uploader_username TEXT,
-            doc_type TEXT,
-            stored_path TEXT,
-            original_filename TEXT,
-            notes TEXT,
-            created_at TEXT
-        )'''
-    )
 
     # Ensure groups table has monthly_amount column (auto-migration)
     c.execute("PRAGMA table_info(groups)")
     existing_group_cols = {row[1] for row in c.fetchall()}
     if "monthly_amount" not in existing_group_cols:
         c.execute("ALTER TABLE groups ADD COLUMN monthly_amount INTEGER")
+
+    # Extra group fields used by the 4-tab UI
+    if "max_members" not in existing_group_cols:
+        c.execute("ALTER TABLE groups ADD COLUMN max_members INTEGER")
+    if "receiver_name" not in existing_group_cols:
+        c.execute("ALTER TABLE groups ADD COLUMN receiver_name TEXT")
+    if "receiver_upi" not in existing_group_cols:
+        c.execute("ALTER TABLE groups ADD COLUMN receiver_upi TEXT")
 
     # Ensure users table has required columns (auto-migration)
     c.execute("PRAGMA table_info(users)")
@@ -490,7 +439,9 @@ def init_db():
         c.execute("ALTER TABLE group_members ADD COLUMN status TEXT")
 
     # Backfill onboarding + membership status
-    c.execute("UPDATE users SET onboarding_completed=0 WHERE onboarding_completed IS NULL")
+    # The 4-tab UI doesn't require onboarding; default existing users to completed.
+    c.execute("UPDATE users SET onboarding_completed=1 WHERE onboarding_completed IS NULL")
+    c.execute("UPDATE users SET app_fee_paid=0 WHERE app_fee_paid IS NULL")
     c.execute("UPDATE users SET is_active=1 WHERE is_active IS NULL")
     c.execute("UPDATE group_members SET status='joined' WHERE status IS NULL OR status='' ")
 
@@ -593,9 +544,7 @@ def home():
         user = get_user_row(session['username'])
         if not user:
             return redirect(url_for('logout'))
-        if user.get('onboarding_completed'):
-            return redirect(url_for('customer_home'))
-        return redirect(url_for('welcome'))
+        return redirect(url_for('home_tab'))
     return redirect(url_for('login'))
 @app.route('/dashboard')
 @login_required
@@ -625,353 +574,296 @@ def dashboard():
 @app.route('/welcome')
 @require_customer
 def welcome():
-    user = get_user_row(session['username'])
-    if user and user.get('onboarding_completed'):
-        return redirect(url_for('customer_home'))
-    return render_template('welcome.html')
+    return redirect(url_for('home_tab'))
 
 
 @app.route('/how-it-works')
 @require_customer
 def how_it_works():
-    user = get_user_row(session['username'])
-    if user and user.get('onboarding_completed'):
-        return redirect(url_for('customer_home'))
-    return render_template('how_it_works.html')
+    return redirect(url_for('home_tab'))
 
 
 @app.route('/setup', methods=['GET', 'POST'])
 @require_customer
 def setup():
-    username = session['username']
-    user = get_user_row(username)
-    if user and user.get('onboarding_completed'):
-        return redirect(url_for('customer_home'))
-
-    if request.method == 'POST':
-        full_name = (request.form.get('full_name') or '').strip()
-        language = (request.form.get('language') or '').strip()
-        city_state = (request.form.get('city_state') or '').strip()
-        email = (request.form.get('email') or '').strip()
-
-        if not full_name or not language:
-            flash('Please fill the required fields.')
-            return render_template('setup.html', user=user)
-
-        conn = get_db()
-        c = conn.cursor()
-        c.execute(
-            'UPDATE users SET full_name=?, language=?, city_state=?, email=?, onboarding_completed=1 WHERE username=?',
-            (full_name, language, city_state, email, username),
-        )
-        conn.commit()
-        conn.close()
-        flash('Setup complete!')
-        return redirect(url_for('customer_home'))
-
-    return render_template('setup.html', user=user)
+    return redirect(url_for('home_tab'))
 
 
-@app.route('/home')
-@require_customer
-def customer_home():
-    username = session['username']
-    user = get_user_row(username)
-    if not user:
-        return redirect(url_for('logout'))
-    if not user.get('onboarding_completed'):
-        return redirect(url_for('welcome'))
-
+def _fetch_my_groups(username: str):
     conn = get_db()
     c = conn.cursor()
     c.execute(
         '''
-        SELECT g.id, g.name, g.description, g.monthly_amount, gm.status
+        SELECT g.id,
+               g.name,
+               g.description,
+               g.monthly_amount,
+               COALESCE(g.max_members, 10) as max_members,
+               COALESCE(g.receiver_name, '') as receiver_name,
+               COALESCE(g.receiver_upi, '') as receiver_upi,
+               COUNT(gm2.id) as joined_members
         FROM group_members gm
         JOIN groups g ON g.id = gm.group_id
-        WHERE gm.username=?
+        LEFT JOIN group_members gm2 ON gm2.group_id = g.id AND gm2.status='joined'
+        WHERE gm.username=? AND gm.status='joined'
+        GROUP BY g.id, g.name, g.description, g.monthly_amount, g.max_members, g.receiver_name, g.receiver_upi
         ORDER BY g.monthly_amount, g.id
         ''',
         (username,),
     )
-    my_groups = [
-        {
-            'id': row[0],
-            'name': row[1],
-            'description': row[2],
-            'monthly_amount': row[3],
-            'status': row[4] or 'joined',
-        }
-        for row in c.fetchall()
-    ]
-    conn.close()
-    return render_template('customer_home.html', user=user, my_groups=my_groups)
-
-
-@app.route('/groups/<int:amount>')
-@require_customer
-def groups_by_amount(amount):
-    username = session['username']
-    user = get_user_row(username)
-    if not user or not user.get('onboarding_completed'):
-        return redirect(url_for('welcome'))
-
-    conn = get_db()
-    c = conn.cursor()
-    c.execute('SELECT id, name, description, monthly_amount FROM groups WHERE monthly_amount=? ORDER BY id', (amount,))
     rows = c.fetchall()
+    conn.close()
+
     groups = []
     for row in rows:
-        group_id, name, description, monthly_amount = row
-        c.execute('SELECT status FROM group_members WHERE group_id=? AND username=?', (group_id, username))
-        member = c.fetchone()
+        group_id, name, description, monthly_amount, max_members, receiver_name, receiver_upi, joined_members = row
+        status = 'Active' if int(joined_members or 0) >= int(max_members or 10) else 'Formation'
         groups.append(
             {
                 'id': group_id,
                 'name': name,
                 'description': description,
                 'monthly_amount': monthly_amount,
-                'member_status': (member[0] if member else ''),
+                'max_members': int(max_members or 10),
+                'joined_members': int(joined_members or 0),
+                'status': status,
+                'receiver_name': receiver_name or '',
+                'receiver_upi': receiver_upi or '',
             }
         )
+    return groups
+
+
+def _fetch_available_groups(username: str):
+    conn = get_db()
+    c = conn.cursor()
+    c.execute(
+        '''
+        SELECT g.id,
+               g.name,
+               g.description,
+               g.monthly_amount,
+               COALESCE(g.max_members, 10) as max_members,
+               COUNT(gm2.id) as joined_members
+        FROM groups g
+        LEFT JOIN group_members gm2 ON gm2.group_id = g.id AND gm2.status='joined'
+        WHERE g.id NOT IN (
+            SELECT group_id FROM group_members WHERE username=? AND status='joined'
+        )
+        GROUP BY g.id, g.name, g.description, g.monthly_amount, g.max_members
+        ORDER BY g.monthly_amount, g.id
+        ''',
+        (username,),
+    )
+    rows = c.fetchall()
     conn.close()
-    return render_template('groups_by_amount.html', amount=amount, groups=groups)
+    return [
+        {
+            'id': r[0],
+            'name': r[1],
+            'description': r[2],
+            'monthly_amount': r[3],
+            'max_members': int(r[4] or 10),
+            'joined_members': int(r[5] or 0),
+        }
+        for r in rows
+    ]
+
+
+@app.route('/home')
+@require_customer
+def home_tab():
+    username = session['username']
+    user = get_user_row(username)
+    if not user:
+        return redirect(url_for('logout'))
+
+    my_groups = _fetch_my_groups(username)
+    active_count = sum(1 for g in my_groups if g.get('status') == 'Active')
+    formation_count = sum(1 for g in my_groups if g.get('status') == 'Formation')
+
+    return render_template(
+        'home_tab.html',
+        full_name=(user.get('full_name') or user.get('username') or '').strip(),
+        has_groups=len(my_groups) > 0,
+        active_count=active_count,
+        formation_count=formation_count,
+        active_tab='home',
+    )
+
+
+@app.route('/groups')
+@require_customer
+def groups_tab():
+    username = session['username']
+    my_groups = _fetch_my_groups(username)
+    available_groups = _fetch_available_groups(username)
+    user = get_user_row(username) or {}
+
+    return render_template(
+        'groups_tab.html',
+        my_groups=my_groups,
+        available_groups=available_groups,
+        upi_id=(user.get('upi_id') or '').strip(),
+        active_tab='groups',
+    )
+
+
+@app.route('/groups/create', methods=['POST'])
+@require_customer
+def create_group_customer():
+    username = session['username']
+    user = get_user_row(username) or {}
+    upi_id = (user.get('upi_id') or '').strip()
+    if not upi_id:
+        flash('Add your UPI ID in Profile before creating a group.')
+        return redirect(url_for('profile'))
+
+    name = (request.form.get('name') or '').strip() or 'New Group'
+    description = (request.form.get('description') or '').strip()
+    try:
+        monthly_amount = int(request.form.get('monthly_amount') or 0)
+    except ValueError:
+        monthly_amount = 0
+    try:
+        max_members = int(request.form.get('max_members') or 10)
+    except ValueError:
+        max_members = 10
+
+    if monthly_amount <= 0:
+        flash('Enter a valid monthly amount.')
+        return redirect(url_for('groups_tab'))
+    if max_members <= 0:
+        max_members = 10
+
+    conn = get_db()
+    c = conn.cursor()
+    c.execute(
+        'INSERT INTO groups (name, description, monthly_amount, max_members, receiver_name, receiver_upi) VALUES (?,?,?,?,?,?)',
+        (name, description, monthly_amount, max_members, (user.get('full_name') or username), upi_id),
+    )
+    group_id = c.lastrowid
+    conn.commit()
+    conn.close()
+
+    join_group_with_status(group_id, username, status='joined')
+    flash('Group created and joined.')
+    return redirect(url_for('groups_tab'))
+
+
+@app.route('/groups/join', methods=['POST'])
+@require_customer
+def join_group_customer():
+    try:
+        group_id = int(request.form.get('group_id') or 0)
+    except ValueError:
+        group_id = 0
+    if group_id <= 0:
+        flash('Invalid group.')
+        return redirect(url_for('groups_tab'))
+
+    username = session['username']
+    join_group_with_status(group_id, username, status='joined')
+    flash('You joined the group.')
+    return redirect(url_for('groups_tab'))
+
+
+@app.route('/payments')
+@require_customer
+def payments_tab():
+    username = session['username']
+    user = get_user_row(username) or {}
+    upi_id = (user.get('upi_id') or '').strip()
+    my_groups = _fetch_my_groups(username)
+
+    pay_to = []
+    for g in my_groups:
+        receiver_upi = (g.get('receiver_upi') or '').strip()
+        receiver_name = (g.get('receiver_name') or '').strip() or 'Receiver'
+        amount = g.get('monthly_amount')
+        note = f"D-CONT - {g.get('name') or 'Group'}"
+        pay_url = ''
+        if receiver_upi:
+            pay_url = f"upi://pay?pa={quote(receiver_upi)}&pn={quote(receiver_name)}&am={quote(str(amount))}&tn={quote(note)}"
+        pay_to.append(
+            {
+                'group': g,
+                'receiver_upi': receiver_upi,
+                'receiver_name': receiver_name,
+                'amount': amount,
+                'pay_url': pay_url,
+            }
+        )
+
+    return render_template(
+        'payments_tab.html',
+        upi_id=upi_id,
+        pay_to=pay_to,
+        active_tab='payments',
+    )
+
+
+@app.route('/groups/<int:amount>')
+@require_customer
+def groups_by_amount(amount):
+    return redirect(url_for('groups_tab'))
 
 
 @app.route('/group/<int:group_id>')
 @require_customer
 def group_preview(group_id):
     username = session['username']
-    user = get_user_row(username)
-    if not user or not user.get('onboarding_completed'):
-        return redirect(url_for('welcome'))
-
     conn = get_db()
     c = conn.cursor()
-    c.execute('SELECT id, name, description, monthly_amount FROM groups WHERE id=?', (group_id,))
+    c.execute('SELECT id, name, description, monthly_amount, COALESCE(max_members, 10), COALESCE(receiver_name, \'\'), COALESCE(receiver_upi, \'\') FROM groups WHERE id=?', (group_id,))
     row = c.fetchone()
     if not row:
         conn.close()
         abort(404)
-    group = {'id': row[0], 'name': row[1], 'description': row[2], 'monthly_amount': row[3]}
-    c.execute('SELECT status FROM group_members WHERE group_id=? AND username=?', (group_id, username))
-    member = c.fetchone()
-    member_status = (member[0] if member else '')
+    group = {
+        'id': row[0],
+        'name': row[1],
+        'description': row[2],
+        'monthly_amount': row[3],
+        'max_members': int(row[4] or 10),
+        'receiver_name': row[5] or '',
+        'receiver_upi': row[6] or '',
+    }
+    c.execute('SELECT COUNT(1) FROM group_members WHERE group_id=? AND status=\'joined\'', (group_id,))
+    joined_members = int((c.fetchone() or [0])[0] or 0)
     conn.close()
-    return render_template('group_preview.html', user=user, group=group, member_status=member_status)
+    status = 'Active' if joined_members >= group['max_members'] else 'Formation'
+    return render_template('group_details.html', group=group, joined_members=joined_members, status=status, active_tab='groups')
 
 
 @app.route('/add-upi', methods=['GET', 'POST'])
 @require_customer
 def add_upi():
-    username = session['username']
-    user = get_user_row(username)
-    if not user or not user.get('onboarding_completed'):
-        return redirect(url_for('welcome'))
-
-    next_url = request.args.get('next') or url_for('customer_home')
-
-    if request.method == 'POST':
-        upi_id = (request.form.get('upi_id') or '').strip()
-        if not upi_id:
-            flash('Please enter your UPI ID.')
-            return render_template('add_upi.html', user=user, next_url=next_url)
-        conn = get_db()
-        c = conn.cursor()
-        c.execute('UPDATE users SET upi_id=? WHERE username=?', (upi_id, username))
-        conn.commit()
-        conn.close()
-        flash('UPI saved!')
-        return redirect(next_url)
-
-    return render_template('add_upi.html', user=user, next_url=next_url)
+    return redirect(url_for('profile'))
 
 
 @app.route('/group/<int:group_id>/join', methods=['POST'])
 @require_customer
 def request_join_group(group_id):
     username = session['username']
-    user = get_user_row(username)
-    if not user or not user.get('onboarding_completed'):
-        return redirect(url_for('welcome'))
-    if not (user.get('upi_id') or '').strip():
-        flash('Add your UPI ID before joining a group.')
-        return redirect(url_for('add_upi', next=url_for('group_preview', group_id=group_id)))
+    join_group_with_status(group_id, username, status='joined')
+    flash('You joined the group.')
+    return redirect(url_for('groups_tab'))
 
-    join_group_with_status(group_id, username, status='pending')
-    return redirect(url_for('join_success', group_id=group_id))
-
-
-@app.route('/join-success/<int:group_id>')
-@require_customer
-def join_success(group_id):
-    username = session['username']
-    user = get_user_row(username)
-    if not user or not user.get('onboarding_completed'):
-        return redirect(url_for('welcome'))
-
-    conn = get_db()
-    c = conn.cursor()
-    c.execute('SELECT id, name, description, monthly_amount FROM groups WHERE id=?', (group_id,))
-    row = c.fetchone()
-    if not row:
-        conn.close()
-        abort(404)
-    group = {'id': row[0], 'name': row[1], 'description': row[2], 'monthly_amount': row[3]}
-    c.execute('SELECT status FROM group_members WHERE group_id=? AND username=?', (group_id, username))
-    member = c.fetchone()
-    member_status = (member[0] if member else '')
-    conn.close()
-    return render_template('join_success.html', group=group, member_status=member_status)
-
-
-@app.route('/chat', methods=['GET', 'POST'])
-@login_required
-def chat():
-    # Session-backed lightweight chat history (MVP)
-    history = session.get('chat_history') or []
-    unknown_attempts = int(session.get('chat_unknown_attempts') or 0)
-
-    if not history:
-        history = [
-            {
-                'from': 'bot',
-                'text': 'Hi! I’m the D-CONT Bot. Ask a quick question, or tap a FAQ button.',
-            }
-        ]
-
-    whatsapp_url = None
-    if request.method == 'POST':
-        user_text = (request.form.get('message') or '').strip()
-        if user_text:
-            history.append({'from': 'user', 'text': user_text})
-
-            # Rule-based handoff for disputes/complex issues
-            if message_needs_handoff(user_text):
-                bot_text = 'This looks like something our team should handle. Tap below to chat on WhatsApp.'
-                whatsapp_url = build_whatsapp_link(
-                    f"Hi D-CONT Support, I need help with: {user_text} (user={session.get('username','')})"
-                )
-                history.append({'from': 'bot', 'text': bot_text})
-            else:
-                intent = match_intent(user_text)
-                if intent:
-                    bot_text = intent.get('answer')
-                    history.append({'from': 'bot', 'text': bot_text})
-                    if intent.get('handoff'):
-                        whatsapp_url = build_whatsapp_link(
-                            f"Hi D-CONT Support, I need help with: {user_text} (user={session.get('username','')})"
-                        )
-                    unknown_attempts = 0
-                else:
-                    unknown_attempts += 1
-                    if unknown_attempts >= 2:
-                        bot_text = 'I may have misunderstood. This looks like something our team should handle. Tap below to chat on WhatsApp.'
-                        whatsapp_url = build_whatsapp_link(
-                            f"Hi D-CONT Support, I need help with: {user_text} (user={session.get('username','')})"
-                        )
-                        history.append({'from': 'bot', 'text': bot_text})
-                        unknown_attempts = 0
-                    else:
-                        history.append({'from': 'bot', 'text': 'Could you tell me which topic this is about? (Join group / Payment help / UPI update / Missed payment / Support)'})
-
-        session['chat_history'] = history
-        session['chat_unknown_attempts'] = unknown_attempts
-
-    # If an intent includes a direct in-app link, we show it inline as a suggestion
-    last_intent = None
-    if history:
-        last_user = next((m for m in reversed(history) if m.get('from') == 'user'), None)
-        if last_user:
-            last_intent = match_intent(last_user.get('text'))
-
-    intent_link = (last_intent or {}).get('link') if last_intent else None
-    intent_link_label = None
-    if intent_link == '/home':
-        intent_link_label = 'Open Home'
-    elif intent_link == '/add-upi':
-        intent_link_label = 'Add / Update UPI'
-
-    return render_template(
-        'chat.html',
-        history=history,
-        quick_replies=BOT_QUICK_REPLIES,
-        whatsapp_url=whatsapp_url,
-        intent_link=intent_link,
-        intent_link_label=intent_link_label,
-    )
-
-
-@app.route('/documents', methods=['GET', 'POST'])
-@login_required
-def documents():
-    if request.method == 'POST':
-        doc_type = (request.form.get('doc_type') or '').strip().lower()
-        notes = (request.form.get('notes') or '').strip()
-        file = request.files.get('document')
-
-        allowed_types = {'pan', 'aadhaar', 'passport', 'payment_screenshot', 'other'}
-        if doc_type not in allowed_types:
-            flash('Please select a valid document type.')
-            return redirect(url_for('documents'))
-
-        stored_path, original_filename = save_document_file(file, session.get('username', 'user'))
-        if not stored_path:
-            flash('Please upload a valid file (png/jpg/jpeg/webp/gif/pdf).')
-            return redirect(url_for('documents'))
-
-        conn = get_db()
-        c = conn.cursor()
-        c.execute(
-            'INSERT INTO documents (uploader_username, doc_type, stored_path, original_filename, notes, created_at) VALUES (?, ?, ?, ?, ?, datetime("now"))',
-            (session.get('username'), doc_type, stored_path, original_filename or '', notes),
-        )
-        conn.commit()
-        conn.close()
-        flash('Document uploaded.')
-        return redirect(url_for('documents'))
-
-    conn = get_db()
-    c = conn.cursor()
-    try:
-        c.execute(
-            'SELECT id, uploader_username, doc_type, stored_path, original_filename, notes, created_at FROM documents ORDER BY id DESC'
-        )
-        rows = c.fetchall()
-    except sqlite3.OperationalError:
-        rows = []
-    conn.close()
-
-    docs = [
-        {
-            'id': r[0],
-            'uploader_username': r[1] or '',
-            'doc_type': r[2] or '',
-            'stored_path': r[3] or '',
-            'original_filename': r[4] or '',
-            'notes': r[5] or '',
-            'created_at': r[6] or '',
-        }
-        for r in rows
-    ]
-    return render_template('documents.html', docs=docs)
 
 @app.route('/join_group', methods=['POST'])
 @login_required
 def join_group():
     group_id = request.form['group_id']
     username = session['username']
-    if session.get('role') != 'admin':
-        user = get_user_row(username)
-        if not user or not (user.get('upi_id') or '').strip():
-            flash('Add your UPI ID before joining a group.')
-            return redirect(url_for('add_upi', next=url_for('group_preview', group_id=group_id)))
-        join_group_with_status(group_id, username, status='pending')
-        return redirect(url_for('join_success', group_id=group_id))
+    if session.get('role') == 'admin':
+        join_group_with_status(group_id, username, status='joined')
+        flash('You have joined the group!')
+        return redirect(url_for('dashboard'))
 
     join_group_with_status(group_id, username, status='joined')
-    flash('You have joined the group!')
-    return redirect(url_for('dashboard'))
+    flash('You joined the group.')
+    return redirect(url_for('groups_tab'))
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
