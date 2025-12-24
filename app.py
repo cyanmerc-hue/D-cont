@@ -10,6 +10,7 @@ from functools import wraps
 from urllib.parse import quote
 import smtplib
 from email.message import EmailMessage
+import re
 
 app = Flask(__name__)
 # In production (Render/Heroku/etc.), set SECRET_KEY as an environment variable.
@@ -375,6 +376,37 @@ def join_group_with_status(group_id, username, status="joined"):
     conn.commit()
     conn.close()
     return status
+
+
+def _mobile_candidates(raw: str):
+    raw = (raw or '').strip()
+    candidates = []
+    if raw:
+        candidates.append(raw)
+
+    digits = re.sub(r'\D+', '', raw)
+    if digits:
+        candidates.append(digits)
+
+        if digits.startswith('91') and len(digits) == 12:
+            candidates.append(digits[2:])
+            candidates.append('+91' + digits[2:])
+
+        if digits.startswith('0') and len(digits) == 11:
+            candidates.append(digits[1:])
+
+        if len(digits) == 10:
+            candidates.append('91' + digits)
+            candidates.append('+91' + digits)
+
+    # Deduplicate, preserve order
+    deduped = []
+    seen = set()
+    for value in candidates:
+        if value and value not in seen:
+            seen.add(value)
+            deduped.append(value)
+    return deduped
 @app.route('/profile', methods=['GET', 'POST'])
 @require_customer
 def profile():
@@ -906,8 +938,11 @@ def login():
             row = c.fetchone()
             # Fallback: allow login via mobile for legacy accounts
             if not row:
-                c.execute('SELECT username, password, role, is_active, mobile FROM users WHERE mobile=?', (identifier,))
-                row = c.fetchone()
+                for mobile_value in _mobile_candidates(identifier):
+                    c.execute('SELECT username, password, role, is_active, mobile FROM users WHERE mobile=?', (mobile_value,))
+                    row = c.fetchone()
+                    if row:
+                        break
         except sqlite3.OperationalError:
             row = None
 
