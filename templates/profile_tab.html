@@ -28,7 +28,7 @@
       <div style="font-size:18px; font-weight:bold; color:#222;">{{ 'Yes' if app_fee_paid else 'No' }}</div>
     </div>
 
-    <form method="POST" action="/profile" style="margin-top:14px; border:1px solid #e8eef0; border-radius:10px; padding:14px;">
+    <form method="POST" action="/profile" enctype="multipart/form-data" style="margin-top:14px; border:1px solid #e8eef0; border-radius:10px; padding:14px;">
       <label style="display:block; color:#555; font-size:0.95em;">Full Name</label>
       <input name="full_name" type="text" value="{{ full_name }}" style="width:100%; padding:10px; border-radius:8px; border:1px solid #cfd8dc;" />
 
@@ -37,6 +37,49 @@
 
       <label style="display:block; color:#555; font-size:0.95em; margin-top:10px;">UPI ID</label>
       <input name="upi_id" type="text" value="{{ upi_id }}" placeholder="example@upi" style="width:100%; padding:10px; border-radius:8px; border:1px solid #cfd8dc;" />
+
+      <div style="margin-top:14px; padding-top:14px; border-top:1px solid #eef3f5;">
+        <div style="font-weight:bold; color:#222;">Important documents</div>
+        <div style="color:#555; font-size:0.95em; margin-top:6px; line-height:1.4;">
+          Upload PDF/JPG/PNG/WEBP. Your documents are stored privately and can only be downloaded when you are logged in.
+        </div>
+
+        <div style="margin-top:12px; border:1px solid #e8eef0; border-radius:10px; padding:12px; background:#fff;">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+            <div style="font-weight:bold; color:#222;">Aadhaar</div>
+            {% if aadhaar_doc %}
+              <a href="/profile/doc/aadhaar" style="color:#2D9CDB; text-decoration:none;">Download</a>
+            {% else %}
+              <span style="color:#777; font-size:0.9em;">Not uploaded</span>
+            {% endif %}
+          </div>
+          <input type="file" name="aadhaar_file" accept=".pdf,image/*" style="width:100%; margin-top:10px;" />
+        </div>
+
+        <div style="margin-top:12px; border:1px solid #e8eef0; border-radius:10px; padding:12px; background:#fff;">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+            <div style="font-weight:bold; color:#222;">PAN</div>
+            {% if pan_doc %}
+              <a href="/profile/doc/pan" style="color:#2D9CDB; text-decoration:none;">Download</a>
+            {% else %}
+              <span style="color:#777; font-size:0.9em;">Not uploaded</span>
+            {% endif %}
+          </div>
+          <input type="file" name="pan_file" accept=".pdf,image/*" style="width:100%; margin-top:10px;" />
+        </div>
+
+        <div style="margin-top:12px; border:1px solid #e8eef0; border-radius:10px; padding:12px; background:#fff;">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+            <div style="font-weight:bold; color:#222;">Passport</div>
+            {% if passport_doc %}
+              <a href="/profile/doc/passport" style="color:#2D9CDB; text-decoration:none;">Download</a>
+            {% else %}
+              <span style="color:#777; font-size:0.9em;">Not uploaded</span>
+            {% endif %}
+          </div>
+          <input type="file" name="passport_file" accept=".pdf,image/*" style="width:100%; margin-top:10px;" />
+        </div>
+      </div>
 
       <button type="submit" style="margin-top:12px; width:100%; background:#2D9CDB; color:#fff; border:none; padding:10px 14px; border-radius:8px; cursor:pointer;">Save</button>
     </form>

@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash, abort
+from flask import Flask, render_template, request, redirect, url_for, session, flash, abort, send_from_directory
 import sqlite3
 import os
 import random
@@ -20,7 +20,9 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # Render's filesystem is ephemeral unless you attach a persistent disk.
 # You can override these paths via env vars to point at a persistent mount.
 DATABASE = os.environ.get('DCONT_DATABASE_PATH', os.path.join(BASE_DIR, 'users.db'))
-UPLOAD_FOLDER = os.environ.get('DCONT_UPLOAD_FOLDER', os.path.join(BASE_DIR, 'static', 'uploads'))
+# Store uploads outside /static by default so sensitive documents aren't publicly accessible.
+# Override with DCONT_UPLOAD_FOLDER if you want a mounted disk path (recommended in production).
+UPLOAD_FOLDER = os.environ.get('DCONT_UPLOAD_FOLDER', os.path.join(BASE_DIR, 'uploads'))
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
@@ -32,6 +34,25 @@ ADMIN_MOBILE = os.environ.get('DCONT_ADMIN_MOBILE', '9999999999')
 WHATSAPP_SUPPORT_NUMBER = '917506680031'  # +91 7506680031
 
 ALLOWED_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "webp", "gif"}
+ALLOWED_DOCUMENT_EXTENSIONS = {"png", "jpg", "jpeg", "webp", "pdf"}
+
+
+def _allowed_extension(filename: str, allowed: set[str]) -> bool:
+    if not filename or '.' not in filename:
+        return False
+    ext = filename.rsplit('.', 1)[1].lower().strip()
+    return ext in allowed
+
+
+def _save_user_document(*, username: str, doc_type: str, file_storage) -> str:
+    original = secure_filename(file_storage.filename or '')
+    if not _allowed_extension(original, ALLOWED_DOCUMENT_EXTENSIONS):
+        raise ValueError('Unsupported file type. Please upload PDF, JPG, PNG, or WEBP.')
+    ext = original.rsplit('.', 1)[1].lower().strip()
+    out_name = f"{username}_{doc_type}_{uuid.uuid4().hex}.{ext}"
+    out_path = os.path.join(app.config['UPLOAD_FOLDER'], out_name)
+    file_storage.save(out_path)
+    return out_name
 
 BOT_QUICK_REPLIES = [
     "What is D-CONT?",
@@ -265,6 +286,10 @@ USER_COLUMNS = {
     "trust_score": "INTEGER",
     "join_blocked": "INTEGER",
     "is_active": "INTEGER",
+    # Customer KYC docs (stored as filenames in UPLOAD_FOLDER)
+    "aadhaar_doc": "TEXT",
+    "pan_doc": "TEXT",
+    "passport_doc": "TEXT",
 }
 
 
@@ -433,20 +458,86 @@ def profile():
     username = session['username']
     conn = get_db()
     c = conn.cursor()
-    c.execute('SELECT full_name, mobile, upi_id, app_fee_paid FROM users WHERE username=?', (username,))
+    c.execute(
+        'SELECT full_name, mobile, upi_id, app_fee_paid, aadhaar_doc, pan_doc, passport_doc FROM users WHERE username=?',
+        (username,),
+    )
     row = c.fetchone()
     full_name = mobile = upi_id = None
+    aadhaar_doc = pan_doc = passport_doc = None
     app_fee_paid = 0
     if row:
-        full_name, mobile, upi_id, app_fee_paid = row
+        full_name, mobile, upi_id, app_fee_paid, aadhaar_doc, pan_doc, passport_doc = row
     if request.method == 'POST':
         full_name = (request.form.get('full_name') or '').strip()
         upi_id = (request.form.get('upi_id') or '').strip()
+        # Update profile fields
         c.execute('UPDATE users SET full_name=?, upi_id=? WHERE username=?', (full_name, upi_id, username))
+
+        # Optional: handle document uploads
+        doc_fields = [
+            ('aadhaar', 'aadhaar_doc', 'aadhaar_file'),
+            ('pan', 'pan_doc', 'pan_file'),
+            ('passport', 'passport_doc', 'passport_file'),
+        ]
+        for doc_type, column, form_key in doc_fields:
+            file_obj = request.files.get(form_key)
+            if not file_obj or not (file_obj.filename or '').strip():
+                continue
+            try:
+                saved_name = _save_user_document(username=username, doc_type=doc_type, file_storage=file_obj)
+            except ValueError as e:
+                conn.close()
+                flash(str(e))
+                return redirect(url_for('profile'))
+            c.execute(f'UPDATE users SET {column}=? WHERE username=?', (saved_name, username))
+            if column == 'aadhaar_doc':
+                aadhaar_doc = saved_name
+            elif column == 'pan_doc':
+                pan_doc = saved_name
+            elif column == 'passport_doc':
+                passport_doc = saved_name
         conn.commit()
         flash('Profile updated!')
     conn.close()
-    return render_template('profile_tab.html', full_name=full_name or '', mobile=mobile or '', upi_id=upi_id or '', app_fee_paid=int(app_fee_paid or 0), active_tab='profile')
+    return render_template(
+        'profile_tab.html',
+        full_name=full_name or '',
+        mobile=mobile or '',
+        upi_id=upi_id or '',
+        app_fee_paid=int(app_fee_paid or 0),
+        aadhaar_doc=aadhaar_doc or '',
+        pan_doc=pan_doc or '',
+        passport_doc=passport_doc or '',
+        active_tab='profile',
+    )
+
+
+@app.route('/profile/doc/<doc_type>')
+@require_customer
+def profile_doc(doc_type: str):
+    doc_type = (doc_type or '').strip().lower()
+    column_by_type = {
+        'aadhaar': 'aadhaar_doc',
+        'pan': 'pan_doc',
+        'passport': 'passport_doc',
+    }
+    if doc_type not in column_by_type:
+        abort(404)
+    username = session['username']
+    conn = get_db()
+    c = conn.cursor()
+    col = column_by_type[doc_type]
+    try:
+        c.execute(f'SELECT {col} FROM users WHERE username=?', (username,))
+        row = c.fetchone()
+    except sqlite3.OperationalError:
+        row = None
+    conn.close()
+    if not row or not row[0]:
+        abort(404)
+    filename = str(row[0])
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename, as_attachment=True)
 
 def get_db():
     # If using a mounted disk path like /var/data/users.db on Render,
