@@ -485,53 +485,15 @@ def init_db():
     if "status" not in existing_member_cols:
         c.execute("ALTER TABLE group_members ADD COLUMN status TEXT")
 
-    conn.commit()
-    conn.close()
-
-
-def get_setting(key: str, default: str = "") -> str:
-    conn = get_db()
-    c = conn.cursor()
-    try:
-        c.execute('SELECT value FROM settings WHERE key=?', (key,))
-        row = c.fetchone()
-    except sqlite3.OperationalError:
-        row = None
-    conn.close()
-    if not row or row[0] is None:
-        return default
-    return str(row[0])
-
-
-def set_setting(key: str, value: str) -> None:
-    conn = get_db()
-    c = conn.cursor()
-    c.execute('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', (key, str(value)))
-    conn.commit()
-    conn.close()
-
-
-def is_join_blocked(username: str) -> bool:
-    if not username:
-        return False
-    conn = get_db()
-    c = conn.cursor()
-    try:
-        c.execute('SELECT join_blocked FROM users WHERE username=?', (username,))
-        row = c.fetchone()
-    except sqlite3.OperationalError:
-        row = None
-    conn.close()
-    if not row:
-        return False
-    return int(row[0] if row[0] is not None else 0) == 1
-
     # Backfill onboarding + membership status
     # The 4-tab UI doesn't require onboarding; default existing users to completed.
     c.execute("UPDATE users SET onboarding_completed=1 WHERE onboarding_completed IS NULL")
     c.execute("UPDATE users SET app_fee_paid=0 WHERE app_fee_paid IS NULL")
+    c.execute("UPDATE users SET trust_score=50 WHERE trust_score IS NULL")
+    c.execute("UPDATE users SET join_blocked=0 WHERE join_blocked IS NULL")
     c.execute("UPDATE users SET is_active=1 WHERE is_active IS NULL")
     c.execute("UPDATE group_members SET status='joined' WHERE status IS NULL OR status='' ")
+    c.execute("UPDATE groups SET is_paused=0 WHERE is_paused IS NULL")
 
     # Backfill roles for existing users
     c.execute("UPDATE users SET role='customer' WHERE role IS NULL OR role='' ")
@@ -586,12 +548,12 @@ def is_join_blocked(username: str) -> bool:
     group_count = (c.fetchone() or [0])[0]
     if group_count == 0:
         c.execute(
-            'INSERT INTO groups (name, description, monthly_amount) VALUES (?, ?, ?)',
-            ("Pilot Group 2026", "Monthly savings group", 500),
+            'INSERT INTO groups (name, description, monthly_amount, status, is_paused) VALUES (?, ?, ?, ?, ?)',
+            ("Pilot Group 2026", "Monthly savings group", 500, 'formation', 0),
         )
         c.execute(
-            'INSERT INTO groups (name, description, monthly_amount) VALUES (?, ?, ?)',
-            ("Pilot Group 2 2026", "Monthly savings group", 1000),
+            'INSERT INTO groups (name, description, monthly_amount, status, is_paused) VALUES (?, ?, ?, ?, ?)',
+            ("Pilot Group 2 2026", "Monthly savings group", 1000, 'formation', 0),
         )
     else:
         # Best-effort updates for existing seeded groups
@@ -609,6 +571,44 @@ def is_join_blocked(username: str) -> bool:
 
     conn.commit()
     conn.close()
+
+
+def get_setting(key: str, default: str = "") -> str:
+    conn = get_db()
+    c = conn.cursor()
+    try:
+        c.execute('SELECT value FROM settings WHERE key=?', (key,))
+        row = c.fetchone()
+    except sqlite3.OperationalError:
+        row = None
+    conn.close()
+    if not row or row[0] is None:
+        return default
+    return str(row[0])
+
+
+def set_setting(key: str, value: str) -> None:
+    conn = get_db()
+    c = conn.cursor()
+    c.execute('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', (key, str(value)))
+    conn.commit()
+    conn.close()
+
+
+def is_join_blocked(username: str) -> bool:
+    if not username:
+        return False
+    conn = get_db()
+    c = conn.cursor()
+    try:
+        c.execute('SELECT join_blocked FROM users WHERE username=?', (username,))
+        row = c.fetchone()
+    except sqlite3.OperationalError:
+        row = None
+    conn.close()
+    if not row:
+        return False
+    return int(row[0] if row[0] is not None else 0) == 1
 
 
 # Ensure DB is ready when imported by WSGI servers (e.g., Gunicorn)
