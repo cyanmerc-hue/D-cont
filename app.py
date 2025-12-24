@@ -1321,45 +1321,7 @@ def groups_tab():
 @app.route('/groups/create', methods=['POST'])
 @require_customer
 def create_group_customer():
-    username = session['username']
-    if is_join_blocked(username):
-        flash('Your access is restricted for future groups. Please contact support.')
-        return redirect(url_for('home_tab'))
-    user = get_user_row(username) or {}
-    upi_id = (user.get('upi_id') or '').strip()
-    if not upi_id:
-        flash('Add your UPI ID in Profile before creating a group.')
-        return redirect(url_for('profile'))
-
-    name = (request.form.get('name') or '').strip() or 'New Group'
-    description = (request.form.get('description') or '').strip()
-    try:
-        monthly_amount = int(request.form.get('monthly_amount') or 0)
-    except ValueError:
-        monthly_amount = 0
-    try:
-        max_members = int(request.form.get('max_members') or 10)
-    except ValueError:
-        max_members = 10
-
-    if monthly_amount <= 0:
-        flash('Enter a valid monthly amount.')
-        return redirect(url_for('groups_tab'))
-    if max_members <= 0:
-        max_members = 10
-
-    conn = get_db()
-    c = conn.cursor()
-    c.execute(
-        'INSERT INTO groups (name, description, monthly_amount, max_members, receiver_name, receiver_upi, status, is_paused) VALUES (?,?,?,?,?,?,?,?)',
-        (name, description, monthly_amount, max_members, (user.get('full_name') or username), upi_id, 'formation', 0),
-    )
-    group_id = c.lastrowid
-    conn.commit()
-    conn.close()
-
-    join_group_with_status(group_id, username, status='joined')
-    flash('Group created and joined.')
+    flash('Customers cannot create groups. Please join an existing group created by the owner.')
     return redirect(url_for('groups_tab'))
 
 
