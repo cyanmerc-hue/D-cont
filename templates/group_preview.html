@@ -22,8 +22,7 @@
         <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
             <h2 style="color:#2D9CDB; margin:0;">{{ group.name }}</h2>
             <div style="display:flex; gap:10px; align-items:center;">
-                <a href="/chat" style="color:#2D9CDB; text-decoration:none;">Help</a>
-                <a href="/groups/{{ group.monthly_amount }}" style="color:#2D9CDB; text-decoration:none;">Back</a>
+                <a href="/groups" style="color:#2D9CDB; text-decoration:none;">Back</a>
             </div>
         </div>
 
@@ -42,19 +41,14 @@
             {% else %}
                 {% if not user.upi_id %}
                     <p style="color:#555;">Add your UPI ID to request joining this group.</p>
-                    <a href="/add-upi?next=/group/{{ group.id }}" style="display:inline-block; background:#2D9CDB; color:#fff; padding:10px 16px; border-radius:8px; text-decoration:none;">Add UPI ID</a>
+                    <a href="/profile" style="display:inline-block; background:#2D9CDB; color:#fff; padding:10px 16px; border-radius:8px; text-decoration:none;">Add UPI ID</a>
                 {% else %}
-                    <form method="post" action="/group/{{ group.id }}/join" style="margin:0;">
-                        <button type="submit" style="width:100%; background:#2D9CDB; color:#fff; border:none; padding:12px 16px; border-radius:8px; cursor:pointer;">Request to Join</button>
+                    <form method="post" action="/groups/join" style="margin:0;">
+                        <input type="hidden" name="group_id" value="{{ group.id }}" />
+                        <button type="submit" style="width:100%; background:#2D9CDB; color:#fff; border:none; padding:12px 16px; border-radius:8px; cursor:pointer;">Join Group</button>
                     </form>
                 {% endif %}
             {% endif %}
-        </div>
-
-        <div style="margin-top:16px; padding-top:14px; border-top:1px solid #eef3f5; display:flex; justify-content:center; gap:12px;">
-            <span style="color:#555;">Need help?</span>
-            <a href="/chat" style="color:#2D9CDB; text-decoration:none;">Chat</a>
-            <a href="{{ support_whatsapp_url }}" target="_blank" rel="noopener" style="color:#2D9CDB; text-decoration:none;">WhatsApp</a>
         </div>
     </div>
 </body>

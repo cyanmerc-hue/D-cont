@@ -9,101 +9,11 @@
     </div>
 
     <div style="max-width: 600px; margin: 28px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px #e0e0e0; padding: 28px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
-            <h2 style="color:#2D9CDB; margin:0;">Hi, {{ user.full_name or user.username }}!</h2>
-            <div style="display:flex; gap:8px;">
-                <a href="/chat" style="color:#2D9CDB; background:#eaf6fb; padding:6px 14px; border-radius:6px; text-decoration:none; border:1px solid #2D9CDB;">Chat with D-CONT Bot</a>
-                <a href="/documents" style="color:#2D9CDB; background:#eaf6fb; padding:6px 14px; border-radius:6px; text-decoration:none; border:1px solid #2D9CDB;">Documents</a>
-                <a href="/profile" style="color:#2D9CDB; background:#eaf6fb; padding:6px 14px; border-radius:6px; text-decoration:none; border:1px solid #2D9CDB;">Profile</a>
-                <a href="/logout" style="color:#fff; background:#2D9CDB; padding:6px 14px; border-radius:6px; text-decoration:none;">Logout</a>
-            </div>
-        </div>
-
-        <div style="margin-top:14px; background:#eaf6fb; border-radius:10px; padding:14px; border:1px solid #2D9CDB;">
-            <p style="margin:0; color:#222; line-height:1.5;"><strong>Non-custodial:</strong> D-cont does not hold money. You contribute directly via your UPI.</p>
-        </div>
-
-        {% set has_pending = false %}
-        {% if my_groups and my_groups|length > 0 %}
-            {% for g in my_groups %}
-                {% if (g.status|default('')) == 'pending' %}
-                    {% set has_pending = true %}
-                {% endif %}
-            {% endfor %}
-        {% endif %}
-
-        <div style="margin-top:12px; background:#fff; border:1px solid #e8eef0; border-radius:10px; padding:14px;">
-            {% if not user.upi_id %}
-                <div style="font-weight:bold; color:#222;">Next step: Add your UPI ID</div>
-                <div style="color:#555; margin-top:6px;">UPI is required before you can join a group.</div>
-                <a href="/add-upi" style="display:inline-block; margin-top:10px; background:#2D9CDB; color:#fff; padding:10px 14px; border-radius:8px; text-decoration:none;">Add UPI to join a group</a>
-            {% elif has_pending %}
-                <div style="font-weight:bold; color:#222;">Next step: Wait for approval</div>
-                <div style="color:#555; margin-top:6px;">Your request is pending. You can chat with support if needed.</div>
-                <a href="/chat" style="display:inline-block; margin-top:10px; background:#2D9CDB; color:#fff; padding:10px 14px; border-radius:8px; text-decoration:none;">Chat with support</a>
-            {% else %}
-                <div style="font-weight:bold; color:#222;">Next step: Browse groups</div>
-                <div style="color:#555; margin-top:6px;">Pick ₹500 or ₹1000 to see available groups.</div>
-            {% endif %}
-        </div>
-
-        {% if (not user.full_name) or (not user.language) %}
-            <div style="margin-top:12px; background:#fff; border:1px solid #e8eef0; border-radius:10px; padding:14px;">
-                <div style="font-weight:bold; color:#222;">Complete your profile</div>
-                <div style="color:#555; margin-top:6px;">Adding your name and preferred language helps your group communicate clearly.</div>
-                <a href="/profile" style="display:inline-block; margin-top:10px; background:#2D9CDB; color:#fff; padding:10px 14px; border-radius:8px; text-decoration:none;">Update Profile</a>
-            </div>
-        {% endif %}
-
-        <h3 style="margin-top:22px; color:#222;">Choose your monthly amount</h3>
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
-            <a href="/groups/500" style="display:block; text-decoration:none; background:#fff; border:1px solid #e8eef0; border-radius:10px; padding:16px; box-shadow: 0 1px 4px #f0f0f0;">
-                <div style="color:#2D9CDB; font-weight:bold; font-size:18px;">₹500 / month</div>
-                <div style="color:#444; margin-top:6px;">Browse available groups</div>
-            </a>
-            <a href="/groups/1000" style="display:block; text-decoration:none; background:#fff; border:1px solid #e8eef0; border-radius:10px; padding:16px; box-shadow: 0 1px 4px #f0f0f0;">
-                <div style="color:#2D9CDB; font-weight:bold; font-size:18px;">₹1000 / month</div>
-                <div style="color:#444; margin-top:6px;">Browse available groups</div>
-            </a>
-        </div>
-
-        <h3 style="margin-top:26px; color:#222;">Your contribution groups</h3>
-        {% if my_groups and my_groups|length > 0 %}
-            <ul style="list-style:none; padding:0; margin:0;">
-            {% for g in my_groups %}
-                <li style="margin-bottom: 12px; background: #eaf6fb; border-radius: 10px; padding: 14px; box-shadow: 0 1px 4px #e0e0e0;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
-                        <div>
-                            <div style="font-weight:bold; color:#2D9CDB;">{{ g.name }}</div>
-                            <div style="color:#222;"><strong>₹{{ g.monthly_amount }}</strong> / month</div>
-                            <div style="color:#444;">{{ g.description }}</div>
-                            <div style="color:#555; margin-top:6px; font-size:0.95em;">{{ g.status|status_hint }}</div>
-                        </div>
-                        <div style="min-width:120px; text-align:right;">
-                            <div style="color:#222; font-weight:bold;">{{ g.status|status_label }}</div>
-                            <a href="/group/{{ g.id }}" style="color:#2D9CDB; text-decoration:none;">View</a>
-                        </div>
-                    </div>
-                </li>
-            {% endfor %}
-            </ul>
-        {% else %}
-            <p style="color:#555;">You haven’t joined any group yet. Pick an amount above to start.</p>
-        {% endif %}
-
-        <div style="margin-top:14px;">
-            {% if user.upi_id %}
-                <div style="color:#444;"><strong>Your UPI:</strong> {{ user.upi_id }}</div>
-            {% else %}
-                <a href="/add-upi" style="display:inline-block; margin-top:6px; background:#2D9CDB; color:#fff; padding:8px 14px; border-radius:8px; text-decoration:none;">Add UPI ID</a>
-            {% endif %}
-        </div>
-
-        <div style="margin-top:16px; padding-top:14px; border-top:1px solid #eef3f5; display:flex; justify-content:center; gap:12px;">
-            <span style="color:#555;">Need help?</span>
-            <a href="/chat" style="color:#2D9CDB; text-decoration:none;">Chat</a>
-            <a href="{{ support_whatsapp_url }}" target="_blank" rel="noopener" style="color:#2D9CDB; text-decoration:none;">WhatsApp</a>
-        </div>
+        <h2 style="color:#2D9CDB; margin:0;">This page has moved</h2>
+        <p style="margin-top:10px; color:#444; line-height:1.5;">Please use the 4-tab app: Home, Groups, Payments, Profile.</p>
+        <a href="/home" style="display:inline-block; margin-top:10px; background:#2D9CDB; color:#fff; padding:10px 14px; border-radius:8px; text-decoration:none;">Go to Home</a>
     </div>
+
+    {% include '_tab_nav.html' %}
 </body>
 </html>

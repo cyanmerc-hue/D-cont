@@ -11,7 +11,6 @@
     <div style="max-width: 520px; margin: 28px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px #e0e0e0; padding: 28px;">
       <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
         <h2 style="color:#2D9CDB; margin-top:0; margin-bottom:0;">Add your UPI ID</h2>
-        <a href="/chat" style="color:#2D9CDB; text-decoration:none;">Help</a>
       </div>
 
         {% with messages = get_flashed_messages() %}
@@ -35,13 +34,7 @@
           </div>
 
         <div style="margin-top:14px; text-align:center;">
-            <a href="{{ next_url }}" style="color:#2D9CDB; text-decoration:none;">Cancel</a>
-        </div>
-
-        <div style="margin-top:16px; padding-top:14px; border-top:1px solid #eef3f5; display:flex; justify-content:center; gap:12px;">
-          <span style="color:#555;">Need help?</span>
-          <a href="/chat" style="color:#2D9CDB; text-decoration:none;">Chat</a>
-          <a href="{{ support_whatsapp_url }}" target="_blank" rel="noopener" style="color:#2D9CDB; text-decoration:none;">WhatsApp</a>
+          <a href="/profile" style="color:#2D9CDB; text-decoration:none;">Back to Profile</a>
         </div>
     </div>
 </body>
