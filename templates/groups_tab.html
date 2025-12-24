@@ -8,6 +8,8 @@
     <img src="/static/logo.png" onerror="this.onerror=null;this.src='/static/logo.svg';" alt="D-cont Logo" style="height:60px;"/>
   </div>
 
+  {% include '_tab_nav.html' %}
+
   <div style="max-width: 600px; margin: 22px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px #e0e0e0; padding: 22px;">
     {% with messages = get_flashed_messages() %}
       {% if messages %}
@@ -100,6 +102,5 @@
     {% endif %}
   </div>
 
-  {% include '_tab_nav.html' %}
 </body>
 </html>

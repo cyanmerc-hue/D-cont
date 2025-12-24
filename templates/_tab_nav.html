@@ -1,4 +1,4 @@
-<div style="position:fixed; bottom:0; left:0; right:0; background:#fff; border-top:1px solid #e8eef0; padding:10px 0;">
+<div style="background:#fff; border-bottom:1px solid #e8eef0; padding:10px 0;">
   {% set t = active_tab|default('') %}
   <div style="max-width:600px; margin:0 auto; display:flex; justify-content:space-around;">
     <a href="/home" style="text-decoration:none; color:{{ '#2D9CDB' if t=='home' else '#555' }}; font-weight:{{ 'bold' if t=='home' else 'normal' }};">Home</a>
@@ -7,4 +7,3 @@
     <a href="/profile" style="text-decoration:none; color:{{ '#2D9CDB' if t=='profile' else '#555' }}; font-weight:{{ 'bold' if t=='profile' else 'normal' }};">Profile</a>
   </div>
 </div>
-<div style="height:56px;"></div>
