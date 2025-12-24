@@ -889,37 +889,63 @@ def login():
             session['role'] = 'admin'
             return redirect(url_for('dashboard'))
 
-        # Customer login (username/password)
-        username = (request.form.get('username') or '').strip()
+        # Customer login (username OR mobile + password)
+        identifier = (request.form.get('username') or '').strip()
         password = request.form.get('password') or ''
 
-        if not username or not password:
-            flash('Enter your username and password.')
+        if not identifier or not password:
+            flash('Enter your username/mobile and password.')
             return render_template('login.html')
 
         conn = get_db()
         c = conn.cursor()
+        row = None
         try:
-            c.execute('SELECT username, password, role, is_active FROM users WHERE username=?', (username,))
+            # First try username
+            c.execute('SELECT username, password, role, is_active, mobile FROM users WHERE username=?', (identifier,))
             row = c.fetchone()
+            # Fallback: allow login via mobile for legacy accounts
+            if not row:
+                c.execute('SELECT username, password, role, is_active, mobile FROM users WHERE mobile=?', (identifier,))
+                row = c.fetchone()
         except sqlite3.OperationalError:
             row = None
-        conn.close()
 
         if not row:
+            conn.close()
             flash('Invalid credentials.')
             return render_template('login.html')
 
-        role = (row[2] or 'customer').strip().lower()
+        db_username, stored_pw, role_raw, is_active_raw, db_mobile = row
+        # Auto-repair: some legacy rows may have a blank username
+        if not (db_username or '').strip() and (db_mobile or '').strip():
+            candidate = (db_mobile or '').strip()
+            try:
+                c.execute('SELECT 1 FROM users WHERE username=?', (candidate,))
+                exists = c.fetchone()
+                if not exists:
+                    c.execute('UPDATE users SET username=? WHERE mobile=?', (candidate, candidate))
+                    conn.commit()
+                    db_username = candidate
+            except sqlite3.OperationalError:
+                pass
+
+        conn.close()
+
+        if not (db_username or '').strip():
+            flash('Your account needs an update. Please contact support.')
+            return render_template('login.html')
+
+        role = (role_raw or 'customer').strip().lower()
         if role == 'admin':
             flash('Use the Admin Login section to sign in as admin.')
             return render_template('login.html')
 
-        if int(row[3] if row[3] is not None else 1) != 1:
+        if int(is_active_raw if is_active_raw is not None else 1) != 1:
             flash('Your account is blocked. Please contact support.')
             return render_template('login.html')
 
-        stored_pw = row[1] or ''
+        stored_pw = stored_pw or ''
         password_ok = False
         try:
             password_ok = check_password_hash(stored_pw, password)
@@ -933,7 +959,7 @@ def login():
             flash('Invalid credentials.')
             return render_template('login.html')
 
-        session['username'] = row[0]
+        session['username'] = db_username
         session['role'] = role
         return redirect(url_for('home'))
 
