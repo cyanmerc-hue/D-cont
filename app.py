@@ -1103,6 +1103,55 @@ def admin_update_group():
     return redirect(url_for('admin_panel'))
 
 
+@app.route('/admin/add_group', methods=['POST'])
+@admin_required
+def admin_add_group():
+    name = (request.form.get('name') or '').strip()
+    description = (request.form.get('description') or '').strip()
+    monthly_amount = request.form.get('monthly_amount')
+    try:
+        monthly_amount_int = int(monthly_amount) if monthly_amount is not None else 0
+    except ValueError:
+        monthly_amount_int = 0
+
+    if not name:
+        flash('Group name is required.')
+        return redirect(url_for('admin_panel'))
+    if monthly_amount_int <= 0:
+        flash('Monthly amount must be greater than 0.')
+        return redirect(url_for('admin_panel'))
+
+    conn = get_db()
+    c = conn.cursor()
+    c.execute(
+        'INSERT INTO groups (name, description, monthly_amount) VALUES (?, ?, ?)',
+        (name, description, monthly_amount_int),
+    )
+    conn.commit()
+    conn.close()
+    flash('Group added.')
+    return redirect(url_for('admin_panel'))
+
+
+@app.route('/admin/delete_group', methods=['POST'])
+@admin_required
+def admin_delete_group():
+    group_id = request.form.get('group_id')
+    if not group_id:
+        flash('Missing group id.')
+        return redirect(url_for('admin_panel'))
+
+    conn = get_db()
+    c = conn.cursor()
+    # Best-effort cleanup: remove memberships first.
+    c.execute('DELETE FROM group_members WHERE group_id=?', (group_id,))
+    c.execute('DELETE FROM groups WHERE id=?', (group_id,))
+    conn.commit()
+    conn.close()
+    flash('Group deleted.')
+    return redirect(url_for('admin_panel'))
+
+
 @app.route('/admin/update_membership_status', methods=['POST'])
 @admin_required
 def admin_update_membership_status():
