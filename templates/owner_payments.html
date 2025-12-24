@@ -11,10 +11,10 @@
 
     {% include '_owner_nav.html' %}
 
-    <div class="container container-wide" style="margin: 18px auto 48px auto;">
-      <div class="card" style="padding:24px; color:#222;">
+        <div class="container container-wide" style="margin: 18px auto 48px auto;">
+            <div class="card" style="padding:24px;">
         <div style="display:flex; justify-content: space-between; align-items:center; gap: 12px;">
-            <h2 style="margin:0; color:#2D9CDB;">Payments</h2>
+                        <h2 class="pageTitle">Payments</h2>
             <a href="/logout" class="btn btn-sm" style="width:auto; padding:6px 16px; border-radius:6px;">Logout</a>
         </div>
 
@@ -26,39 +26,39 @@
           {% endif %}
         {% endwith %}
 
-                <div class="notice" style="margin-top:14px;">
-            <div style="color:#222;"><strong>App fee amount:</strong> ₹{{ app_fee_amount }}</div>
-            <div style="color:#777; font-size:0.95em; margin-top:4px;">This page records payments; D-CONT does not hold money.</div>
+        <div class="notice" style="margin-top:14px;">
+            <div><strong>App fee amount:</strong> ₹{{ app_fee_amount }}</div>
+            <div class="muted" style="font-size:0.95em; margin-top:4px;">This page records payments; D-CONT does not hold money.</div>
         </div>
 
-        <h3 style="margin-top:18px;">App fee payments</h3>
+        <h3 class="sectionTitle">App fee payments</h3>
         {% if app_fee_payments and app_fee_payments|length > 0 %}
             <div style="overflow-x:auto;">
-                <table style="width:100%; border-collapse: collapse; min-width: 700px;">
+                <table class="table" style="min-width: 700px;">
                     <thead>
                         <tr>
-                            <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">User</th>
-                            <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Mobile</th>
-                            <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Amount</th>
+                            <th>User</th>
+                            <th>Mobile</th>
+                            <th>Amount</th>
                         </tr>
                     </thead>
                     <tbody>
                     {% for p in app_fee_payments %}
                         <tr>
-                            <td style="padding:8px; border-bottom:1px solid #f2f2f2;">{{ p.full_name or p.username }}</td>
-                            <td style="padding:8px; border-bottom:1px solid #f2f2f2;">{{ p.mobile }}</td>
-                            <td style="padding:8px; border-bottom:1px solid #f2f2f2;">₹{{ p.amount }}</td>
+                            <td>{{ p.full_name or p.username }}</td>
+                            <td>{{ p.mobile }}</td>
+                            <td>₹{{ p.amount }}</td>
                         </tr>
                     {% endfor %}
                     </tbody>
                 </table>
             </div>
         {% else %}
-            <div style="color:#777;">No app fee payments recorded yet.</div>
+            <div class="muted">No app fee payments recorded yet.</div>
         {% endif %}
 
-        <h3 style="margin-top:22px;">Contributions / UTR verification</h3>
-        <div style="color:#777;">Contribution logs + UTR verification UI will appear here once enabled.</div>
+        <h3 class="sectionTitle">Contributions / UTR verification</h3>
+        <div class="muted">Contribution logs + UTR verification UI will appear here once enabled.</div>
       </div>
     </div>
 </body>

@@ -12,18 +12,18 @@
     {% include '_owner_nav.html' %}
 
     <div class="container container-wide" style="margin: 18px auto 48px auto;">
-      <div class="card" style="padding:24px; color:#222;">
+      <div class="card" style="padding:24px;">
         <div style="display:flex; justify-content: space-between; align-items:center; gap: 12px;">
-            <h2 style="margin:0; color:#2D9CDB;">Risk / Defaults</h2>
+            <h2 class="pageTitle">Risk / Defaults</h2>
             <a href="/logout" class="btn btn-sm" style="width:auto; padding:6px 16px; border-radius:6px;">Logout</a>
         </div>
 
         <div class="notice" style="margin-top:14px;">
-            <div style="color:#222; font-weight:700;">Purpose</div>
-            <div style="color:#555; margin-top:6px;">Protect the platform. This view summarizes accounts that are blocked/frozen/low trust.</div>
+            <div style="font-weight:800;">Purpose</div>
+            <div class="muted" style="margin-top:6px;">Protect the platform. This view summarizes accounts that are blocked/frozen/low trust.</div>
         </div>
 
-        <h3 style="margin-top:18px;">Blocked accounts</h3>
+        <h3 class="sectionTitle">Blocked accounts</h3>
         {% if blocked and blocked|length > 0 %}
             <ul>
                 {% for u in blocked %}
@@ -31,10 +31,10 @@
                 {% endfor %}
             </ul>
         {% else %}
-            <div style="color:#777;">None.</div>
+            <div class="muted">None.</div>
         {% endif %}
 
-        <h3 style="margin-top:18px;">Future frozen</h3>
+        <h3 class="sectionTitle">Future frozen</h3>
         {% if frozen and frozen|length > 0 %}
             <ul>
                 {% for u in frozen %}
@@ -42,10 +42,10 @@
                 {% endfor %}
             </ul>
         {% else %}
-            <div style="color:#777;">None.</div>
+            <div class="muted">None.</div>
         {% endif %}
 
-        <h3 style="margin-top:18px;">Low trust (&lt; 40)</h3>
+        <h3 class="sectionTitle">Low trust (&lt; 40)</h3>
         {% if low_trust and low_trust|length > 0 %}
             <ul>
                 {% for u in low_trust %}
@@ -53,10 +53,10 @@
                 {% endfor %}
             </ul>
         {% else %}
-            <div style="color:#777;">None.</div>
+            <div class="muted">None.</div>
         {% endif %}
 
-                <div style="margin-top:18px; color:#777; font-size:0.95em;">Missed payments / UTR mismatches require contribution logs to be enabled.</div>
+        <div class="muted" style="margin-top:18px; font-size:0.95em;">Missed payments / UTR mismatches require contribution logs to be enabled.</div>
             </div>
         </div>
 </body>
