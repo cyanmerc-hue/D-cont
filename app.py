@@ -8,12 +8,18 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import date
 from functools import wraps
 from urllib.parse import quote
+import smtplib
+from email.message import EmailMessage
 
 app = Flask(__name__)
-app.secret_key = 'your_secret_key'  # Change this in production
+# In production (Render/Heroku/etc.), set SECRET_KEY as an environment variable.
+app.secret_key = os.environ.get('SECRET_KEY', 'your_secret_key')
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATABASE = os.path.join(BASE_DIR, 'users.db')
-UPLOAD_FOLDER = os.path.join(BASE_DIR, 'static', 'uploads')
+
+# Render's filesystem is ephemeral unless you attach a persistent disk.
+# You can override these paths via env vars to point at a persistent mount.
+DATABASE = os.environ.get('DCONT_DATABASE_PATH', os.path.join(BASE_DIR, 'users.db'))
+UPLOAD_FOLDER = os.environ.get('DCONT_UPLOAD_FOLDER', os.path.join(BASE_DIR, 'static', 'uploads'))
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
@@ -142,6 +148,50 @@ FAQ_INTENTS = [
 
 def build_whatsapp_link(prefill_text: str) -> str:
     return f"https://wa.me/{WHATSAPP_SUPPORT_NUMBER}?text={quote(prefill_text)}"
+
+
+def _smtp_configured() -> bool:
+    return bool(
+        os.environ.get('SMTP_HOST')
+        and os.environ.get('SMTP_PORT')
+        and os.environ.get('SMTP_USERNAME')
+        and os.environ.get('SMTP_PASSWORD')
+        and os.environ.get('SMTP_FROM')
+    )
+
+
+def send_login_otp_email(*, to_email: str, otp_code: str, mobile: str) -> None:
+    """Send a login OTP to the user's registered email.
+
+    Uses standard SMTP configuration from environment variables:
+    SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD, SMTP_FROM.
+    Optional: SMTP_USE_TLS (default: true).
+    """
+    smtp_host = os.environ['SMTP_HOST']
+    smtp_port = int(os.environ['SMTP_PORT'])
+    smtp_username = os.environ['SMTP_USERNAME']
+    smtp_password = os.environ['SMTP_PASSWORD']
+    smtp_from = os.environ['SMTP_FROM']
+    use_tls = (os.environ.get('SMTP_USE_TLS', 'true') or '').strip().lower() not in {'0', 'false', 'no'}
+
+    message = EmailMessage()
+    message['From'] = smtp_from
+    message['To'] = to_email
+    message['Subject'] = 'Your D-CONT login OTP'
+    message.set_content(
+        "Your D-CONT OTP is: {otp}\n\n"
+        "Mobile: {mobile}\n\n"
+        "If you did not request this OTP, you can ignore this email.\n".format(
+            otp=otp_code,
+            mobile=mobile,
+        )
+    )
+
+    with smtplib.SMTP(smtp_host, smtp_port, timeout=20) as server:
+        if use_tls:
+            server.starttls()
+        server.login(smtp_username, smtp_password)
+        server.send_message(message)
 
 
 def status_label(status: str) -> str:
@@ -881,7 +931,7 @@ def login():
             return redirect(url_for('dashboard'))
 
         # Customer login (OTP)
-        mobile = request.form.get('mobile')
+        mobile = (request.form.get('mobile') or '').strip()
         otp = request.form.get('otp')
         if not mobile:
             flash('Please enter your mobile number')
@@ -906,22 +956,39 @@ def login():
             else:
                 flash('Invalid OTP')
         else:
-            # Generate and "send" OTP (demo: show on page)
+            # Generate and send OTP.
             conn = get_db()
             c = conn.cursor()
             try:
-                c.execute('SELECT is_active FROM users WHERE mobile=?', (mobile,))
+                c.execute('SELECT email, is_active FROM users WHERE mobile=?', (mobile,))
                 row = c.fetchone()
             except sqlite3.OperationalError:
                 row = None
             conn.close()
-            if row is not None and int(row[0] if row[0] is not None else 1) != 1:
+
+            if not row:
+                flash('No user found for this mobile. Please register.')
+                return render_template('login.html', demo_otp=session.get('otp'), otp_mobile=session.get('otp_mobile'))
+
+            email = (row[0] or '').strip()
+            if int(row[1] if row[1] is not None else 1) != 1:
                 flash('Your account is blocked. Please contact support.')
                 return render_template('login.html', demo_otp=session.get('otp'), otp_mobile=session.get('otp_mobile'))
+
             otp_code = str(random.randint(100000, 999999))
             session['otp'] = otp_code
             session['otp_mobile'] = mobile
-            flash(f'Your OTP is: {otp_code} (demo only)')
+
+            # Prefer email delivery if SMTP is configured and the user has a registered email.
+            if email and _smtp_configured():
+                try:
+                    send_login_otp_email(to_email=email, otp_code=otp_code, mobile=mobile)
+                    flash('OTP sent to your registered email.')
+                except Exception:
+                    # Fallback to demo OTP display so the user can still log in.
+                    flash(f'Unable to email OTP right now. Your OTP is: {otp_code} (demo only)')
+            else:
+                flash(f'Your OTP is: {otp_code} (demo only)')
     return render_template('login.html', demo_otp=session.get('otp'), otp_mobile=session.get('otp_mobile'))
 
 @app.route('/register', methods=['GET', 'POST'])
