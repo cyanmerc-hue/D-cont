@@ -412,6 +412,21 @@ def _mobile_candidates(raw: str):
             seen.add(value)
             deduped.append(value)
     return deduped
+
+
+def _normalize_mobile_digits(raw: str) -> str:
+    raw = (raw or '').strip()
+    digits = re.sub(r'\D+', '', raw)
+    if not digits:
+        return ''
+    # Normalize common India formats to 10-digit mobile when possible
+    if digits.startswith('91') and len(digits) == 12:
+        return digits[2:]
+    if digits.startswith('0') and len(digits) == 11:
+        return digits[1:]
+    if len(digits) == 10:
+        return digits
+    return digits
 @app.route('/profile', methods=['GET', 'POST'])
 @require_customer
 def profile():
@@ -434,6 +449,14 @@ def profile():
     return render_template('profile_tab.html', full_name=full_name or '', mobile=mobile or '', upi_id=upi_id or '', app_fee_paid=int(app_fee_paid or 0), active_tab='profile')
 
 def get_db():
+    # If using a mounted disk path like /var/data/users.db on Render,
+    # ensure the directory exists.
+    try:
+        db_dir = os.path.dirname(DATABASE)
+        if db_dir:
+            os.makedirs(db_dir, exist_ok=True)
+    except OSError:
+        pass
     conn = sqlite3.connect(DATABASE)
     return conn
 
@@ -1517,6 +1540,18 @@ def login():
                     row = c.fetchone()
                     if row:
                         break
+
+            # Last-resort fallback: legacy DB rows may store mobile with spaces/dashes/+91.
+            # Compare digit-normalized mobile values.
+            if not row:
+                identifier_digits = _normalize_mobile_digits(identifier)
+                if identifier_digits:
+                    c.execute('SELECT username, password, role, is_active, mobile FROM users')
+                    for cand in c.fetchall() or []:
+                        cand_mobile = cand[4] if len(cand) > 4 else ''
+                        if _normalize_mobile_digits(cand_mobile) == identifier_digits:
+                            row = cand
+                            break
         except sqlite3.OperationalError:
             row = None
 
@@ -1583,7 +1618,10 @@ def register():
             return render_template('register.html')
         username = request.form.get('username')
         password = request.form.get('password')
-        mobile = request.form.get('mobile')
+        mobile_raw = request.form.get('mobile')
+        # Store mobile in a normalized digits format when possible so
+        # users can log in even if they type +91/spaces/dashes later.
+        mobile = _normalize_mobile_digits(mobile_raw) or (mobile_raw or '').strip()
         full_name = request.form.get('full_name')
         language = request.form.get('language')
         city_state = request.form.get('city_state')
