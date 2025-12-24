@@ -1,11 +1,17 @@
-<div class="top-nav">
+<div class="topbar">
   {% set t = active_owner_tab|default('dashboard') %}
-  <div class="nav-inner owner">
-    <a href="/owner/dashboard" class="nav-link {{ 'active' if t=='dashboard' else '' }}">📊 Dashboard</a>
-    <a href="/owner/users" class="nav-link {{ 'active' if t=='users' else '' }}">👥 Users</a>
-    <a href="/owner/groups" class="nav-link {{ 'active' if t=='groups' else '' }}">🏘️ Groups</a>
-    <a href="/owner/payments" class="nav-link {{ 'active' if t=='payments' else '' }}">💰 Payments</a>
-    <a href="/owner/risk" class="nav-link {{ 'active' if t=='risk' else '' }}">⚠️ Risk</a>
-    <a href="/owner/settings" class="nav-link {{ 'active' if t=='settings' else '' }}">⚙️ Settings</a>
+  <div class="topbarInner">
+    <div class="logo">
+      <span class="logoMark">D</span>
+      <span>Owner</span>
+    </div>
+    <div class="nav-inner owner">
+      <a href="/owner/dashboard" class="nav-link {{ 'active' if t=='dashboard' else '' }}">Dashboard</a>
+      <a href="/owner/users" class="nav-link {{ 'active' if t=='users' else '' }}">Users</a>
+      <a href="/owner/groups" class="nav-link {{ 'active' if t=='groups' else '' }}">Groups</a>
+      <a href="/owner/payments" class="nav-link {{ 'active' if t=='payments' else '' }}">Payments</a>
+      <a href="/owner/risk" class="nav-link {{ 'active' if t=='risk' else '' }}">Risk</a>
+      <a href="/owner/settings" class="nav-link {{ 'active' if t=='settings' else '' }}">Settings</a>
+    </div>
   </div>
 </div>

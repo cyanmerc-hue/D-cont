@@ -238,6 +238,20 @@ h3 {
   gap: 12px;
 }
 
+/* Make existing nav pills work inside the new topbar layout */
+.topbarInner .nav-inner {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.topbarInner .nav-link {
+  padding: 8px 12px;
+  border-radius: 999px;
+}
+
 .logo {
   display: flex;
   align-items: center;

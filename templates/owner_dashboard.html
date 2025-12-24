@@ -11,12 +11,12 @@
 
     {% include '_owner_nav.html' %}
 
-    <div class="container container-wide" style="margin: 18px auto 48px auto;">
-      <div class="card" style="padding:24px; color:#222;">
-        <div style="display:flex; justify-content: space-between; align-items:center; gap: 12px;">
-            <h2 style="margin:0; color:#2D9CDB;">Owner Dashboard</h2>
-            <a href="/logout" class="btn btn-sm" style="width:auto; padding:6px 16px; border-radius:6px;">Logout</a>
-        </div>
+        <div class="container container-pro" style="margin: 18px auto 48px auto;">
+            <div class="card card-pro card-lg" style="color:#222;">
+                <div class="row" style="justify-content: space-between; align-items:center;">
+                        <h2 style="margin:0; color:#2D9CDB;">Owner Dashboard</h2>
+                        <a href="/logout" class="btn btn-sm" style="width:auto;">Logout</a>
+                </div>
 
         {% with messages = get_flashed_messages() %}
           {% if messages %}
@@ -26,29 +26,49 @@
           {% endif %}
         {% endwith %}
 
-        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:12px; margin-top:18px;">
-            <div style="border:1px solid #e8eef0; border-radius:10px; padding:14px;">
-                <div style="color:#555;">Total users</div>
-                <div style="font-size:22px; font-weight:700;">{{ total_users }}</div>
-            </div>
-            <div style="border:1px solid #e8eef0; border-radius:10px; padding:14px;">
-                <div style="color:#555;">Active groups</div>
-                <div style="font-size:22px; font-weight:700;">{{ active_groups }}</div>
-            </div>
-            <div style="border:1px solid #e8eef0; border-radius:10px; padding:14px;">
-                <div style="color:#555;">Formation groups</div>
-                <div style="font-size:22px; font-weight:700;">{{ formation_groups }}</div>
-            </div>
-            <div style="border:1px solid #e8eef0; border-radius:10px; padding:14px;">
-                <div style="color:#555;">Defaults this month</div>
-                <div style="font-size:22px; font-weight:700;">{{ defaults_this_month }}</div>
-            </div>
-            <div style="border:1px solid #e8eef0; border-radius:10px; padding:14px;">
-                <div style="color:#555;">App fee collected</div>
-                <div style="font-size:22px; font-weight:700;">₹{{ app_fee_collected }}</div>
-                <div style="color:#777; font-size:0.9em; margin-top:4px;">{{ app_fee_paid_count }} paid × ₹{{ app_fee_amount }}</div>
-            </div>
-        </div>
+                <div class="row" style="margin-top:18px;">
+                        <div class="col" style="min-width: 220px;">
+                            <div class="card-pro" style="padding:14px;">
+                                <div class="kpi">
+                                    <div class="kpiLabel">Total users</div>
+                                    <div class="kpiValue">{{ total_users }}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col" style="min-width: 220px;">
+                            <div class="card-pro" style="padding:14px;">
+                                <div class="kpi">
+                                    <div class="kpiLabel">Active groups</div>
+                                    <div class="kpiValue">{{ active_groups }}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col" style="min-width: 220px;">
+                            <div class="card-pro" style="padding:14px;">
+                                <div class="kpi">
+                                    <div class="kpiLabel">Formation groups</div>
+                                    <div class="kpiValue">{{ formation_groups }}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col" style="min-width: 220px;">
+                            <div class="card-pro" style="padding:14px;">
+                                <div class="kpi">
+                                    <div class="kpiLabel">Defaults this month</div>
+                                    <div class="kpiValue">{{ defaults_this_month }}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col" style="min-width: 220px;">
+                            <div class="card-pro" style="padding:14px;">
+                                <div class="kpi">
+                                    <div class="kpiLabel">App fee collected</div>
+                                    <div class="kpiValue">₹{{ app_fee_collected }}</div>
+                                </div>
+                                <div class="small" style="margin-top:6px; color:#777;">{{ app_fee_paid_count }} paid × ₹{{ app_fee_amount }}</div>
+                            </div>
+                        </div>
+                </div>
 
         <div style="margin-top:16px; color:#777; font-size:0.95em;">Note: Payments/defaults tracking is record-only and will populate once contribution logs are enabled.</div>
       </div>

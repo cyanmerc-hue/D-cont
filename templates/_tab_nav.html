@@ -1,9 +1,15 @@
-<div class="top-nav">
+<div class="topbar">
   {% set t = active_tab|default('') %}
-  <div class="nav-inner">
-    <a href="/home" class="nav-link {{ 'active' if t=='home' else '' }}">Home</a>
-    <a href="/groups" class="nav-link {{ 'active' if t=='groups' else '' }}">Groups</a>
-    <a href="/payments" class="nav-link {{ 'active' if t=='payments' else '' }}">Payments</a>
-    <a href="/profile" class="nav-link {{ 'active' if t=='profile' else '' }}">Profile</a>
+  <div class="topbarInner">
+    <div class="logo">
+      <span class="logoMark">D</span>
+      <span>D-cont</span>
+    </div>
+    <div class="nav-inner">
+      <a href="/home" class="nav-link {{ 'active' if t=='home' else '' }}">Home</a>
+      <a href="/groups" class="nav-link {{ 'active' if t=='groups' else '' }}">Groups</a>
+      <a href="/payments" class="nav-link {{ 'active' if t=='payments' else '' }}">Payments</a>
+      <a href="/profile" class="nav-link {{ 'active' if t=='profile' else '' }}">Profile</a>
+    </div>
   </div>
 </div>
