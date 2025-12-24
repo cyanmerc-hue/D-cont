@@ -2,7 +2,7 @@
 <html>
 <head>
     <title>Owner User - D-cont</title>
-    <link rel="stylesheet" href="/static/app.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='app.css', v=asset_version) }}">
 </head>
 <body class="app-body">
     <div class="app-header">
@@ -98,6 +98,16 @@
                 <input type="hidden" name="username" value="{{ user.username }}">
                 <button type="submit" style="background:#fff; color:#b42318; border:1px solid #b42318; padding:8px 12px; border-radius:8px; cursor:pointer;">{{ 'Unfreeze future' if user.join_blocked else 'Freeze future' }}</button>
             </form>
+        </div>
+
+        <div style="margin-top:14px; border:1px solid #e8eef0; border-radius:10px; padding:14px;">
+            <div style="font-weight:700; color:#222;">Reset password (Owner only)</div>
+            <form method="post" action="/owner/users/reset_password" style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                <input type="hidden" name="username" value="{{ user.username }}">
+                <input name="new_password" type="password" placeholder="New password (min 6 chars)" class="input" style="margin:0; max-width: 320px;" />
+                <button type="submit" class="btn btn-sm" style="width:auto; padding:8px 14px;">Reset</button>
+            </form>
+            <div style="margin-top:8px; color:#777; font-size:0.95em;">Use this if the user forgot their password or is stuck due to legacy/blank password data.</div>
         </div>
 
         <div style="margin-top:14px; border:1px solid #e8eef0; border-radius:10px; padding:14px;">

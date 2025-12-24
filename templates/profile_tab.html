@@ -2,7 +2,7 @@
 <html>
 <head>
   <title>Profile - D-cont</title>
-  <link rel="stylesheet" href="/static/app.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css', v=asset_version) }}">
 </head>
 <body class="app-body">
   <div class="app-header">
@@ -44,7 +44,7 @@
       <input name="full_name" type="text" value="{{ full_name }}" style="width:100%; padding:10px; border-radius:8px; border:1px solid #cfd8dc;" />
 
       <label style="display:block; color:#555; font-size:0.95em; margin-top:10px;">Mobile (read-only)</label>
-      <input type="text" value="{{ mobile }}" readonly style="width:100%; padding:10px; border-radius:8px; border:1px solid #e0e0e0; background:#f7fbfc;" />
+      <input type="text" value="{{ mobile }}" readonly class="input" style="margin:0;" />
 
       <label style="display:block; color:#555; font-size:0.95em; margin-top:10px;">UPI ID</label>
       <input name="upi_id" type="text" value="{{ upi_id }}" placeholder="example@upi" style="width:100%; padding:10px; border-radius:8px; border:1px solid #cfd8dc;" />

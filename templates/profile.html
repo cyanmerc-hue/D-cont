@@ -2,7 +2,7 @@
 <html>
 <head>
     <title>Profile - D-cont</title>
-    <link rel="stylesheet" href="/static/app.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='app.css', v=asset_version) }}">
     <style>
         .profile-container { max-width: 400px; margin: 40px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px #e0e0e0; padding: 32px; }
         .profile-photo { width: 120px; height: 120px; border-radius: 50%; object-fit: cover; border: 2px solid #2D9CDB; margin-bottom: 16px; }

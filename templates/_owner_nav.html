@@ -1,8 +1,8 @@
 <div class="topbar">
   {% set t = active_owner_tab|default('dashboard') %}
   <div class="topbarInner">
-    <div class="logo">
-      <span class="logoMark">D</span>
+    <div class="brand">
+      <span class="brandMark">D</span>
       <span>Owner</span>
     </div>
     <div class="nav-inner owner">
@@ -13,5 +13,8 @@
       <a href="/owner/risk" class="nav-link {{ 'active' if t=='risk' else '' }}">Risk</a>
       <a href="/owner/settings" class="nav-link {{ 'active' if t=='settings' else '' }}">Settings</a>
     </div>
+    {% if nav_user_pill %}
+      <div class="pill">{{ nav_user_pill }}</div>
+    {% endif %}
   </div>
 </div>

@@ -12,11 +12,32 @@ import smtplib
 from email.message import EmailMessage
 import re
 from datetime import datetime
+import time
 
 app = Flask(__name__)
 # In production (Render/Heroku/etc.), set SECRET_KEY as an environment variable.
 app.secret_key = os.environ.get('SECRET_KEY', 'your_secret_key')
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def _compute_asset_version() -> str:
+    # Prefer build/deploy identifiers when available (Render)
+    commit = (
+        os.environ.get('RENDER_GIT_COMMIT')
+        or os.environ.get('RENDER_COMMIT')
+        or os.environ.get('GIT_COMMIT')
+        or os.environ.get('COMMIT_SHA')
+    )
+    if commit:
+        return str(commit)[:12]
+    try:
+        css_path = os.path.join(BASE_DIR, 'static', 'app.css')
+        return str(int(os.path.getmtime(css_path)))
+    except Exception:
+        return str(int(time.time()))
+
+
+ASSET_VERSION = _compute_asset_version()
 
 # Render's filesystem is ephemeral unless you attach a persistent disk.
 # You can override these paths via env vars to point at a persistent mount.
@@ -430,8 +451,27 @@ def jinja_status_hint_filter(value):
 
 @app.context_processor
 def inject_support_links():
+    nav_user_pill = None
+    username = session.get('username')
+    if username:
+        try:
+            user = get_user_row(username) or {}
+        except Exception:
+            user = {}
+
+        role = (session.get('role') or user.get('role') or 'customer').strip().lower()
+        display_name = (user.get('full_name') or username).strip()
+        mobile = (user.get('mobile') or '').strip()
+
+        if role == 'admin':
+            nav_user_pill = f"Owner • {username}"
+        else:
+            nav_user_pill = f"{display_name} • {mobile}" if mobile else display_name
+
     return {
         'support_whatsapp_url': build_whatsapp_link('Hi D-CONT Support, I need help with: '),
+        'nav_user_pill': nav_user_pill,
+        'asset_version': ASSET_VERSION,
     }
 
 
@@ -632,6 +672,58 @@ def _normalize_mobile_digits(raw: str) -> str:
     if len(digits) == 10:
         return digits
     return digits
+
+
+def _password_matches(stored_pw: str, provided_pw: str) -> bool:
+    stored_pw = stored_pw or ''
+    provided_pw = provided_pw or ''
+    if not stored_pw or not provided_pw:
+        return False
+    try:
+        if check_password_hash(stored_pw, provided_pw):
+            return True
+    except (ValueError, TypeError):
+        pass
+    # Back-compat: if password was stored in plain text
+    return stored_pw == provided_pw
+
+
+def _repair_blank_username(conn, username: str, mobile: str) -> str:
+    """Best-effort fix for legacy rows where username is blank.
+
+    Returns the repaired username if updated; otherwise returns the original value.
+    """
+    if (username or '').strip():
+        return username
+    mobile = (mobile or '').strip()
+    if not mobile:
+        return username
+    candidate = mobile
+    try:
+        c = conn.cursor()
+        c.execute('SELECT 1 FROM users WHERE username=?', (candidate,))
+        exists = c.fetchone()
+        if exists:
+            return username
+        c.execute('UPDATE users SET username=? WHERE mobile=?', (candidate, candidate))
+        conn.commit()
+        return candidate
+    except sqlite3.OperationalError:
+        return username
+
+
+def _dedupe_user_rows(rows):
+    deduped = []
+    seen = set()
+    for row in rows or []:
+        if not row:
+            continue
+        key = (row[0] or '', _normalize_mobile_digits(row[4] if len(row) > 4 else ''))
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(row)
+    return deduped
 @app.route('/profile', methods=['GET', 'POST'])
 @require_customer
 def profile():
@@ -1893,83 +1985,82 @@ def login():
 
         conn = get_db()
         c = conn.cursor()
-        row = None
+
+        candidate_rows = []
         try:
-            # First try username
-            c.execute('SELECT username, password, role, is_active, mobile FROM users WHERE username=?', (identifier,))
-            row = c.fetchone()
-            # Fallback: allow login via mobile for legacy accounts
-            if not row:
-                for mobile_value in _mobile_candidates(identifier):
-                    c.execute('SELECT username, password, role, is_active, mobile FROM users WHERE mobile=?', (mobile_value,))
-                    row = c.fetchone()
-                    if row:
-                        break
+            # Username: tolerate case/spacing differences
+            c.execute(
+                'SELECT username, password, role, is_active, mobile FROM users WHERE lower(trim(username)) = lower(?)',
+                (identifier.strip(),),
+            )
+            candidate_rows.extend(c.fetchall() or [])
 
-            # Last-resort fallback: legacy DB rows may store mobile with spaces/dashes/+91.
-            # Compare digit-normalized mobile values.
-            if not row:
-                identifier_digits = _normalize_mobile_digits(identifier)
-                if identifier_digits:
-                    c.execute('SELECT username, password, role, is_active, mobile FROM users')
-                    for cand in c.fetchall() or []:
-                        cand_mobile = cand[4] if len(cand) > 4 else ''
-                        if _normalize_mobile_digits(cand_mobile) == identifier_digits:
-                            row = cand
-                            break
+            # Mobile: try exact candidates (raw/digits/+91 variations)
+            for mobile_value in _mobile_candidates(identifier):
+                c.execute(
+                    'SELECT username, password, role, is_active, mobile FROM users WHERE mobile=?',
+                    (mobile_value,),
+                )
+                candidate_rows.extend(c.fetchall() or [])
+
+            # Last-resort fallback: digit-normalized mobile matching
+            identifier_digits = _normalize_mobile_digits(identifier)
+            if identifier_digits:
+                c.execute('SELECT username, password, role, is_active, mobile FROM users')
+                for cand in c.fetchall() or []:
+                    cand_mobile = cand[4] if len(cand) > 4 else ''
+                    if _normalize_mobile_digits(cand_mobile) == identifier_digits:
+                        candidate_rows.append(cand)
         except sqlite3.OperationalError:
-            row = None
+            candidate_rows = []
 
-        if not row:
+        candidate_rows = _dedupe_user_rows(candidate_rows)
+
+        if not candidate_rows:
             conn.close()
             flash('Invalid credentials.')
             return render_template('login.html')
 
-        db_username, stored_pw, role_raw, is_active_raw, db_mobile = row
-        # Auto-repair: some legacy rows may have a blank username
-        if not (db_username or '').strip() and (db_mobile or '').strip():
-            candidate = (db_mobile or '').strip()
-            try:
-                c.execute('SELECT 1 FROM users WHERE username=?', (candidate,))
-                exists = c.fetchone()
-                if not exists:
-                    c.execute('UPDATE users SET username=? WHERE mobile=?', (candidate, candidate))
-                    conn.commit()
-                    db_username = candidate
-            except sqlite3.OperationalError:
-                pass
+        matched = None
+        for row in candidate_rows:
+            db_username, stored_pw, role_raw, is_active_raw, db_mobile = row
+            db_username = _repair_blank_username(conn, db_username, db_mobile)
+            if not (db_username or '').strip():
+                continue
+
+            role = (role_raw or 'customer').strip().lower()
+            if role == 'admin':
+                # Don't allow admin to login via customer section
+                continue
+
+            if int(is_active_raw if is_active_raw is not None else 1) != 1:
+                # Preserve earlier behavior for blocked accounts
+                continue
+
+            if _password_matches(stored_pw, password):
+                matched = (db_username, role)
+                break
 
         conn.close()
 
-        if not (db_username or '').strip():
-            flash('Your account needs an update. Please contact support.')
+        if not matched:
+            # If any candidate is blocked, show the blocked message (more helpful than Invalid credentials)
+            any_blocked = False
+            for row in candidate_rows:
+                try:
+                    if int(row[3] if row[3] is not None else 1) != 1:
+                        any_blocked = True
+                        break
+                except Exception:
+                    continue
+            if any_blocked:
+                flash('Your account is blocked. Please contact support.')
+            else:
+                flash('Invalid credentials.')
             return render_template('login.html')
 
-        role = (role_raw or 'customer').strip().lower()
-        if role == 'admin':
-            flash('Use the Admin Login section to sign in as admin.')
-            return render_template('login.html')
-
-        if int(is_active_raw if is_active_raw is not None else 1) != 1:
-            flash('Your account is blocked. Please contact support.')
-            return render_template('login.html')
-
-        stored_pw = stored_pw or ''
-        password_ok = False
-        try:
-            password_ok = check_password_hash(stored_pw, password)
-        except (ValueError, TypeError):
-            password_ok = False
-        if not password_ok:
-            # Back-compat: if password was stored in plain text
-            password_ok = stored_pw == password
-
-        if not password_ok:
-            flash('Invalid credentials.')
-            return render_template('login.html')
-
-        session['username'] = db_username
-        session['role'] = role
+        session['username'] = matched[0]
+        session['role'] = matched[1]
         return redirect(url_for('home'))
 
     return render_template('login.html')
@@ -1981,8 +2072,8 @@ def register():
         if agree_terms != 'yes':
             flash('You must agree to the Terms & Conditions to register.')
             return render_template('register.html')
-        username = request.form.get('username')
-        password = request.form.get('password')
+        username = (request.form.get('username') or '').strip()
+        password = request.form.get('password') or ''
         mobile_raw = request.form.get('mobile')
         # Store mobile in a normalized digits format when possible so
         # users can log in even if they type +91/spaces/dashes later.
@@ -1991,6 +2082,16 @@ def register():
         language = request.form.get('language')
         city_state = request.form.get('city_state')
         email = request.form.get('email')
+
+        if not username:
+            flash('Username is required.')
+            return render_template('register.html')
+        if not password or len(password.strip()) < 6:
+            flash('Password is required (min 6 characters).')
+            return render_template('register.html')
+        if not mobile:
+            flash('Mobile number is required.')
+            return render_template('register.html')
         try:
             password_hash = generate_password_hash(password)
             conn = get_db()
@@ -2004,6 +2105,40 @@ def register():
         except sqlite3.IntegrityError:
             flash('Username or mobile already exists!')
     return render_template('register.html')
+
+
+@app.route('/owner/users/reset_password', methods=['POST'])
+@admin_required
+def owner_reset_user_password():
+    target_username = (request.form.get('username') or '').strip()
+    new_password = request.form.get('new_password') or ''
+
+    if not target_username:
+        flash('Missing username.')
+        return redirect(url_for('owner_users'))
+    if not new_password or len(new_password.strip()) < 6:
+        flash('Password must be at least 6 characters.')
+        return redirect(url_for('owner_user_profile', username=target_username))
+
+    conn = get_db()
+    c = conn.cursor()
+    c.execute('SELECT role FROM users WHERE username=?', (target_username,))
+    row = c.fetchone()
+    if not row:
+        conn.close()
+        flash('User not found.')
+        return redirect(url_for('owner_users'))
+    if (row[0] or '').strip().lower() == 'admin':
+        conn.close()
+        flash('Admin passwords are not reset here.')
+        return redirect(url_for('owner_users'))
+
+    new_hash = generate_password_hash(new_password)
+    c.execute('UPDATE users SET password=? WHERE username=?', (new_hash, target_username))
+    conn.commit()
+    conn.close()
+    flash('Password reset successfully.')
+    return redirect(url_for('owner_user_profile', username=target_username))
 
 @app.route('/logout')
 def logout():
