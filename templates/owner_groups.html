@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Owner Groups - D-cont</title>
+</head>
+<body style="font-family: Arial, Helvetica, sans-serif; background: #f7fbfc; margin: 0; padding: 0;">
+    <div style="background: #fff; box-shadow: 0 2px 8px #e0e0e0; padding: 16px 0 8px 0; text-align: center;">
+        <img src="/static/logo.png" onerror="this.onerror=null;this.src='/static/logo.svg';" alt="D-cont Logo" style="height:60px; margin-bottom: 0;"/>
+    </div>
+
+    {% include '_owner_nav.html' %}
+
+    <div style="max-width: 1100px; margin: 18px auto 48px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px #e0e0e0; padding: 24px; color: #222;">
+        <div style="display:flex; justify-content: space-between; align-items:center; gap: 12px;">
+            <h2 style="margin:0; color:#2D9CDB;">Groups</h2>
+            <a href="/logout" style="color:#fff; background:#2D9CDB; padding:6px 16px; border-radius:6px; text-decoration:none;">Logout</a>
+        </div>
+
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            <div style="margin-top:12px; background:#eaf6fb; border:1px solid #2D9CDB; padding:10px 12px; border-radius:10px; color:#222;">
+              {{ messages[0] }}
+            </div>
+          {% endif %}
+        {% endwith %}
+
+        <h3 style="margin-top:18px;">Join Requests</h3>
+        {% if join_requests and join_requests|length > 0 %}
+            <div style="overflow-x:auto;">
+                <table style="width:100%; border-collapse: collapse; min-width: 900px;">
+                    <thead>
+                        <tr>
+                            <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">User</th>
+                            <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Mobile</th>
+                            <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">UPI</th>
+                            <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Group</th>
+                            <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Amount</th>
+                            <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for r in join_requests %}
+                        <tr>
+                            <td style="padding:8px; border-bottom:1px solid #f2f2f2;">{{ r.full_name or r.username }}</td>
+                            <td style="padding:8px; border-bottom:1px solid #f2f2f2;">{{ r.mobile }}</td>
+                            <td style="padding:8px; border-bottom:1px solid #f2f2f2;">{{ r.upi_id }}</td>
+                            <td style="padding:8px; border-bottom:1px solid #f2f2f2;">{{ r.group_name }}</td>
+                            <td style="padding:8px; border-bottom:1px solid #f2f2f2;">₹{{ r.monthly_amount }}</td>
+                            <td style="padding:8px; border-bottom:1px solid #f2f2f2;">
+                                <div style="display:flex; gap:8px;">
+                                    <form method="post" action="/admin/update_membership_status" style="margin:0;">
+                                        <input type="hidden" name="membership_id" value="{{ r.membership_id }}">
+                                        <input type="hidden" name="status" value="joined">
+                                        <button type="submit" style="background:#2D9CDB; color:#fff; border:none; padding:6px 12px; border-radius:6px; cursor:pointer;">Approve</button>
+                                    </form>
+                                    <form method="post" action="/admin/update_membership_status" style="margin:0;">
+                                        <input type="hidden" name="membership_id" value="{{ r.membership_id }}">
+                                        <input type="hidden" name="status" value="rejected">
+                                        <button type="submit" style="background:#eaf6fb; color:#2D9CDB; border:1px solid #2D9CDB; padding:6px 12px; border-radius:6px; cursor:pointer;">Reject</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div style="color:#777;">No pending join requests.</div>
+        {% endif %}
+
+        <h3 style="margin-top:22px;">Add group</h3>
+        <form method="post" action="/owner/groups/add" style="margin-top:10px; border:1px solid #e8eef0; border-radius:10px; padding:14px; display:grid; grid-template-columns: 1.2fr 1.6fr 140px 130px; gap:10px; align-items:end;">
+            <div>
+                <label style="display:block; color:#555; font-size:0.95em;">Name</label>
+                <input type="text" name="name" required style="width:100%; padding:8px; border-radius:8px; border:1px solid #ccc;">
+            </div>
+            <div>
+                <label style="display:block; color:#555; font-size:0.95em;">Description</label>
+                <input type="text" name="description" style="width:100%; padding:8px; border-radius:8px; border:1px solid #ccc;">
+            </div>
+            <div>
+                <label style="display:block; color:#555; font-size:0.95em;">Monthly ₹</label>
+                <input type="number" min="1" name="monthly_amount" required style="width:100%; padding:8px; border-radius:8px; border:1px solid #ccc;">
+            </div>
+            <div>
+                <label style="display:block; color:#555; font-size:0.95em;">Max members</label>
+                <input type="number" min="1" name="max_members" value="10" style="width:100%; padding:8px; border-radius:8px; border:1px solid #ccc;">
+            </div>
+            <div style="grid-column: 1 / -1; display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                <div>
+                    <label style="display:block; color:#555; font-size:0.95em;">Receiver name</label>
+                    <input type="text" name="receiver_name" style="width:100%; padding:8px; border-radius:8px; border:1px solid #ccc;">
+                </div>
+                <div>
+                    <label style="display:block; color:#555; font-size:0.95em;">Receiver UPI</label>
+                    <input type="text" name="receiver_upi" style="width:100%; padding:8px; border-radius:8px; border:1px solid #ccc;">
+                </div>
+            </div>
+            <button type="submit" style="grid-column: 1 / -1; background:#2D9CDB; color:#fff; border:none; padding:10px 14px; border-radius:8px; cursor:pointer;">Add</button>
+        </form>
+
+        <h3 style="margin-top:22px;">All groups</h3>
+        {% if groups and groups|length > 0 %}
+            <div style="overflow-x:auto;">
+                <table style="width:100%; border-collapse: collapse; min-width: 1100px;">
+                    <thead>
+                        <tr>
+                            <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Group</th>
+                            <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Status</th>
+                            <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Members</th>
+                            <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Monthly</th>
+                            <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Receiver</th>
+                            <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for g in groups %}
+                        <tr>
+                            <td style="padding:8px; border-bottom:1px solid #f2f2f2;">
+                                <div style="font-weight:700; color:#2D9CDB;">{{ g.name }}</div>
+                                <div style="color:#777; font-size:0.9em;">{{ g.description }}</div>
+                            </td>
+                            <td style="padding:8px; border-bottom:1px solid #f2f2f2;">
+                                {% if g.is_paused %}
+                                    <span style="color:#b42318; font-weight:700;">Paused</span>
+                                {% else %}
+                                    <span style="color:#222; font-weight:700;">{{ (g.status or 'formation')|capitalize }}</span>
+                                {% endif %}
+                            </td>
+                            <td style="padding:8px; border-bottom:1px solid #f2f2f2;">{{ g.joined_members }}/{{ g.max_members }}</td>
+                            <td style="padding:8px; border-bottom:1px solid #f2f2f2;">₹{{ g.monthly_amount }}</td>
+                            <td style="padding:8px; border-bottom:1px solid #f2f2f2;">{{ g.receiver_name }}<div style="color:#777; font-size:0.9em;">{{ g.receiver_upi }}</div></td>
+                            <td style="padding:8px; border-bottom:1px solid #f2f2f2;">
+                                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                                    <form method="post" action="/owner/groups/update" style="margin:0; display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+                                        <input type="hidden" name="group_id" value="{{ g.id }}">
+                                        <input name="name" value="{{ g.name }}" style="width:180px; padding:6px; border-radius:6px; border:1px solid #ccc;">
+                                        <input name="monthly_amount" type="number" min="0" value="{{ g.monthly_amount }}" style="width:120px; padding:6px; border-radius:6px; border:1px solid #ccc;">
+                                        <input name="max_members" type="number" min="1" value="{{ g.max_members }}" style="width:120px; padding:6px; border-radius:6px; border:1px solid #ccc;">
+                                        <select name="status" style="padding:6px; border-radius:6px; border:1px solid #ccc;">
+                                            <option value="formation" {% if (g.status or 'formation')=='formation' %}selected{% endif %}>Formation</option>
+                                            <option value="active" {% if g.status=='active' %}selected{% endif %}>Active</option>
+                                            <option value="completed" {% if g.status=='completed' %}selected{% endif %}>Completed</option>
+                                        </select>
+                                        <input name="receiver_name" value="{{ g.receiver_name }}" placeholder="Receiver name" style="width:160px; padding:6px; border-radius:6px; border:1px solid #ccc;">
+                                        <input name="receiver_upi" value="{{ g.receiver_upi }}" placeholder="Receiver UPI" style="width:180px; padding:6px; border-radius:6px; border:1px solid #ccc;">
+                                        <button type="submit" style="background:#eaf6fb; color:#2D9CDB; border:1px solid #2D9CDB; padding:6px 10px; border-radius:6px; cursor:pointer;">Save</button>
+                                    </form>
+
+                                    <form method="post" action="/owner/groups/toggle_pause" style="margin:0;">
+                                        <input type="hidden" name="group_id" value="{{ g.id }}">
+                                        <button type="submit" style="background:#fff; color:#b42318; border:1px solid #b42318; padding:6px 10px; border-radius:6px; cursor:pointer;">{{ 'Unpause' if g.is_paused else 'Pause' }}</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div style="color:#777;">No groups found.</div>
+        {% endif %}
+
+        <div style="margin-top: 18px; color:#777; font-size: 0.95em;">Note: You are recording, not holding money.</div>
+    </div>
+</body>
+</html>

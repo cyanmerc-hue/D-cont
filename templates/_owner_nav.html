@@ -1,0 +1,11 @@
+<div style="background:#fff; border-bottom:1px solid #e8eef0; padding:10px 0;">
+  {% set t = active_owner_tab|default('dashboard') %}
+  <div style="max-width:1100px; margin:0 auto; display:flex; justify-content:space-around; flex-wrap:wrap; gap:10px; padding:0 12px;">
+    <a href="/owner/dashboard" style="text-decoration:none; color:{{ '#2D9CDB' if t=='dashboard' else '#555' }}; font-weight:{{ 'bold' if t=='dashboard' else 'normal' }};">📊 Dashboard</a>
+    <a href="/owner/users" style="text-decoration:none; color:{{ '#2D9CDB' if t=='users' else '#555' }}; font-weight:{{ 'bold' if t=='users' else 'normal' }};">👥 Users</a>
+    <a href="/owner/groups" style="text-decoration:none; color:{{ '#2D9CDB' if t=='groups' else '#555' }}; font-weight:{{ 'bold' if t=='groups' else 'normal' }};">🏘️ Groups</a>
+    <a href="/owner/payments" style="text-decoration:none; color:{{ '#2D9CDB' if t=='payments' else '#555' }}; font-weight:{{ 'bold' if t=='payments' else 'normal' }};">💰 Payments</a>
+    <a href="/owner/risk" style="text-decoration:none; color:{{ '#2D9CDB' if t=='risk' else '#555' }}; font-weight:{{ 'bold' if t=='risk' else 'normal' }};">⚠️ Risk</a>
+    <a href="/owner/settings" style="text-decoration:none; color:{{ '#2D9CDB' if t=='settings' else '#555' }}; font-weight:{{ 'bold' if t=='settings' else 'normal' }};">⚙️ Settings</a>
+  </div>
+</div>

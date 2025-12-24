@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Owner Users - D-cont</title>
+</head>
+<body style="font-family: Arial, Helvetica, sans-serif; background: #f7fbfc; margin: 0; padding: 0;">
+    <div style="background: #fff; box-shadow: 0 2px 8px #e0e0e0; padding: 16px 0 8px 0; text-align: center;">
+        <img src="/static/logo.png" onerror="this.onerror=null;this.src='/static/logo.svg';" alt="D-cont Logo" style="height:60px; margin-bottom: 0;"/>
+    </div>
+
+    {% include '_owner_nav.html' %}
+
+    <div style="max-width: 1100px; margin: 18px auto 48px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px #e0e0e0; padding: 24px; color: #222;">
+        <div style="display:flex; justify-content: space-between; align-items:center; gap: 12px;">
+            <h2 style="margin:0; color:#2D9CDB;">Users</h2>
+            <a href="/logout" style="color:#fff; background:#2D9CDB; padding:6px 16px; border-radius:6px; text-decoration:none;">Logout</a>
+        </div>
+
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            <div style="margin-top:12px; background:#eaf6fb; border:1px solid #2D9CDB; padding:10px 12px; border-radius:10px; color:#222;">
+              {{ messages[0] }}
+            </div>
+          {% endif %}
+        {% endwith %}
+
+        <div style="margin-top:18px; overflow-x:auto;">
+            <table style="width:100%; border-collapse: collapse; min-width: 900px;">
+                <thead>
+                    <tr>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">User</th>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Phone</th>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Trust</th>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Active groups</th>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Flags</th>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for u in users %}
+                    {% if (u.role or 'customer') != 'admin' %}
+                    <tr>
+                        <td style="padding:8px; border-bottom:1px solid #f2f2f2;">
+                            <div style="font-weight:700;">{{ u.full_name or u.username }}</div>
+                            <div style="color:#777; font-size:0.9em;">{{ u.username }}</div>
+                        </td>
+                        <td style="padding:8px; border-bottom:1px solid #f2f2f2;">{{ u.mobile }}</td>
+                        <td style="padding:8px; border-bottom:1px solid #f2f2f2;">{{ u.trust_score }}</td>
+                        <td style="padding:8px; border-bottom:1px solid #f2f2f2;">{{ u.active_groups }}</td>
+                        <td style="padding:8px; border-bottom:1px solid #f2f2f2;">{{ u.flags }}</td>
+                        <td style="padding:8px; border-bottom:1px solid #f2f2f2;">
+                            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                                <a href="/owner/users/{{ u.username }}" style="color:#2D9CDB; background:#eaf6fb; padding:6px 10px; border-radius:6px; text-decoration:none; border:1px solid #2D9CDB;">View</a>
+
+                                <form method="post" action="/admin/toggle_user_active" style="margin:0;">
+                                    <input type="hidden" name="username" value="{{ u.username }}">
+                                    <input type="hidden" name="action" value="{{ 'block' if u.is_active else 'unblock' }}">
+                                    <button type="submit" style="background:#2D9CDB; color:#fff; border:none; padding:6px 10px; border-radius:6px; cursor:pointer;">{{ 'Block' if u.is_active else 'Unblock' }}</button>
+                                </form>
+
+                                <form method="post" action="/owner/users/toggle_join_block" style="margin:0;">
+                                    <input type="hidden" name="username" value="{{ u.username }}">
+                                    <button type="submit" style="background:#fff; color:#b42318; border:1px solid #b42318; padding:6px 10px; border-radius:6px; cursor:pointer;">{{ 'Unfreeze future' if u.join_blocked else 'Freeze future' }}</button>
+                                </form>
+
+                                <form method="post" action="/owner/users/update_trust" style="margin:0; display:flex; gap:6px; align-items:center;">
+                                    <input type="hidden" name="username" value="{{ u.username }}">
+                                    <input name="trust_score" type="number" min="0" max="100" value="{{ u.trust_score }}" style="width:80px; padding:6px; border-radius:6px; border:1px solid #ccc;">
+                                    <button type="submit" style="background:#eaf6fb; color:#2D9CDB; border:1px solid #2D9CDB; padding:6px 10px; border-radius:6px; cursor:pointer;">Set</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endif %}
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+</html>

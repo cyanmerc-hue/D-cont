@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Owner Settings - D-cont</title>
+</head>
+<body style="font-family: Arial, Helvetica, sans-serif; background: #f7fbfc; margin: 0; padding: 0;">
+    <div style="background: #fff; box-shadow: 0 2px 8px #e0e0e0; padding: 16px 0 8px 0; text-align: center;">
+        <img src="/static/logo.png" onerror="this.onerror=null;this.src='/static/logo.svg';" alt="D-cont Logo" style="height:60px; margin-bottom: 0;"/>
+    </div>
+
+    {% include '_owner_nav.html' %}
+
+    <div style="max-width: 1100px; margin: 18px auto 48px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px #e0e0e0; padding: 24px; color: #222;">
+        <div style="display:flex; justify-content: space-between; align-items:center; gap: 12px;">
+            <h2 style="margin:0; color:#2D9CDB;">Settings</h2>
+            <a href="/logout" style="color:#fff; background:#2D9CDB; padding:6px 16px; border-radius:6px; text-decoration:none;">Logout</a>
+        </div>
+
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            <div style="margin-top:12px; background:#eaf6fb; border:1px solid #2D9CDB; padding:10px 12px; border-radius:10px; color:#222;">
+              {{ messages[0] }}
+            </div>
+          {% endif %}
+        {% endwith %}
+
+        <form method="post" action="/owner/settings" style="margin-top:18px; border:1px solid #e8eef0; border-radius:10px; padding:14px;">
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:10px;">
+                <div>
+                    <label style="display:block; color:#555; font-size:0.95em;">App fee amount (₹)</label>
+                    <input name="app_fee_amount" type="number" min="0" value="{{ settings.app_fee_amount }}" style="width:100%; padding:10px; border-radius:8px; border:1px solid #cfd8dc;" />
+                </div>
+                <div>
+                    <label style="display:block; color:#555; font-size:0.95em;">Group size limits</label>
+                    <input name="group_size_limit" type="text" value="{{ settings.group_size_limit }}" placeholder="e.g., 10" style="width:100%; padding:10px; border-radius:8px; border:1px solid #cfd8dc;" />
+                </div>
+                <div>
+                    <label style="display:block; color:#555; font-size:0.95em;">Max monthly contribution (₹)</label>
+                    <input name="max_monthly_contribution" type="number" min="0" value="{{ settings.max_monthly_contribution }}" style="width:100%; padding:10px; border-radius:8px; border:1px solid #cfd8dc;" />
+                </div>
+                <div>
+                    <label style="display:block; color:#555; font-size:0.95em;">Company UPI ID</label>
+                    <input name="company_upi_id" type="text" value="{{ settings.company_upi_id }}" placeholder="example@upi" style="width:100%; padding:10px; border-radius:8px; border:1px solid #cfd8dc;" />
+                </div>
+            </div>
+
+            <div style="margin-top:12px;">
+                <label style="display:block; color:#555; font-size:0.95em;">Legal text (T&C / disclaimers)</label>
+                <textarea name="legal_text" rows="6" style="width:100%; padding:10px; border-radius:8px; border:1px solid #cfd8dc;">{{ settings.legal_text }}</textarea>
+            </div>
+
+            <button type="submit" style="margin-top:12px; width:100%; background:#2D9CDB; color:#fff; border:none; padding:10px 14px; border-radius:8px; cursor:pointer;">Save settings</button>
+        </form>
+    </div>
+</body>
+</html>

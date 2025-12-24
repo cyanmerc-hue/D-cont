@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Owner User - D-cont</title>
+</head>
+<body style="font-family: Arial, Helvetica, sans-serif; background: #f7fbfc; margin: 0; padding: 0;">
+    <div style="background: #fff; box-shadow: 0 2px 8px #e0e0e0; padding: 16px 0 8px 0; text-align: center;">
+        <img src="/static/logo.png" onerror="this.onerror=null;this.src='/static/logo.svg';" alt="D-cont Logo" style="height:60px; margin-bottom: 0;"/>
+    </div>
+
+    {% include '_owner_nav.html' %}
+
+    <div style="max-width: 1100px; margin: 18px auto 48px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px #e0e0e0; padding: 24px; color: #222;">
+        <div style="display:flex; justify-content: space-between; align-items:center; gap: 12px;">
+            <div>
+                <a href="/owner/users" style="color:#2D9CDB; text-decoration:none;">← Back to Users</a>
+                <h2 style="margin:8px 0 0 0; color:#2D9CDB;">{{ user.full_name or user.username }}</h2>
+                <div style="color:#777; font-size:0.95em;">{{ user.username }}</div>
+            </div>
+            <a href="/logout" style="color:#fff; background:#2D9CDB; padding:6px 16px; border-radius:6px; text-decoration:none;">Logout</a>
+        </div>
+
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            <div style="margin-top:12px; background:#eaf6fb; border:1px solid #2D9CDB; padding:10px 12px; border-radius:10px; color:#222;">
+              {{ messages[0] }}
+            </div>
+          {% endif %}
+        {% endwith %}
+
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:12px; margin-top:18px;">
+            <div style="border:1px solid #e8eef0; border-radius:10px; padding:14px;">
+                <div style="color:#555;">Phone</div>
+                <div style="font-weight:700;">{{ user.mobile }}</div>
+            </div>
+            <div style="border:1px solid #e8eef0; border-radius:10px; padding:14px;">
+                <div style="color:#555;">Trust score</div>
+                <div style="font-weight:700;">{{ user.trust_score }}</div>
+            </div>
+            <div style="border:1px solid #e8eef0; border-radius:10px; padding:14px;">
+                <div style="color:#555;">App fee paid</div>
+                <div style="font-weight:700;">{{ 'Yes' if user.app_fee_paid else 'No' }}</div>
+            </div>
+            <div style="border:1px solid #e8eef0; border-radius:10px; padding:14px;">
+                <div style="color:#555;">Future groups</div>
+                <div style="font-weight:700;">{{ 'Frozen' if user.join_blocked else 'Allowed' }}</div>
+            </div>
+        </div>
+
+        <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;">
+            <form method="post" action="/admin/toggle_user_active" style="margin:0;">
+                <input type="hidden" name="username" value="{{ user.username }}">
+                <input type="hidden" name="action" value="{{ 'block' if user.is_active else 'unblock' }}">
+                <button type="submit" style="background:#2D9CDB; color:#fff; border:none; padding:8px 12px; border-radius:8px; cursor:pointer;">{{ 'Block' if user.is_active else 'Unblock' }}</button>
+            </form>
+
+            <form method="post" action="/owner/users/toggle_join_block" style="margin:0;">
+                <input type="hidden" name="username" value="{{ user.username }}">
+                <button type="submit" style="background:#fff; color:#b42318; border:1px solid #b42318; padding:8px 12px; border-radius:8px; cursor:pointer;">{{ 'Unfreeze future' if user.join_blocked else 'Freeze future' }}</button>
+            </form>
+
+            <form method="post" action="/owner/users/update_trust" style="margin:0; display:flex; gap:8px; align-items:center;">
+                <input type="hidden" name="username" value="{{ user.username }}">
+                <input name="trust_score" type="number" min="0" max="100" value="{{ user.trust_score }}" style="width:90px; padding:8px; border-radius:8px; border:1px solid #ccc;">
+                <button type="submit" style="background:#eaf6fb; color:#2D9CDB; border:1px solid #2D9CDB; padding:8px 12px; border-radius:8px; cursor:pointer;">Update trust</button>
+            </form>
+        </div>
+
+        <h3 style="margin-top:22px;">Groups</h3>
+        {% if groups and groups|length > 0 %}
+            <ul style="list-style:none; padding:0; margin:0;">
+                {% for g in groups %}
+                    <li style="margin-bottom:10px; border:1px solid #e8eef0; border-radius:10px; padding:12px;">
+                        <div style="font-weight:700; color:#2D9CDB;">{{ g.name }}</div>
+                        <div style="color:#222;"><strong>₹{{ g.monthly_amount }}</strong> / month</div>
+                        <div style="color:#555; margin-top:4px;"><strong>Status:</strong> {{ g.status }}</div>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <div style="color:#777;">No joined groups.</div>
+        {% endif %}
+    </div>
+</body>
+</html>

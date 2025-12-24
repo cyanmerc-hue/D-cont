@@ -262,6 +262,8 @@ USER_COLUMNS = {
     "upi_id": "TEXT",
     "onboarding_completed": "INTEGER",
     "app_fee_paid": "INTEGER",
+    "trust_score": "INTEGER",
+    "join_blocked": "INTEGER",
     "is_active": "INTEGER",
 }
 
@@ -327,7 +329,7 @@ def get_user_row(username):
     conn = get_db()
     c = conn.cursor()
     c.execute(
-        'SELECT username, full_name, mobile, language, city_state, email, role, upi_id, onboarding_completed, is_active FROM users WHERE username=?',
+        'SELECT username, full_name, mobile, language, city_state, email, role, upi_id, onboarding_completed, app_fee_paid, trust_score, join_blocked, is_active FROM users WHERE username=?',
         (username,),
     )
     row = c.fetchone()
@@ -344,7 +346,10 @@ def get_user_row(username):
         'role': row[6] or 'customer',
         'upi_id': row[7] or '',
         'onboarding_completed': int(row[8] or 0),
-        'is_active': int(row[9] if row[9] is not None else 1),
+        'app_fee_paid': int(row[9] if row[9] is not None else 0),
+        'trust_score': int(row[10] if row[10] is not None else 50),
+        'join_blocked': int(row[11] if row[11] is not None else 0),
+        'is_active': int(row[12] if row[12] is not None else 1),
     }
 
 
@@ -456,6 +461,10 @@ def init_db():
         c.execute("ALTER TABLE groups ADD COLUMN receiver_name TEXT")
     if "receiver_upi" not in existing_group_cols:
         c.execute("ALTER TABLE groups ADD COLUMN receiver_upi TEXT")
+    if "status" not in existing_group_cols:
+        c.execute("ALTER TABLE groups ADD COLUMN status TEXT")
+    if "is_paused" not in existing_group_cols:
+        c.execute("ALTER TABLE groups ADD COLUMN is_paused INTEGER")
 
     # Ensure users table has required columns (auto-migration)
     c.execute("PRAGMA table_info(users)")
@@ -464,11 +473,58 @@ def init_db():
         if col_name not in existing_cols:
             c.execute(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}")
 
+    # Settings table for owner controls
+    c.execute('''CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY,
+        value TEXT
+    )''')
+
     # Ensure group_members has status column (auto-migration)
     c.execute("PRAGMA table_info(group_members)")
     existing_member_cols = {row[1] for row in c.fetchall()}
     if "status" not in existing_member_cols:
         c.execute("ALTER TABLE group_members ADD COLUMN status TEXT")
+
+    conn.commit()
+    conn.close()
+
+
+def get_setting(key: str, default: str = "") -> str:
+    conn = get_db()
+    c = conn.cursor()
+    try:
+        c.execute('SELECT value FROM settings WHERE key=?', (key,))
+        row = c.fetchone()
+    except sqlite3.OperationalError:
+        row = None
+    conn.close()
+    if not row or row[0] is None:
+        return default
+    return str(row[0])
+
+
+def set_setting(key: str, value: str) -> None:
+    conn = get_db()
+    c = conn.cursor()
+    c.execute('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', (key, str(value)))
+    conn.commit()
+    conn.close()
+
+
+def is_join_blocked(username: str) -> bool:
+    if not username:
+        return False
+    conn = get_db()
+    c = conn.cursor()
+    try:
+        c.execute('SELECT join_blocked FROM users WHERE username=?', (username,))
+        row = c.fetchone()
+    except sqlite3.OperationalError:
+        row = None
+    conn.close()
+    if not row:
+        return False
+    return int(row[0] if row[0] is not None else 0) == 1
 
     # Backfill onboarding + membership status
     # The 4-tab UI doesn't require onboarding; default existing users to completed.
@@ -581,26 +637,537 @@ def home():
 @app.route('/dashboard')
 @login_required
 def dashboard():
+    # Legacy route: owner/admin UI lives under /owner/*
     if session.get('role') != 'admin':
         return redirect(url_for('home'))
-    username = session['username']
-    display_name = username
+    return redirect(url_for('owner_dashboard'))
+
+
+@app.route('/owner/dashboard')
+@admin_required
+def owner_dashboard():
     conn = get_db()
     c = conn.cursor()
-    c.execute('SELECT full_name FROM users WHERE username=?', (username,))
-    row = c.fetchone()
-    if row and row[0]:
-        display_name = row[0]
-    c.execute('SELECT id, name, description, monthly_amount FROM groups')
-    groups = c.fetchall()
-    group_list = []
-    for group in groups:
-        group_id, name, description, monthly_amount = group
-        c.execute('SELECT * FROM group_members WHERE group_id=? AND username=?', (group_id, username))
-        joined = c.fetchone() is not None
-        group_list.append({'id': group_id, 'name': name, 'description': description, 'monthly_amount': monthly_amount, 'joined': joined})
+
+    c.execute("SELECT COUNT(*) FROM users WHERE COALESCE(NULLIF(role,''), 'customer') != 'admin'")
+    total_users = int((c.fetchone() or [0])[0] or 0)
+
+    c.execute("SELECT COUNT(*) FROM users WHERE COALESCE(NULLIF(role,''), 'customer') != 'admin' AND COALESCE(app_fee_paid,0)=1")
+    app_fee_paid_count = int((c.fetchone() or [0])[0] or 0)
+
+    app_fee_amount_raw = (get_setting('app_fee_amount', '0') or '0').strip()
+    try:
+        app_fee_amount = int(app_fee_amount_raw)
+    except ValueError:
+        app_fee_amount = 0
+    app_fee_collected = app_fee_paid_count * max(app_fee_amount, 0)
+
+    c.execute(
+        """
+        SELECT g.id,
+               COALESCE(g.max_members, 10) as max_members,
+               COALESCE(g.status, '') as status,
+               COALESCE(g.is_paused, 0) as is_paused,
+               COUNT(gm.id) as joined_members
+        FROM groups g
+        LEFT JOIN group_members gm ON gm.group_id = g.id AND gm.status='joined'
+        GROUP BY g.id, g.max_members, g.status, g.is_paused
+        """
+    )
+    group_rows = c.fetchall()
+
+    active_groups = 0
+    formation_groups = 0
+    completed_groups = 0
+    for _gid, max_members, status_raw, is_paused, joined_members in group_rows:
+        if int(is_paused or 0) == 1:
+            continue
+        status = (status_raw or '').strip().lower()
+        if status == 'completed':
+            completed_groups += 1
+        elif status == 'active':
+            active_groups += 1
+        elif status == 'formation':
+            formation_groups += 1
+        else:
+            if int(joined_members or 0) >= int(max_members or 10):
+                active_groups += 1
+            else:
+                formation_groups += 1
+
+    defaults_this_month = 0  # Placeholder until contribution tracking exists
+
     conn.close()
-    return render_template('dashboard.html', username=display_name, groups=group_list, is_admin=(session.get('role') == 'admin'))
+    return render_template(
+        'owner_dashboard.html',
+        active_owner_tab='dashboard',
+        total_users=total_users,
+        active_groups=active_groups,
+        formation_groups=formation_groups,
+        completed_groups=completed_groups,
+        defaults_this_month=defaults_this_month,
+        app_fee_amount=app_fee_amount,
+        app_fee_paid_count=app_fee_paid_count,
+        app_fee_collected=app_fee_collected,
+    )
+
+
+@app.route('/owner/users')
+@admin_required
+def owner_users():
+    conn = get_db()
+    c = conn.cursor()
+
+    c.execute(
+        """
+        SELECT username, full_name, mobile, COALESCE(NULLIF(role,''),'customer') as role,
+               COALESCE(is_active,1) as is_active,
+               COALESCE(join_blocked,0) as join_blocked,
+               COALESCE(trust_score,50) as trust_score,
+               COALESCE(app_fee_paid,0) as app_fee_paid
+        FROM users
+        ORDER BY id DESC
+        """
+    )
+    users_rows = c.fetchall()
+
+    c.execute(
+        """
+        SELECT g.id,
+               COALESCE(g.max_members,10) as max_members,
+               COALESCE(g.status,'') as status,
+               COALESCE(g.is_paused,0) as is_paused,
+               COUNT(gm.id) as joined_members
+        FROM groups g
+        LEFT JOIN group_members gm ON gm.group_id=g.id AND gm.status='joined'
+        GROUP BY g.id, g.max_members, g.status, g.is_paused
+        """
+    )
+    group_meta = {}
+    for gid, max_members, status_raw, is_paused, joined_members in c.fetchall():
+        status = (status_raw or '').strip().lower()
+        if int(is_paused or 0) == 1:
+            label = 'paused'
+        elif status in {'active', 'formation', 'completed'}:
+            label = status
+        else:
+            label = 'active' if int(joined_members or 0) >= int(max_members or 10) else 'formation'
+        group_meta[int(gid)] = label
+
+    c.execute("SELECT username, group_id FROM group_members WHERE status='joined'")
+    memberships = c.fetchall()
+    per_user_group_ids = {}
+    for uname, gid in memberships:
+        if not uname:
+            continue
+        per_user_group_ids.setdefault(uname, []).append(int(gid))
+
+    users = []
+    for username, full_name, mobile, role, is_active, join_blocked, trust_score, app_fee_paid in users_rows:
+        group_ids = per_user_group_ids.get(username, [])
+        active_group_count = sum(1 for gid in group_ids if group_meta.get(gid) == 'active')
+        flags = []
+        if int(join_blocked or 0) == 1:
+            flags.append('Future frozen')
+        users.append(
+            {
+                'username': username,
+                'full_name': full_name or '',
+                'mobile': mobile or '',
+                'role': role or 'customer',
+                'is_active': int(is_active or 1),
+                'join_blocked': int(join_blocked or 0),
+                'trust_score': int(trust_score if trust_score is not None else 50),
+                'active_groups': int(active_group_count),
+                'flags': ', '.join(flags) if flags else '—',
+                'app_fee_paid': int(app_fee_paid or 0),
+            }
+        )
+
+    conn.close()
+    return render_template('owner_users.html', active_owner_tab='users', users=users)
+
+
+@app.route('/owner/users/<path:username>')
+@admin_required
+def owner_user_profile(username):
+    username = (username or '').strip()
+    conn = get_db()
+    c = conn.cursor()
+    c.execute(
+        """
+        SELECT username, full_name, mobile, email,
+               COALESCE(NULLIF(role,''),'customer') as role,
+               COALESCE(is_active,1) as is_active,
+               COALESCE(join_blocked,0) as join_blocked,
+               COALESCE(trust_score,50) as trust_score,
+               COALESCE(app_fee_paid,0) as app_fee_paid,
+               COALESCE(upi_id,'') as upi_id
+        FROM users WHERE username=?
+        """,
+        (username,),
+    )
+    row = c.fetchone()
+    if not row:
+        conn.close()
+        flash('User not found.')
+        return redirect(url_for('owner_users'))
+
+    c.execute(
+        """
+        SELECT g.id, g.name, g.monthly_amount, COALESCE(g.status,'') as status, COALESCE(g.is_paused,0) as is_paused
+        FROM group_members gm
+        JOIN groups g ON g.id = gm.group_id
+        WHERE gm.username=? AND gm.status='joined'
+        ORDER BY g.monthly_amount, g.id
+        """,
+        (username,),
+    )
+    groups = [
+        {
+            'id': r[0],
+            'name': r[1],
+            'monthly_amount': r[2],
+            'status': ('Paused' if int(r[4] or 0) == 1 else ((r[3] or '').strip().capitalize() if (r[3] or '').strip() else '—')),
+        }
+        for r in c.fetchall()
+    ]
+    conn.close()
+
+    user = {
+        'username': row[0],
+        'full_name': row[1] or '',
+        'mobile': row[2] or '',
+        'email': row[3] or '',
+        'role': row[4] or 'customer',
+        'is_active': int(row[5] or 1),
+        'join_blocked': int(row[6] or 0),
+        'trust_score': int(row[7] if row[7] is not None else 50),
+        'app_fee_paid': int(row[8] or 0),
+        'upi_id': row[9] or '',
+    }
+    return render_template('owner_user_profile.html', active_owner_tab='users', user=user, groups=groups)
+
+
+@app.route('/owner/users/toggle_join_block', methods=['POST'])
+@admin_required
+def owner_toggle_join_block():
+    target_username = (request.form.get('username') or '').strip()
+    if not target_username:
+        flash('Missing username.')
+        return redirect(url_for('owner_users'))
+    if target_username == session.get('username'):
+        flash('You cannot change your own access.')
+        return redirect(url_for('owner_users'))
+
+    conn = get_db()
+    c = conn.cursor()
+    c.execute('SELECT COALESCE(NULLIF(role,\'\'),\'customer\') FROM users WHERE username=?', (target_username,))
+    row = c.fetchone()
+    if not row:
+        conn.close()
+        flash('User not found.')
+        return redirect(url_for('owner_users'))
+    if (row[0] or '').strip().lower() == 'admin':
+        conn.close()
+        flash('Admin users cannot be modified here.')
+        return redirect(url_for('owner_users'))
+
+    c.execute('UPDATE users SET join_blocked = CASE WHEN COALESCE(join_blocked,0)=1 THEN 0 ELSE 1 END WHERE username=?', (target_username,))
+    conn.commit()
+    conn.close()
+    flash('User updated.')
+    return redirect(url_for('owner_users'))
+
+
+@app.route('/owner/users/update_trust', methods=['POST'])
+@admin_required
+def owner_update_trust():
+    target_username = (request.form.get('username') or '').strip()
+    trust_raw = (request.form.get('trust_score') or '').strip()
+    try:
+        trust = int(trust_raw)
+    except ValueError:
+        trust = 50
+    trust = max(0, min(100, trust))
+
+    if not target_username:
+        flash('Missing username.')
+        return redirect(url_for('owner_users'))
+    if target_username == session.get('username'):
+        flash('You cannot change your own trust score.')
+        return redirect(url_for('owner_users'))
+
+    conn = get_db()
+    c = conn.cursor()
+    c.execute('SELECT COALESCE(NULLIF(role,\'\'),\'customer\') FROM users WHERE username=?', (target_username,))
+    row = c.fetchone()
+    if not row:
+        conn.close()
+        flash('User not found.')
+        return redirect(url_for('owner_users'))
+    if (row[0] or '').strip().lower() == 'admin':
+        conn.close()
+        flash('Admin users cannot be modified here.')
+        return redirect(url_for('owner_users'))
+
+    c.execute('UPDATE users SET trust_score=? WHERE username=?', (trust, target_username))
+    conn.commit()
+    conn.close()
+    flash('Trust score updated.')
+    return redirect(url_for('owner_users'))
+
+
+@app.route('/owner/groups')
+@admin_required
+def owner_groups():
+    conn = get_db()
+    c = conn.cursor()
+    c.execute(
+        """
+        SELECT g.id, g.name, g.description, g.monthly_amount,
+               COALESCE(g.max_members,10) as max_members,
+               COALESCE(g.receiver_name,'') as receiver_name,
+               COALESCE(g.receiver_upi,'') as receiver_upi,
+               COALESCE(g.status,'') as status,
+               COALESCE(g.is_paused,0) as is_paused,
+               COUNT(gm.id) as joined_members
+        FROM groups g
+        LEFT JOIN group_members gm ON gm.group_id=g.id AND gm.status='joined'
+        GROUP BY g.id, g.name, g.description, g.monthly_amount, g.max_members, g.receiver_name, g.receiver_upi, g.status, g.is_paused
+        ORDER BY g.monthly_amount, g.id
+        """
+    )
+    groups = []
+    for r in c.fetchall():
+        groups.append(
+            {
+                'id': r[0],
+                'name': r[1],
+                'description': r[2] or '',
+                'monthly_amount': int(r[3] or 0),
+                'max_members': int(r[4] or 10),
+                'receiver_name': r[5] or '',
+                'receiver_upi': r[6] or '',
+                'status': (r[7] or '').strip().lower(),
+                'is_paused': int(r[8] or 0),
+                'joined_members': int(r[9] or 0),
+            }
+        )
+
+    c.execute(
+        """
+        SELECT gm.id, gm.group_id, gm.username, gm.status,
+               g.name, g.monthly_amount,
+               u.full_name, u.mobile, u.upi_id
+        FROM group_members gm
+        JOIN groups g ON g.id = gm.group_id
+        LEFT JOIN users u ON u.username = gm.username
+        WHERE gm.status='pending'
+        ORDER BY gm.id DESC
+        """
+    )
+    join_requests = [
+        {
+            'membership_id': row[0],
+            'group_id': row[1],
+            'username': row[2],
+            'status': row[3],
+            'group_name': row[4],
+            'monthly_amount': row[5],
+            'full_name': row[6] or '',
+            'mobile': row[7] or '',
+            'upi_id': row[8] or '',
+        }
+        for row in c.fetchall()
+    ]
+    conn.close()
+    return render_template('owner_groups.html', active_owner_tab='groups', groups=groups, join_requests=join_requests)
+
+
+@app.route('/owner/groups/add', methods=['POST'])
+@admin_required
+def owner_add_group():
+    name = (request.form.get('name') or '').strip()
+    description = (request.form.get('description') or '').strip()
+    monthly_amount_raw = (request.form.get('monthly_amount') or '').strip()
+    max_members_raw = (request.form.get('max_members') or '').strip()
+    receiver_name = (request.form.get('receiver_name') or '').strip()
+    receiver_upi = (request.form.get('receiver_upi') or '').strip()
+    try:
+        monthly_amount = int(monthly_amount_raw)
+    except ValueError:
+        monthly_amount = 0
+    try:
+        max_members = int(max_members_raw)
+    except ValueError:
+        max_members = 10
+
+    if not name:
+        flash('Group name is required.')
+        return redirect(url_for('owner_groups'))
+    if monthly_amount <= 0:
+        flash('Monthly amount must be greater than 0.')
+        return redirect(url_for('owner_groups'))
+    if max_members <= 0:
+        max_members = 10
+
+    conn = get_db()
+    c = conn.cursor()
+    c.execute(
+        'INSERT INTO groups (name, description, monthly_amount, max_members, receiver_name, receiver_upi, status, is_paused) VALUES (?,?,?,?,?,?,?,?)',
+        (name, description, monthly_amount, max_members, receiver_name, receiver_upi, 'formation', 0),
+    )
+    conn.commit()
+    conn.close()
+    flash('Group added.')
+    return redirect(url_for('owner_groups'))
+
+
+@app.route('/owner/groups/update', methods=['POST'])
+@admin_required
+def owner_update_group():
+    group_id = (request.form.get('group_id') or '').strip()
+    name = (request.form.get('name') or '').strip()
+    description = (request.form.get('description') or '').strip()
+    receiver_name = (request.form.get('receiver_name') or '').strip()
+    receiver_upi = (request.form.get('receiver_upi') or '').strip()
+    status = (request.form.get('status') or '').strip().lower()
+    monthly_amount_raw = (request.form.get('monthly_amount') or '').strip()
+    max_members_raw = (request.form.get('max_members') or '').strip()
+    try:
+        monthly_amount = int(monthly_amount_raw)
+    except ValueError:
+        monthly_amount = 0
+    try:
+        max_members = int(max_members_raw)
+    except ValueError:
+        max_members = 10
+
+    if status not in {'formation', 'active', 'completed', ''}:
+        status = ''
+    if max_members <= 0:
+        max_members = 10
+    if monthly_amount < 0:
+        monthly_amount = 0
+
+    conn = get_db()
+    c = conn.cursor()
+    c.execute(
+        'UPDATE groups SET name=?, description=?, monthly_amount=?, max_members=?, receiver_name=?, receiver_upi=?, status=? WHERE id=?',
+        (name, description, monthly_amount, max_members, receiver_name, receiver_upi, status, group_id),
+    )
+    conn.commit()
+    conn.close()
+    flash('Group updated.')
+    return redirect(url_for('owner_groups'))
+
+
+@app.route('/owner/groups/toggle_pause', methods=['POST'])
+@admin_required
+def owner_toggle_group_pause():
+    group_id = (request.form.get('group_id') or '').strip()
+    if not group_id:
+        flash('Missing group id.')
+        return redirect(url_for('owner_groups'))
+    conn = get_db()
+    c = conn.cursor()
+    c.execute('UPDATE groups SET is_paused = CASE WHEN COALESCE(is_paused,0)=1 THEN 0 ELSE 1 END WHERE id=?', (group_id,))
+    conn.commit()
+    conn.close()
+    flash('Group updated.')
+    return redirect(url_for('owner_groups'))
+
+
+@app.route('/owner/payments')
+@admin_required
+def owner_payments():
+    fee_raw = (get_setting('app_fee_amount', '0') or '0').strip()
+    try:
+        fee_amount = int(fee_raw)
+    except ValueError:
+        fee_amount = 0
+    fee_amount = max(0, fee_amount)
+
+    conn = get_db()
+    c = conn.cursor()
+    c.execute(
+        """
+        SELECT username, full_name, mobile
+        FROM users
+        WHERE COALESCE(NULLIF(role,''), 'customer') != 'admin'
+          AND COALESCE(app_fee_paid,0)=1
+        ORDER BY id DESC
+        """
+    )
+    app_fee_payments = [
+        {
+            'username': r[0],
+            'full_name': r[1] or '',
+            'mobile': r[2] or '',
+            'amount': fee_amount,
+        }
+        for r in c.fetchall()
+    ]
+    conn.close()
+    return render_template('owner_payments.html', active_owner_tab='payments', app_fee_amount=fee_amount, app_fee_payments=app_fee_payments)
+
+
+@app.route('/owner/risk')
+@admin_required
+def owner_risk():
+    conn = get_db()
+    c = conn.cursor()
+    c.execute(
+        """
+        SELECT username, full_name, mobile,
+               COALESCE(is_active,1) as is_active,
+               COALESCE(join_blocked,0) as join_blocked,
+               COALESCE(trust_score,50) as trust_score
+        FROM users
+        WHERE COALESCE(NULLIF(role,''), 'customer') != 'admin'
+        ORDER BY id DESC
+        """
+    )
+    rows = c.fetchall()
+    conn.close()
+
+    blocked = []
+    frozen = []
+    low_trust = []
+    for r in rows:
+        username, full_name, mobile, is_active, join_blocked, trust_score = r
+        item = {'username': username, 'full_name': full_name or '', 'mobile': mobile or '', 'trust_score': int(trust_score if trust_score is not None else 50)}
+        if int(is_active or 1) == 0:
+            blocked.append(item)
+        if int(join_blocked or 0) == 1:
+            frozen.append(item)
+        if int(trust_score if trust_score is not None else 50) < 40:
+            low_trust.append(item)
+
+    return render_template('owner_risk.html', active_owner_tab='risk', blocked=blocked, frozen=frozen, low_trust=low_trust)
+
+
+@app.route('/owner/settings', methods=['GET', 'POST'])
+@admin_required
+def owner_settings():
+    if request.method == 'POST':
+        set_setting('app_fee_amount', (request.form.get('app_fee_amount') or '').strip())
+        set_setting('group_size_limit', (request.form.get('group_size_limit') or '').strip())
+        set_setting('max_monthly_contribution', (request.form.get('max_monthly_contribution') or '').strip())
+        set_setting('company_upi_id', (request.form.get('company_upi_id') or '').strip())
+        set_setting('legal_text', (request.form.get('legal_text') or '').strip())
+        flash('Settings saved.')
+        return redirect(url_for('owner_settings'))
+
+    settings = {
+        'app_fee_amount': get_setting('app_fee_amount', '0'),
+        'group_size_limit': get_setting('group_size_limit', ''),
+        'max_monthly_contribution': get_setting('max_monthly_contribution', ''),
+        'company_upi_id': get_setting('company_upi_id', ''),
+        'legal_text': get_setting('legal_text', ''),
+    }
+    return render_template('owner_settings.html', active_owner_tab='settings', settings=settings)
 
 
 @app.route('/welcome')
@@ -633,12 +1200,14 @@ def _fetch_my_groups(username: str):
                COALESCE(g.max_members, 10) as max_members,
                COALESCE(g.receiver_name, '') as receiver_name,
                COALESCE(g.receiver_upi, '') as receiver_upi,
+               COALESCE(g.status, '') as group_status,
+               COALESCE(g.is_paused, 0) as is_paused,
                COUNT(gm2.id) as joined_members
         FROM group_members gm
         JOIN groups g ON g.id = gm.group_id
         LEFT JOIN group_members gm2 ON gm2.group_id = g.id AND gm2.status='joined'
         WHERE gm.username=? AND gm.status='joined'
-        GROUP BY g.id, g.name, g.description, g.monthly_amount, g.max_members, g.receiver_name, g.receiver_upi
+        GROUP BY g.id, g.name, g.description, g.monthly_amount, g.max_members, g.receiver_name, g.receiver_upi, g.status, g.is_paused
         ORDER BY g.monthly_amount, g.id
         ''',
         (username,),
@@ -648,8 +1217,15 @@ def _fetch_my_groups(username: str):
 
     groups = []
     for row in rows:
-        group_id, name, description, monthly_amount, max_members, receiver_name, receiver_upi, joined_members = row
-        status = 'Active' if int(joined_members or 0) >= int(max_members or 10) else 'Formation'
+        group_id, name, description, monthly_amount, max_members, receiver_name, receiver_upi, group_status, is_paused, joined_members = row
+        computed_status = 'Active' if int(joined_members or 0) >= int(max_members or 10) else 'Formation'
+        status = (group_status or '').strip().lower()
+        if int(is_paused or 0) == 1:
+            status_label = 'Paused'
+        elif status in {'active', 'formation', 'completed'}:
+            status_label = status.capitalize()
+        else:
+            status_label = computed_status
         groups.append(
             {
                 'id': group_id,
@@ -658,7 +1234,7 @@ def _fetch_my_groups(username: str):
                 'monthly_amount': monthly_amount,
                 'max_members': int(max_members or 10),
                 'joined_members': int(joined_members or 0),
-                'status': status,
+                'status': status_label,
                 'receiver_name': receiver_name or '',
                 'receiver_upi': receiver_upi or '',
             }
@@ -682,6 +1258,7 @@ def _fetch_available_groups(username: str):
         WHERE g.id NOT IN (
             SELECT group_id FROM group_members WHERE username=? AND status='joined'
         )
+          AND COALESCE(g.is_paused, 0) = 0
         GROUP BY g.id, g.name, g.description, g.monthly_amount, g.max_members
         ORDER BY g.monthly_amount, g.id
         ''',
@@ -745,6 +1322,9 @@ def groups_tab():
 @require_customer
 def create_group_customer():
     username = session['username']
+    if is_join_blocked(username):
+        flash('Your access is restricted for future groups. Please contact support.')
+        return redirect(url_for('home_tab'))
     user = get_user_row(username) or {}
     upi_id = (user.get('upi_id') or '').strip()
     if not upi_id:
@@ -771,8 +1351,8 @@ def create_group_customer():
     conn = get_db()
     c = conn.cursor()
     c.execute(
-        'INSERT INTO groups (name, description, monthly_amount, max_members, receiver_name, receiver_upi) VALUES (?,?,?,?,?,?)',
-        (name, description, monthly_amount, max_members, (user.get('full_name') or username), upi_id),
+        'INSERT INTO groups (name, description, monthly_amount, max_members, receiver_name, receiver_upi, status, is_paused) VALUES (?,?,?,?,?,?,?,?)',
+        (name, description, monthly_amount, max_members, (user.get('full_name') or username), upi_id, 'formation', 0),
     )
     group_id = c.lastrowid
     conn.commit()
@@ -795,6 +1375,22 @@ def join_group_customer():
         return redirect(url_for('groups_tab'))
 
     username = session['username']
+    if is_join_blocked(username):
+        flash('Your access is restricted for future groups. Please contact support.')
+        return redirect(url_for('groups_tab'))
+
+    conn = get_db()
+    c = conn.cursor()
+    try:
+        c.execute('SELECT COALESCE(is_paused, 0) FROM groups WHERE id=?', (group_id,))
+        row = c.fetchone()
+    except sqlite3.OperationalError:
+        row = None
+    conn.close()
+    if row and int(row[0] if row[0] is not None else 0) == 1:
+        flash('This group is currently paused.')
+        return redirect(url_for('groups_tab'))
+
     join_group_with_status(group_id, username, status='joined')
     flash('You joined the group.')
     return redirect(url_for('groups_tab'))
@@ -857,6 +1453,22 @@ def add_upi():
 @require_customer
 def request_join_group(group_id):
     username = session['username']
+    if is_join_blocked(username):
+        flash('Your access is restricted for future groups. Please contact support.')
+        return redirect(url_for('groups_tab'))
+
+    conn = get_db()
+    c = conn.cursor()
+    try:
+        c.execute('SELECT COALESCE(is_paused, 0) FROM groups WHERE id=?', (group_id,))
+        row = c.fetchone()
+    except sqlite3.OperationalError:
+        row = None
+    conn.close()
+    if row and int(row[0] if row[0] is not None else 0) == 1:
+        flash('This group is currently paused.')
+        return redirect(url_for('groups_tab'))
+
     join_group_with_status(group_id, username, status='joined')
     flash('You joined the group.')
     return redirect(url_for('groups_tab'))
@@ -1038,58 +1650,8 @@ def logout():
 @app.route('/admin')
 @admin_required
 def admin_panel():
-    conn = get_db()
-    c = conn.cursor()
-    c.execute('SELECT id, name, description, monthly_amount FROM groups ORDER BY id')
-    groups = [
-        {
-            'id': row[0],
-            'name': row[1],
-            'description': row[2],
-            'monthly_amount': row[3],
-        }
-        for row in c.fetchall()
-    ]
-    c.execute('SELECT username, full_name, mobile, role, is_active FROM users ORDER BY id')
-    users = [
-        {
-            'username': row[0],
-            'full_name': row[1],
-            'mobile': row[2],
-            'role': row[3],
-            'is_active': int(row[4] if row[4] is not None else 1),
-        }
-        for row in c.fetchall()
-    ]
-
-    c.execute(
-        '''
-        SELECT gm.id, gm.group_id, gm.username, gm.status,
-               g.name, g.monthly_amount,
-               u.full_name, u.mobile, u.upi_id
-        FROM group_members gm
-        JOIN groups g ON g.id = gm.group_id
-        LEFT JOIN users u ON u.username = gm.username
-        WHERE gm.status='pending'
-        ORDER BY gm.id DESC
-        '''
-    )
-    join_requests = [
-        {
-            'membership_id': row[0],
-            'group_id': row[1],
-            'username': row[2],
-            'status': row[3],
-            'group_name': row[4],
-            'monthly_amount': row[5],
-            'full_name': row[6] or '',
-            'mobile': row[7] or '',
-            'upi_id': row[8] or '',
-        }
-        for row in c.fetchall()
-    ]
-    conn.close()
-    return render_template('admin.html', groups=groups, users=users, join_requests=join_requests)
+    # Legacy route: owner/admin UI lives under /owner/*
+    return redirect(url_for('owner_dashboard'))
 
 
 @app.route('/admin/update_group', methods=['POST'])
@@ -1110,7 +1672,7 @@ def admin_update_group():
     conn.commit()
     conn.close()
     flash('Group updated.')
-    return redirect(url_for('admin_panel'))
+    return redirect(url_for('owner_groups'))
 
 
 @app.route('/admin/add_group', methods=['POST'])
@@ -1126,21 +1688,21 @@ def admin_add_group():
 
     if not name:
         flash('Group name is required.')
-        return redirect(url_for('admin_panel'))
+        return redirect(url_for('owner_groups'))
     if monthly_amount_int <= 0:
         flash('Monthly amount must be greater than 0.')
-        return redirect(url_for('admin_panel'))
+        return redirect(url_for('owner_groups'))
 
     conn = get_db()
     c = conn.cursor()
     c.execute(
-        'INSERT INTO groups (name, description, monthly_amount) VALUES (?, ?, ?)',
-        (name, description, monthly_amount_int),
+        'INSERT INTO groups (name, description, monthly_amount, status, is_paused) VALUES (?, ?, ?, ?, ?)',
+        (name, description, monthly_amount_int, 'formation', 0),
     )
     conn.commit()
     conn.close()
     flash('Group added.')
-    return redirect(url_for('admin_panel'))
+    return redirect(url_for('owner_groups'))
 
 
 @app.route('/admin/delete_group', methods=['POST'])
@@ -1149,7 +1711,7 @@ def admin_delete_group():
     group_id = request.form.get('group_id')
     if not group_id:
         flash('Missing group id.')
-        return redirect(url_for('admin_panel'))
+        return redirect(url_for('owner_groups'))
 
     conn = get_db()
     c = conn.cursor()
@@ -1159,7 +1721,7 @@ def admin_delete_group():
     conn.commit()
     conn.close()
     flash('Group deleted.')
-    return redirect(url_for('admin_panel'))
+    return redirect(url_for('owner_groups'))
 
 
 @app.route('/admin/update_membership_status', methods=['POST'])
@@ -1169,7 +1731,7 @@ def admin_update_membership_status():
     new_status = (request.form.get('status') or '').strip().lower()
     if new_status not in {'joined', 'rejected'}:
         flash('Invalid status.')
-        return redirect(url_for('admin_panel'))
+        return redirect(url_for('owner_groups'))
 
     conn = get_db()
     c = conn.cursor()
@@ -1177,7 +1739,7 @@ def admin_update_membership_status():
     conn.commit()
     conn.close()
     flash(f'Updated request: {new_status}.')
-    return redirect(url_for('admin_panel'))
+    return redirect(url_for('owner_groups'))
 
 
 @app.route('/admin/toggle_user_active', methods=['POST'])
@@ -1188,13 +1750,13 @@ def admin_toggle_user_active():
 
     if not target_username:
         flash('Missing username.')
-        return redirect(url_for('admin_panel'))
+        return redirect(url_for('owner_users'))
     if target_username == session.get('username'):
         flash('You cannot block your own account.')
-        return redirect(url_for('admin_panel'))
+        return redirect(url_for('owner_users'))
     if action not in {'block', 'unblock'}:
         flash('Invalid action.')
-        return redirect(url_for('admin_panel'))
+        return redirect(url_for('owner_users'))
 
     conn = get_db()
     c = conn.cursor()
@@ -1203,18 +1765,18 @@ def admin_toggle_user_active():
     if not row:
         conn.close()
         flash('User not found.')
-        return redirect(url_for('admin_panel'))
+        return redirect(url_for('owner_users'))
     if (row[0] or '').strip().lower() == 'admin':
         conn.close()
         flash('Admin accounts cannot be blocked from this panel.')
-        return redirect(url_for('admin_panel'))
+        return redirect(url_for('owner_users'))
 
     is_active_value = 1 if action == 'unblock' else 0
     c.execute('UPDATE users SET is_active=? WHERE username=?', (is_active_value, target_username))
     conn.commit()
     conn.close()
     flash('User updated.')
-    return redirect(url_for('admin_panel'))
+    return redirect(url_for('owner_users'))
 
 if __name__ == '__main__':
     host = os.environ.get('DCONT_HOST', '127.0.0.1')
