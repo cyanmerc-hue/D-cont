@@ -13,7 +13,7 @@
 
         <div style="margin-top:10px; background:#eaf6fb; border-radius:10px; padding:12px; border:1px solid #2D9CDB; color:#222; line-height:1.5;">
             <strong>Trust:</strong> D-cont never holds money. Payments happen directly between members.
-            <div style="margin-top:6px; color:#555;">We will never ask for your OTP or UPI PIN.</div>
+            <div style="margin-top:6px; color:#555;">We will never ask for your password or UPI PIN.</div>
         </div>
 
         {% with messages = get_flashed_messages() %}
@@ -26,20 +26,14 @@
           {% endif %}
         {% endwith %}
 
-        {% if demo_otp and otp_mobile %}
-          <div style="margin-top:12px; background:#fff; border:1px solid #e8eef0; border-radius:10px; padding:12px;">
-              <strong>Demo OTP for {{ otp_mobile }}:</strong> {{ demo_otp }}
-          </div>
-        {% endif %}
-
         <form method="post" style="margin-top:12px;">
-            <label style="display:block; font-weight:bold; color:#2D9CDB;">Mobile Number</label>
-            <input type="text" name="mobile" value="{{ otp_mobile or '' }}" required style="width:100%; padding:10px; margin:8px 0 14px; border-radius:8px; border:1px solid #ccc;">
+            <label style="display:block; font-weight:bold; color:#2D9CDB;">Username</label>
+            <input type="text" name="username" placeholder="Enter username" required style="width:100%; padding:10px; margin:8px 0 14px; border-radius:8px; border:1px solid #ccc;">
 
-            <label style="display:block; font-weight:bold; color:#2D9CDB;">OTP</label>
-            <input type="text" name="otp" placeholder="Enter OTP" style="width:100%; padding:10px; margin:8px 0 18px; border-radius:8px; border:1px solid #ccc;">
+            <label style="display:block; font-weight:bold; color:#2D9CDB;">Password</label>
+            <input type="password" name="password" placeholder="Enter password" required style="width:100%; padding:10px; margin:8px 0 18px; border-radius:8px; border:1px solid #ccc;">
 
-            <button type="submit" style="width:100%; background:#2D9CDB; color:#fff; border:none; padding:12px 16px; border-radius:8px; cursor:pointer;">Continue</button>
+            <button type="submit" style="width:100%; background:#2D9CDB; color:#fff; border:none; padding:12px 16px; border-radius:8px; cursor:pointer;">Login</button>
         </form>
 
         <div style="margin-top:18px; padding-top:14px; border-top:1px solid #eef3f5;">

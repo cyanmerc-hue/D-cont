@@ -894,7 +894,7 @@ def login():
         if admin_username or admin_password:
             if not admin_username or not admin_password:
                 flash('Enter admin user id and password.')
-                return render_template('login.html', demo_otp=session.get('otp'), otp_mobile=session.get('otp_mobile'))
+                return render_template('login.html')
 
             conn = get_db()
             c = conn.cursor()
@@ -907,10 +907,10 @@ def login():
 
             if not row or (row[2] or '').strip().lower() != 'admin':
                 flash('Invalid admin credentials.')
-                return render_template('login.html', demo_otp=session.get('otp'), otp_mobile=session.get('otp_mobile'))
+                return render_template('login.html')
             if int(row[3] if row[3] is not None else 1) != 1:
                 flash('Your account is blocked. Please contact support.')
-                return render_template('login.html', demo_otp=session.get('otp'), otp_mobile=session.get('otp_mobile'))
+                return render_template('login.html')
 
             stored_pw = row[1] or ''
             password_ok = False
@@ -924,72 +924,61 @@ def login():
 
             if not password_ok:
                 flash('Invalid admin credentials.')
-                return render_template('login.html', demo_otp=session.get('otp'), otp_mobile=session.get('otp_mobile'))
+                return render_template('login.html')
 
             session['username'] = row[0]
             session['role'] = 'admin'
             return redirect(url_for('dashboard'))
 
-        # Customer login (OTP)
-        mobile = (request.form.get('mobile') or '').strip()
-        otp = request.form.get('otp')
-        if not mobile:
-            flash('Please enter your mobile number')
-            return render_template('login.html', demo_otp=session.get('otp'), otp_mobile=session.get('otp_mobile'))
-        if otp:
-            # Demo OTP check
-            if otp == session.get('otp') and mobile == session.get('otp_mobile'):
-                conn = get_db()
-                c = conn.cursor()
-                c.execute('SELECT username, role, is_active FROM users WHERE mobile=?', (mobile,))
-                user = c.fetchone()
-                conn.close()
-                if user:
-                    if int(user[2] if user[2] is not None else 1) != 1:
-                        flash('Your account is blocked. Please contact support.')
-                        return render_template('login.html', demo_otp=session.get('otp'), otp_mobile=session.get('otp_mobile'))
-                    session['username'] = user[0]
-                    session['role'] = user[1] or 'customer'
-                    return redirect(url_for('home'))
-                else:
-                    flash('No user found for this mobile. Please register.')
-            else:
-                flash('Invalid OTP')
-        else:
-            # Generate and send OTP.
-            conn = get_db()
-            c = conn.cursor()
-            try:
-                c.execute('SELECT email, is_active FROM users WHERE mobile=?', (mobile,))
-                row = c.fetchone()
-            except sqlite3.OperationalError:
-                row = None
-            conn.close()
+        # Customer login (username/password)
+        username = (request.form.get('username') or '').strip()
+        password = request.form.get('password') or ''
 
-            if not row:
-                flash('No user found for this mobile. Please register.')
-                return render_template('login.html', demo_otp=session.get('otp'), otp_mobile=session.get('otp_mobile'))
+        if not username or not password:
+            flash('Enter your username and password.')
+            return render_template('login.html')
 
-            email = (row[0] or '').strip()
-            if int(row[1] if row[1] is not None else 1) != 1:
-                flash('Your account is blocked. Please contact support.')
-                return render_template('login.html', demo_otp=session.get('otp'), otp_mobile=session.get('otp_mobile'))
+        conn = get_db()
+        c = conn.cursor()
+        try:
+            c.execute('SELECT username, password, role, is_active FROM users WHERE username=?', (username,))
+            row = c.fetchone()
+        except sqlite3.OperationalError:
+            row = None
+        conn.close()
 
-            otp_code = str(random.randint(100000, 999999))
-            session['otp'] = otp_code
-            session['otp_mobile'] = mobile
+        if not row:
+            flash('Invalid credentials.')
+            return render_template('login.html')
 
-            # Prefer email delivery if SMTP is configured and the user has a registered email.
-            if email and _smtp_configured():
-                try:
-                    send_login_otp_email(to_email=email, otp_code=otp_code, mobile=mobile)
-                    flash('OTP sent to your registered email.')
-                except Exception:
-                    # Fallback to demo OTP display so the user can still log in.
-                    flash(f'Unable to email OTP right now. Your OTP is: {otp_code} (demo only)')
-            else:
-                flash(f'Your OTP is: {otp_code} (demo only)')
-    return render_template('login.html', demo_otp=session.get('otp'), otp_mobile=session.get('otp_mobile'))
+        role = (row[2] or 'customer').strip().lower()
+        if role == 'admin':
+            flash('Use the Admin Login section to sign in as admin.')
+            return render_template('login.html')
+
+        if int(row[3] if row[3] is not None else 1) != 1:
+            flash('Your account is blocked. Please contact support.')
+            return render_template('login.html')
+
+        stored_pw = row[1] or ''
+        password_ok = False
+        try:
+            password_ok = check_password_hash(stored_pw, password)
+        except (ValueError, TypeError):
+            password_ok = False
+        if not password_ok:
+            # Back-compat: if password was stored in plain text
+            password_ok = stored_pw == password
+
+        if not password_ok:
+            flash('Invalid credentials.')
+            return render_template('login.html')
+
+        session['username'] = row[0]
+        session['role'] = role
+        return redirect(url_for('home'))
+
+    return render_template('login.html')
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -1006,10 +995,11 @@ def register():
         city_state = request.form.get('city_state')
         email = request.form.get('email')
         try:
+            password_hash = generate_password_hash(password)
             conn = get_db()
             c = conn.cursor()
             c.execute('INSERT INTO users (username, password, mobile, full_name, language, city_state, email, role, upi_id, onboarding_completed, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                      (username, password, mobile, full_name, language, city_state, email, 'customer', '', 0, 1))
+                      (username, password_hash, mobile, full_name, language, city_state, email, 'customer', '', 0, 1))
             conn.commit()
             conn.close()
             flash('Registration successful! Please log in.')
