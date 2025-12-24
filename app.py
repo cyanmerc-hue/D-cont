@@ -31,6 +31,7 @@ ADMIN_MOBILE = os.environ.get('DCONT_ADMIN_MOBILE', '9999999999')
 WHATSAPP_SUPPORT_NUMBER = '917506680031'  # +91 7506680031
 
 ALLOWED_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "webp", "gif"}
+ALLOWED_DOCUMENT_EXTENSIONS = {"png", "jpg", "jpeg", "webp", "gif", "pdf"}
 
 BOT_QUICK_REPLIES = [
     "What is D-CONT?",
@@ -392,6 +393,27 @@ def save_profile_photo(file, username):
 
     # Store relative path from /static so it can be served by Flask's static handler
     return f"uploads/{filename}"
+
+
+def save_document_file(file, uploader_username: str) -> tuple[str | None, str | None]:
+    if not file or not file.filename:
+        return None, None
+
+    original = secure_filename(file.filename)
+    if '.' not in original:
+        return None, None
+
+    ext = original.rsplit('.', 1)[-1].lower()
+    if ext not in ALLOWED_DOCUMENT_EXTENSIONS:
+        return None, None
+
+    docs_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'docs')
+    os.makedirs(docs_dir, exist_ok=True)
+    filename = f"{secure_filename(uploader_username)}_{uuid.uuid4().hex}.{ext}"
+    filepath = os.path.join(docs_dir, filename)
+    file.save(filepath)
+    # Stored under /static/uploads/docs/<filename>
+    return f"uploads/docs/{filename}", original
 @app.route('/profile', methods=['GET', 'POST'])
 @login_required
 def profile():
@@ -436,6 +458,17 @@ def init_db():
     )''')
     c.execute('''CREATE TABLE IF NOT EXISTS groups (id INTEGER PRIMARY KEY, name TEXT, description TEXT, monthly_amount INTEGER)''')
     c.execute('''CREATE TABLE IF NOT EXISTS group_members (id INTEGER PRIMARY KEY, group_id INTEGER, username TEXT, status TEXT)''')
+    c.execute(
+        '''CREATE TABLE IF NOT EXISTS documents (
+            id INTEGER PRIMARY KEY,
+            uploader_username TEXT,
+            doc_type TEXT,
+            stored_path TEXT,
+            original_filename TEXT,
+            notes TEXT,
+            created_at TEXT
+        )'''
+    )
 
     # Ensure groups table has monthly_amount column (auto-migration)
     c.execute("PRAGMA table_info(groups)")
@@ -867,6 +900,61 @@ def chat():
         intent_link=intent_link,
         intent_link_label=intent_link_label,
     )
+
+
+@app.route('/documents', methods=['GET', 'POST'])
+@login_required
+def documents():
+    if request.method == 'POST':
+        doc_type = (request.form.get('doc_type') or '').strip().lower()
+        notes = (request.form.get('notes') or '').strip()
+        file = request.files.get('document')
+
+        allowed_types = {'pan', 'aadhaar', 'passport', 'payment_screenshot', 'other'}
+        if doc_type not in allowed_types:
+            flash('Please select a valid document type.')
+            return redirect(url_for('documents'))
+
+        stored_path, original_filename = save_document_file(file, session.get('username', 'user'))
+        if not stored_path:
+            flash('Please upload a valid file (png/jpg/jpeg/webp/gif/pdf).')
+            return redirect(url_for('documents'))
+
+        conn = get_db()
+        c = conn.cursor()
+        c.execute(
+            'INSERT INTO documents (uploader_username, doc_type, stored_path, original_filename, notes, created_at) VALUES (?, ?, ?, ?, ?, datetime("now"))',
+            (session.get('username'), doc_type, stored_path, original_filename or '', notes),
+        )
+        conn.commit()
+        conn.close()
+        flash('Document uploaded.')
+        return redirect(url_for('documents'))
+
+    conn = get_db()
+    c = conn.cursor()
+    try:
+        c.execute(
+            'SELECT id, uploader_username, doc_type, stored_path, original_filename, notes, created_at FROM documents ORDER BY id DESC'
+        )
+        rows = c.fetchall()
+    except sqlite3.OperationalError:
+        rows = []
+    conn.close()
+
+    docs = [
+        {
+            'id': r[0],
+            'uploader_username': r[1] or '',
+            'doc_type': r[2] or '',
+            'stored_path': r[3] or '',
+            'original_filename': r[4] or '',
+            'notes': r[5] or '',
+            'created_at': r[6] or '',
+        }
+        for r in rows
+    ]
+    return render_template('documents.html', docs=docs)
 
 @app.route('/join_group', methods=['POST'])
 @login_required

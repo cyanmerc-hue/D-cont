@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Documents - D-cont</title>
+</head>
+<body style="font-family: Arial, Helvetica, sans-serif; background: #f7fbfc; margin: 0; padding: 0;">
+    <div style="background: #fff; box-shadow: 0 2px 8px #e0e0e0; padding: 16px 0 8px 0; text-align: center;">
+        <img src="/static/logo.png" onerror="this.onerror=null;this.src='/static/logo.svg';" alt="D-cont Logo" style="height:60px; margin-bottom: 0;"/>
+    </div>
+
+    <div style="max-width: 950px; margin: 24px auto 48px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px #e0e0e0; padding: 28px; color: #222;">
+        <div style="display:flex; justify-content: space-between; align-items:center; gap: 12px;">
+            <h2 style="margin:0; color:#2D9CDB;">Documents</h2>
+            <div style="display:flex; gap: 10px; align-items:center;">
+                <a href="{% if session.get('role') == 'admin' %}/dashboard{% else %}/home{% endif %}" style="color:#2D9CDB; text-decoration:none;">Back</a>
+                <a href="/logout" style="color:#fff; background:#2D9CDB; padding:6px 16px; border-radius:6px; text-decoration:none;">Logout</a>
+            </div>
+        </div>
+
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            <ul style="margin-top:12px; color:#222;">
+            {% for message in messages %}
+              <li>{{ message }}</li>
+            {% endfor %}
+            </ul>
+          {% endif %}
+        {% endwith %}
+
+        <div style="margin-top:14px; background:#fff; border:1px solid #e8eef0; border-radius:10px; padding:14px;">
+            <div style="font-weight:bold; color:#222; margin-bottom:10px;">Upload document</div>
+            <form method="post" enctype="multipart/form-data" style="display:grid; grid-template-columns: 220px 1fr 220px; gap:10px; align-items:center; margin:0;">
+                <select name="doc_type" required style="width:100%; padding:10px; border-radius:8px; border:1px solid #ccc;">
+                    <option value="">Select type</option>
+                    <option value="pan">PAN Card</option>
+                    <option value="aadhaar">Aadhaar Card</option>
+                    <option value="passport">Passport</option>
+                    <option value="payment_screenshot">Payment Screenshot</option>
+                    <option value="other">Other</option>
+                </select>
+                <input type="text" name="notes" placeholder="Notes (optional)" style="width:100%; padding:10px; border-radius:8px; border:1px solid #ccc;">
+                <input type="file" name="document" required accept="image/*,application/pdf" style="width:100%; padding:8px; border-radius:8px; border:1px solid #ccc; background:#fff;">
+                <button type="submit" style="grid-column: 1 / -1; background:#2D9CDB; color:#fff; border:none; padding:12px 16px; border-radius:8px; cursor:pointer;">Upload</button>
+            </form>
+            <div style="margin-top:10px; color:#555; font-size:0.95em;">Allowed: PNG/JPG/JPEG/WEBP/GIF/PDF</div>
+        </div>
+
+        <h3 style="margin-top:22px;">All uploaded documents</h3>
+        {% if docs and docs|length > 0 %}
+            <table style="width:100%; border-collapse: collapse;">
+                <thead>
+                    <tr>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Type</th>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Uploaded by</th>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">File</th>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Notes</th>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Time</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for d in docs %}
+                    <tr>
+                        <td style="padding:8px; border-bottom:1px solid #f2f2f2;">{{ d.doc_type }}</td>
+                        <td style="padding:8px; border-bottom:1px solid #f2f2f2;">{{ d.uploader_username }}</td>
+                        <td style="padding:8px; border-bottom:1px solid #f2f2f2;">
+                            <a href="/static/{{ d.stored_path }}" target="_blank" rel="noopener" style="color:#2D9CDB; text-decoration:none;">View / Download</a>
+                            {% if d.original_filename %}
+                                <div style="color:#777; font-size:0.9em; margin-top:4px;">{{ d.original_filename }}</div>
+                            {% endif %}
+                        </td>
+                        <td style="padding:8px; border-bottom:1px solid #f2f2f2; color:#444;">{{ d.notes }}</td>
+                        <td style="padding:8px; border-bottom:1px solid #f2f2f2; color:#444;">{{ d.created_at }}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p style="color:#555;">No documents uploaded yet.</p>
+        {% endif %}
+
+        <div style="margin-top:16px; padding-top:14px; border-top:1px solid #eef3f5; display:flex; justify-content:center; gap:12px;">
+            <span style="color:#555;">Need help?</span>
+            <a href="/chat" style="color:#2D9CDB; text-decoration:none;">Chat</a>
+            <a href="{{ support_whatsapp_url }}" target="_blank" rel="noopener" style="color:#2D9CDB; text-decoration:none;">WhatsApp</a>
+        </div>
+    </div>
+</body>
+</html>
