@@ -1,9 +1,9 @@
-<div style="background:#fff; border-bottom:1px solid #e8eef0; padding:10px 0;">
+<div class="top-nav">
   {% set t = active_tab|default('') %}
-  <div style="max-width:600px; margin:0 auto; display:flex; justify-content:space-around;">
-    <a href="/home" style="text-decoration:none; color:{{ '#2D9CDB' if t=='home' else '#555' }}; font-weight:{{ 'bold' if t=='home' else 'normal' }};">Home</a>
-    <a href="/groups" style="text-decoration:none; color:{{ '#2D9CDB' if t=='groups' else '#555' }}; font-weight:{{ 'bold' if t=='groups' else 'normal' }};">Groups</a>
-    <a href="/payments" style="text-decoration:none; color:{{ '#2D9CDB' if t=='payments' else '#555' }}; font-weight:{{ 'bold' if t=='payments' else 'normal' }};">Payments</a>
-    <a href="/profile" style="text-decoration:none; color:{{ '#2D9CDB' if t=='profile' else '#555' }}; font-weight:{{ 'bold' if t=='profile' else 'normal' }};">Profile</a>
+  <div class="nav-inner">
+    <a href="/home" class="nav-link {{ 'active' if t=='home' else '' }}">Home</a>
+    <a href="/groups" class="nav-link {{ 'active' if t=='groups' else '' }}">Groups</a>
+    <a href="/payments" class="nav-link {{ 'active' if t=='payments' else '' }}">Payments</a>
+    <a href="/profile" class="nav-link {{ 'active' if t=='profile' else '' }}">Profile</a>
   </div>
 </div>

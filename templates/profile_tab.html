@@ -2,24 +2,26 @@
 <html>
 <head>
   <title>Profile - D-cont</title>
+  <link rel="stylesheet" href="/static/app.css">
 </head>
-<body style="font-family: Arial, Helvetica, sans-serif; background: #f7fbfc; margin: 0; padding: 0;">
-  <div style="background: #fff; box-shadow: 0 2px 8px #e0e0e0; padding: 16px 0 8px 0; text-align: center;">
-    <img src="/static/logo.png" onerror="this.onerror=null;this.src='/static/logo.svg';" alt="D-cont Logo" style="height:60px;"/>
+<body class="app-body">
+  <div class="app-header">
+    <img src="/static/logo.png" onerror="this.onerror=null;this.src='/static/logo.svg';" alt="D-cont Logo" class="app-logo"/>
   </div>
 
   {% include '_tab_nav.html' %}
 
-  <div style="max-width: 600px; margin: 22px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px #e0e0e0; padding: 22px;">
+  <div class="container">
+    <div class="card">
     {% with messages = get_flashed_messages() %}
       {% if messages %}
-        <div style="margin-bottom:12px; background:#eaf6fb; border:1px solid #2D9CDB; padding:10px 12px; border-radius:10px; color:#222;">
+        <div class="notice" style="margin-bottom:12px; padding:10px 12px;">
           {{ messages[0] }}
         </div>
       {% endif %}
     {% endwith %}
 
-    <h2 style="color:#2D9CDB; margin:0;">Profile</h2>
+    <h2 style="margin:0;">Profile</h2>
 
     <div style="margin-top:12px; background:#fff; border:1px solid #e8eef0; border-radius:10px; padding:14px;">
       <div style="color:#555; font-size:0.95em;">App Fee Paid</div>
@@ -39,7 +41,8 @@
       <button type="submit" style="margin-top:12px; width:100%; background:#2D9CDB; color:#fff; border:none; padding:10px 14px; border-radius:8px; cursor:pointer;">Save</button>
     </form>
 
-    <a href="/logout" style="display:block; margin-top:14px; text-align:center; background:#2D9CDB; color:#fff; padding:10px 14px; border-radius:8px; text-decoration:none;">Logout</a>
+    <a href="/logout" class="btn" style="display:block; margin-top:14px;">Logout</a>
+    </div>
   </div>
 
 </body>

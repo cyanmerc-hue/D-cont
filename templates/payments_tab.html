@@ -2,21 +2,23 @@
 <html>
 <head>
   <title>Payments - D-cont</title>
+  <link rel="stylesheet" href="/static/app.css">
 </head>
-<body style="font-family: Arial, Helvetica, sans-serif; background: #f7fbfc; margin: 0; padding: 0;">
-  <div style="background: #fff; box-shadow: 0 2px 8px #e0e0e0; padding: 16px 0 8px 0; text-align: center;">
-    <img src="/static/logo.png" onerror="this.onerror=null;this.src='/static/logo.svg';" alt="D-cont Logo" style="height:60px;"/>
+<body class="app-body">
+  <div class="app-header">
+    <img src="/static/logo.png" onerror="this.onerror=null;this.src='/static/logo.svg';" alt="D-cont Logo" class="app-logo"/>
   </div>
 
   {% include '_tab_nav.html' %}
 
-  <div style="max-width: 600px; margin: 22px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px #e0e0e0; padding: 22px;">
-    <h2 style="color:#2D9CDB; margin:0;">Payments</h2>
+  <div class="container">
+    <div class="card">
+    <h2 style="margin:0;">Payments</h2>
 
-    <div style="margin-top:14px; background:#eaf6fb; border-radius:10px; padding:14px; border:1px solid #2D9CDB;">
+    <div class="notice" style="margin-top:14px;">
       <div style="color:#222;"><strong>Your UPI:</strong> {% if upi_id %}{{ upi_id }}{% else %}<span style="color:#555;">Not set</span>{% endif %}</div>
       {% if not upi_id %}
-        <a href="/profile" style="display:inline-block; margin-top:10px; background:#2D9CDB; color:#fff; padding:10px 14px; border-radius:8px; text-decoration:none;">Add UPI in Profile</a>
+        <a href="/profile" class="btn" style="display:inline-block; margin-top:10px; width:auto;">Add UPI in Profile</a>
       {% endif %}
     </div>
 
@@ -40,8 +42,9 @@
       </ul>
     {% else %}
       <div style="color:#555;">Join a group to see payment instructions.</div>
-      <a href="/groups" style="display:inline-block; margin-top:10px; background:#2D9CDB; color:#fff; padding:10px 14px; border-radius:8px; text-decoration:none;">Go to Groups</a>
+      <a href="/groups" class="btn" style="display:inline-block; margin-top:10px; width:auto;">Go to Groups</a>
     {% endif %}
+    </div>
   </div>
 
 </body>

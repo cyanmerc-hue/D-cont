@@ -2,23 +2,25 @@
 <html>
 <head>
     <title>Owner Groups - D-cont</title>
+    <link rel="stylesheet" href="/static/app.css">
 </head>
-<body style="font-family: Arial, Helvetica, sans-serif; background: #f7fbfc; margin: 0; padding: 0;">
-    <div style="background: #fff; box-shadow: 0 2px 8px #e0e0e0; padding: 16px 0 8px 0; text-align: center;">
-        <img src="/static/logo.png" onerror="this.onerror=null;this.src='/static/logo.svg';" alt="D-cont Logo" style="height:60px; margin-bottom: 0;"/>
+<body class="app-body">
+    <div class="app-header">
+        <img src="/static/logo.png" onerror="this.onerror=null;this.src='/static/logo.svg';" alt="D-cont Logo" class="app-logo"/>
     </div>
 
     {% include '_owner_nav.html' %}
 
-    <div style="max-width: 1100px; margin: 18px auto 48px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px #e0e0e0; padding: 24px; color: #222;">
+    <div class="container container-wide" style="margin: 18px auto 48px auto;">
+      <div class="card" style="padding:24px; color:#222;">
         <div style="display:flex; justify-content: space-between; align-items:center; gap: 12px;">
             <h2 style="margin:0; color:#2D9CDB;">Groups</h2>
-            <a href="/logout" style="color:#fff; background:#2D9CDB; padding:6px 16px; border-radius:6px; text-decoration:none;">Logout</a>
+            <a href="/logout" class="btn btn-sm" style="width:auto; padding:6px 16px; border-radius:6px;">Logout</a>
         </div>
 
         {% with messages = get_flashed_messages() %}
           {% if messages %}
-            <div style="margin-top:12px; background:#eaf6fb; border:1px solid #2D9CDB; padding:10px 12px; border-radius:10px; color:#222;">
+                        <div class="notice" style="margin-top:12px; padding:10px 12px;">
               {{ messages[0] }}
             </div>
           {% endif %}
@@ -164,6 +166,7 @@
         {% endif %}
 
         <div style="margin-top: 18px; color:#777; font-size: 0.95em;">Note: You are recording, not holding money.</div>
-    </div>
+            </div>
+        </div>
 </body>
 </html>
