@@ -21,6 +21,27 @@ body.app-body {
   color: var(--text);
 }
 
+/* Subtle watermark on every page that uses app.css */
+body.app-body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image: url('/static/logo.svg'), url('/static/logo.png');
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 420px auto;
+  opacity: 0.06;
+}
+
+.app-header,
+.top-nav,
+.container {
+  position: relative;
+  z-index: 1;
+}
+
 .app-header {
   background: var(--surface);
   box-shadow: 0 2px 8px var(--shadow);
