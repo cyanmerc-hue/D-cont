@@ -1553,12 +1553,33 @@ def get_user_row(username):
 def require_customer(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
+        wants_json = False
+        try:
+            p = (request.path or '').lower()
+            if p.startswith('/auth/webauthn/'):
+                wants_json = True
+            accept = (request.headers.get('Accept') or '').lower()
+            if 'application/json' in accept:
+                wants_json = True
+            if request.is_json:
+                wants_json = True
+        except Exception:
+            wants_json = False
+
         if 'username' not in session:
+            if wants_json:
+                return jsonify({'error': 'Login required.'}), 401
             return redirect(url_for('login'))
+
         blocked_redirect = enforce_active_session()
         if blocked_redirect is not None:
+            if wants_json:
+                return jsonify({'error': 'Account not active.'}), 403
             return blocked_redirect
+
         if session.get('role') == 'admin':
+            if wants_json:
+                return jsonify({'error': 'Not allowed.'}), 403
             return redirect(url_for('dashboard'))
         return fn(*args, **kwargs)
 

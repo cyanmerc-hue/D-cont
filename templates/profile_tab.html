@@ -127,8 +127,25 @@
                 }
                 try {
                   statusEl.textContent = 'Opening fingerprint setup...';
-                  const resp = await fetch('/auth/webauthn/register/options', { credentials: 'same-origin' });
-                  const options = await resp.json();
+                  const resp = await fetch('/auth/webauthn/register/options', {
+                    credentials: 'same-origin',
+                    headers: { 'Accept': 'application/json' },
+                  });
+
+                  const ct = (resp.headers.get('content-type') || '').toLowerCase();
+                  let options = null;
+                  if (ct.includes('application/json')) {
+                    options = await resp.json();
+                  } else {
+                    const text = await resp.text();
+                    if (resp.status === 401) {
+                      statusEl.textContent = 'Session expired. Please login again.';
+                      window.location.href = '/login';
+                      return;
+                    }
+                    statusEl.textContent = 'Unable to start fingerprint setup. Please try again.';
+                    return;
+                  }
                   if (!resp.ok) {
                     statusEl.textContent = options.error || 'Unable to start fingerprint setup.';
                     return;
@@ -160,7 +177,20 @@
                     credentials: 'same-origin',
                     body: JSON.stringify(credential),
                   });
-                  const verifyJson = await verifyResp.json();
+                  const verifyCt = (verifyResp.headers.get('content-type') || '').toLowerCase();
+                  let verifyJson = null;
+                  if (verifyCt.includes('application/json')) {
+                    verifyJson = await verifyResp.json();
+                  } else {
+                    const text = await verifyResp.text();
+                    if (verifyResp.status === 401) {
+                      statusEl.textContent = 'Session expired. Please login again.';
+                      window.location.href = '/login';
+                      return;
+                    }
+                    statusEl.textContent = 'Fingerprint setup failed. Please try again.';
+                    return;
+                  }
                   if (!verifyResp.ok || !verifyJson.ok) {
                     statusEl.textContent = verifyJson.error || 'Fingerprint setup failed.';
                     return;
