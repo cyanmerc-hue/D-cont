@@ -10,60 +10,57 @@
     <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='icons/icon-512.png', v=asset_version) }}">
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png', v=asset_version) }}">
 </head>
-<body class="app-body">
-    <div class="topbar">
-        <div class="topbarInner">
-            <div class="brand">
-                <div class="brandWrap">
-                    <img src="/static/logo.svg" onerror="this.onerror=null;this.src='/static/logo.png';" alt="D-CONT" />
-                </div>
-                <span class="brandText">D-CONT</span>
-            </div>
-            <div class="pill">Smart Savings Circle</div>
-        </div>
-    </div>
+<body class="app-body hasTabs">
+    {% include '_tab_nav.html' %}
 
     <div class="container">
-        <div class="card card-pro card-lg">
+        <div class="card">
         {% with messages = get_flashed_messages() %}
           {% if messages %}
-            <ul>
-            {% for message in messages %}
-              <li>{{ message }}</li>
-            {% endfor %}
-            </ul>
+            <div class="notice" style="margin-bottom:12px; padding:10px 12px;">
+              {{ messages[0] }}
+            </div>
           {% endif %}
         {% endwith %}
 
         <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
-            <h2 style="margin:0;">{{ group.name }}</h2>
-            <div style="display:flex; gap:10px; align-items:center;">
-                <a href="/groups">Back</a>
-            </div>
+            <h2 style="margin:0;">Confirm Join</h2>
+            <a href="/groups" class="btn btn-secondary btn-sm" style="width:auto; padding:8px 12px;">Back</a>
         </div>
 
-        <div style="margin-top:10px;"><strong>Monthly contribution:</strong> ₹{{ group.monthly_amount }}</div>
-        <div class="muted" style="margin-top:8px; line-height:1.5;">{{ group.description }}</div>
+        <div class="card-pro" style="margin-top:14px; padding:14px;">
+          <div style="font-weight:900;">Confirm Join</div>
+          <div class="muted" style="margin-top:8px; line-height:1.6;">
+            You are joining:<br>
+            <strong>₹{{ group.monthly_amount }} Savings Circle • {{ group.max_members }} Members</strong>
+          </div>
 
-        <div class="notice" style="margin-top:16px;">
-            <p style="margin:0; line-height:1.5;"><strong>Non-custodial:</strong> Contributions are paid directly via UPI. D-cont never holds your money.</p>
+          <div class="muted" style="margin-top:10px; line-height:1.6;">
+            Monthly contribution: <strong>₹{{ group.monthly_amount }}</strong><br>
+            Duration: <strong>{{ group.duration_months }} months</strong><br>
+            Payments are made directly via UPI between members.<br>
+            D-CONT never holds your money.
+          </div>
         </div>
 
-        <div style="margin-top:18px;">
-            {% if member_status %}
-                <div style="font-weight:bold;">Status: {{ member_status|status_label }}</div>
-                <div class="muted" style="margin-top:6px;">{{ member_status|status_hint }}</div>
-                <a href="/home" class="btn" style="display:inline-block; margin-top:10px; width:auto;">Go to Home</a>
+        {% if join_error %}
+          <div class="notice" style="margin-top:12px;">
+            {{ join_error }}
+          </div>
+        {% endif %}
+
+        <div class="notice" style="margin-top:12px;">
+          <div class="muted" style="line-height:1.45;">Payments are directly between members via UPI. D-CONT never holds money.</div>
+        </div>
+
+        <div style="margin-top:16px; display:flex; gap:10px; flex-wrap:wrap;">
+            {% if can_join %}
+              <form method="post" action="/group/{{ group.id }}/join" style="margin:0;">
+                  <button type="submit" class="btn" style="width:auto;">Confirm &amp; Join</button>
+              </form>
+              <a href="/groups" class="btn btn-secondary" style="width:auto;">Cancel</a>
             {% else %}
-                {% if not user.upi_id %}
-                    <p class="muted">Add your UPI ID to request joining this group.</p>
-                    <a href="/profile" class="btn" style="display:inline-block; width:auto;">Add UPI ID</a>
-                {% else %}
-                    <form method="post" action="/groups/join" style="margin:0;">
-                        <input type="hidden" name="group_id" value="{{ group.id }}" />
-                        <button type="submit" class="btn">Join Group</button>
-                    </form>
-                {% endif %}
+              <a href="/groups" class="btn" style="width:auto;">Back to Groups</a>
             {% endif %}
         </div>
         </div>

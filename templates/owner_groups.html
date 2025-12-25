@@ -69,35 +69,116 @@
         {% endif %}
 
         <h3 class="sectionTitle">Add group</h3>
-        <form method="post" action="/owner/groups/add" style="margin-top:10px; border:1px solid #e8eef0; border-radius:10px; padding:14px; display:grid; grid-template-columns: 1.2fr 1.6fr 140px 130px; gap:10px; align-items:end;">
+        <form method="post" action="/owner/groups/add" style="margin-top:10px; border:1px solid #e8eef0; border-radius:10px; padding:14px; display:grid; grid-template-columns: 1fr 1fr; gap:10px; align-items:end;">
             <div>
-                <label class="muted small" style="display:block;">Name</label>
-                <input class="input" style="margin:6px 0 0;" type="text" name="name" required>
+                <label class="muted small" style="display:block;">Monthly Contribution Amount</label>
+                <select class="input" id="og_amount" name="monthly_amount" style="margin:6px 0 0; padding:12px 12px;">
+                    <option value="500">₹500</option>
+                    <option value="1000">₹1,000</option>
+                    <option value="2000">₹2,000</option>
+                    <option value="5000">₹5,000</option>
+                    <option value="10000">₹10,000</option>
+                </select>
+                <div class="muted small" style="margin-top:6px;">This is the amount each member pays every month to the payout receiver.</div>
             </div>
+
             <div>
-                <label class="muted small" style="display:block;">Description</label>
-                <input class="input" style="margin:6px 0 0;" type="text" name="description">
+                <label class="muted small" style="display:block;">Members Limit</label>
+                <select class="input" id="og_members" name="max_members" style="margin:6px 0 0; padding:12px 12px;" disabled>
+                    <option value="10">10 members (recommended)</option>
+                </select>
+                <input type="hidden" name="max_members" value="10" />
+                <div class="muted small" style="margin-top:6px;">Group duration will be 10 months (one payout per month).</div>
             </div>
+
             <div>
-                <label class="muted small" style="display:block;">Monthly ₹</label>
-                <input class="input" style="margin:6px 0 0;" type="number" min="1" name="monthly_amount" required>
+                <label class="muted small" style="display:block;">Start Month</label>
+                <select class="input" id="og_start_mode" name="start_mode" style="margin:6px 0 0; padding:12px 12px;">
+                    <option value="when_full">Start when full</option>
+                    <option value="fixed">Start on a fixed date</option>
+                </select>
+                <div class="muted small" style="margin-top:6px;">Month 1 is formation month. No payouts in month 1.</div>
             </div>
+
+            <div id="og_start_date_wrap" style="display:none;">
+                <label class="muted small" style="display:block;">Start Date</label>
+                <input class="input" id="og_start_date" style="margin:6px 0 0;" type="date" name="start_date" />
+            </div>
+
             <div>
-                <label class="muted small" style="display:block;">Max members</label>
-                <input class="input" style="margin:6px 0 0;" type="number" min="1" name="max_members" value="10">
+                <label class="muted small" style="display:block;">Joining Status</label>
+                <select class="input" id="og_joining" name="joining_open" style="margin:6px 0 0; padding:12px 12px;">
+                    <option value="1">Open to Join</option>
+                    <option value="0">Closed</option>
+                </select>
+                <div class="muted small" style="margin-top:6px;">If Closed, customers can view but cannot join.</div>
             </div>
-            <div style="grid-column: 1 / -1; display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-                <div>
-                    <label class="muted small" style="display:block;">Receiver name</label>
-                    <input class="input" style="margin:6px 0 0;" type="text" name="receiver_name">
+
+            <div>
+                <label class="muted small" style="display:block;">Group Name (Auto)</label>
+                <div class="card-pro" style="margin-top:6px; padding:12px; font-weight:900;" id="og_name_preview">₹500 Savings Circle • 10M • When full</div>
+                <div class="muted small" style="margin-top:6px;">Name is generated automatically for consistency.</div>
+            </div>
+
+            <div class="card-pro" style="grid-column: 1 / -1; padding:12px;">
+                <div style="font-weight:900;">Group Summary</div>
+                <div class="muted" style="margin-top:8px; line-height:1.5;" id="og_summary">
+                    • Amount: ₹500 per month<br>
+                    • Members: 10<br>
+                    • Duration: 10 months<br>
+                    • Month 1: Formation (no payouts)<br>
+                    • Month 2+: Monthly payouts<br>
+                    • Payments happen member-to-member via UPI<br>
+                    • D-CONT does not hold money
                 </div>
-                <div>
-                    <label class="muted small" style="display:block;">Receiver UPI</label>
-                    <input class="input" style="margin:6px 0 0;" type="text" name="receiver_upi">
-                </div>
             </div>
-            <button type="submit" class="btn" style="grid-column: 1 / -1;">Add</button>
+
+            <button type="submit" class="btn" style="grid-column: 1 / -1;">Create Group</button>
         </form>
+
+        <script>
+            (function() {
+                const amountEl = document.getElementById('og_amount');
+                const startModeEl = document.getElementById('og_start_mode');
+                const startWrap = document.getElementById('og_start_date_wrap');
+                const startDateEl = document.getElementById('og_start_date');
+                const nameEl = document.getElementById('og_name_preview');
+                const summaryEl = document.getElementById('og_summary');
+
+                function fmtMonthYear(d) {
+                    try {
+                        const dt = new Date(d + 'T00:00:00');
+                        if (Number.isNaN(dt.getTime())) return '—';
+                        return dt.toLocaleString('en-US', { month: 'short', year: 'numeric' }).replace(',', '');
+                    } catch (e) {
+                        return '—';
+                    }
+                }
+
+                function updateUI() {
+                    const amount = amountEl.value || '500';
+                    const startMode = startModeEl.value || 'when_full';
+                    startWrap.style.display = (startMode === 'fixed') ? 'block' : 'none';
+
+                    const startLabel = (startMode === 'fixed' && startDateEl.value) ? fmtMonthYear(startDateEl.value) : 'When full';
+                    nameEl.textContent = `₹${amount} Savings Circle • 10M • ${startLabel}`;
+
+                    summaryEl.innerHTML =
+                        `• Amount: ₹${amount} per month<br>` +
+                        `• Members: 10<br>` +
+                        `• Duration: 10 months<br>` +
+                        `• Month 1: Formation (no payouts)<br>` +
+                        `• Month 2+: Monthly payouts<br>` +
+                        `• Payments happen member-to-member via UPI<br>` +
+                        `• D-CONT does not hold money`;
+                }
+
+                amountEl.addEventListener('change', updateUI);
+                startModeEl.addEventListener('change', updateUI);
+                startDateEl.addEventListener('change', updateUI);
+                updateUI();
+            })();
+        </script>
 
         <h3 class="sectionTitle">All groups</h3>
         {% if groups and groups|length > 0 %}

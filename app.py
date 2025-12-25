@@ -12,6 +12,7 @@ import smtplib
 from email.message import EmailMessage
 import re
 import time
+import calendar
 
 from flask import jsonify
 
@@ -3082,6 +3083,14 @@ def init_db():
     if "receiver_selected_at" not in existing_group_cols:
         c.execute("ALTER TABLE groups ADD COLUMN receiver_selected_at TEXT")
 
+    # Customer join controls + scheduling (owner-created groups)
+    if "joining_open" not in existing_group_cols:
+        c.execute("ALTER TABLE groups ADD COLUMN joining_open INTEGER")
+    if "start_mode" not in existing_group_cols:
+        c.execute("ALTER TABLE groups ADD COLUMN start_mode TEXT")
+    if "start_date" not in existing_group_cols:
+        c.execute("ALTER TABLE groups ADD COLUMN start_date TEXT")
+
     # Ensure users table has required columns (auto-migration)
     c.execute("PRAGMA table_info(users)")
     existing_cols = {row[1] for row in c.fetchall()}  # row[1] = column name
@@ -3113,6 +3122,14 @@ def init_db():
     c.execute("UPDATE users SET wallet_credit=0 WHERE wallet_credit IS NULL")
     c.execute("UPDATE group_members SET status='joined' WHERE status IS NULL OR status='' ")
     c.execute("UPDATE groups SET is_paused=0 WHERE is_paused IS NULL")
+    try:
+        c.execute("UPDATE groups SET joining_open=1 WHERE joining_open IS NULL")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        c.execute("UPDATE groups SET start_mode='when_full' WHERE start_mode IS NULL OR start_mode='' ")
+    except sqlite3.OperationalError:
+        pass
 
     # Best-effort: if a group is already full but has no activation schedule yet, start it now.
     try:
@@ -3876,12 +3893,11 @@ def owner_groups():
 @app.route('/owner/groups/add', methods=['POST'])
 @admin_required
 def owner_add_group():
-    name = (request.form.get('name') or '').strip()
-    description = (request.form.get('description') or '').strip()
     monthly_amount_raw = (request.form.get('monthly_amount') or '').strip()
     max_members_raw = (request.form.get('max_members') or '').strip()
-    receiver_name = (request.form.get('receiver_name') or '').strip()
-    receiver_upi = (request.form.get('receiver_upi') or '').strip()
+    joining_open_raw = (request.form.get('joining_open') or '').strip()
+    start_mode = (request.form.get('start_mode') or 'when_full').strip().lower()
+    start_date = (request.form.get('start_date') or '').strip()
     try:
         monthly_amount = int(monthly_amount_raw)
     except ValueError:
@@ -3891,24 +3907,38 @@ def owner_add_group():
     except ValueError:
         max_members = 10
 
-    if not name:
-        flash('Group name is required.')
-        return redirect(url_for('owner_groups'))
+    try:
+        joining_open = int(joining_open_raw) if joining_open_raw != '' else 1
+    except ValueError:
+        joining_open = 1
+
+    if start_mode not in {'when_full', 'fixed'}:
+        start_mode = 'when_full'
+    if start_mode != 'fixed':
+        start_date = ''
+    if start_date and not _parse_iso_date(start_date):
+        start_date = ''
+
     if monthly_amount <= 0:
         flash('Monthly amount must be greater than 0.')
         return redirect(url_for('owner_groups'))
     if max_members <= 0:
         max_members = 10
 
+    name = _auto_group_name(monthly_amount, max_members, start_mode, start_date)
+    description = ''
+    receiver_name = ''
+    receiver_upi = ''
+
     conn = get_db()
     c = conn.cursor()
     c.execute(
-        'INSERT INTO groups (name, description, monthly_amount, max_members, receiver_name, receiver_upi, status, is_paused) VALUES (?,?,?,?,?,?,?,?)',
-        (name, description, monthly_amount, max_members, receiver_name, receiver_upi, 'formation', 0),
+        'INSERT INTO groups (name, description, monthly_amount, max_members, receiver_name, receiver_upi, status, is_paused, joining_open, start_mode, start_date) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+        (name, description, monthly_amount, max_members, receiver_name, receiver_upi, 'formation', 0, int(1 if joining_open else 0), start_mode, start_date),
     )
     conn.commit()
     conn.close()
-    flash('Group added.')
+    flash('Group Created ✅ Now visible under Available Groups.')
     return redirect(url_for('owner_groups'))
 
 
@@ -3921,6 +3951,9 @@ def owner_update_group():
     receiver_name = (request.form.get('receiver_name') or '').strip()
     receiver_upi = (request.form.get('receiver_upi') or '').strip()
     status = (request.form.get('status') or '').strip().lower()
+    joining_open_raw = (request.form.get('joining_open') or '').strip()
+    start_mode = (request.form.get('start_mode') or '').strip().lower()
+    start_date = (request.form.get('start_date') or '').strip()
     monthly_amount_raw = (request.form.get('monthly_amount') or '').strip()
     max_members_raw = (request.form.get('max_members') or '').strip()
     try:
@@ -3932,6 +3965,18 @@ def owner_update_group():
     except ValueError:
         max_members = 10
 
+    try:
+        joining_open = int(joining_open_raw) if joining_open_raw != '' else 1
+    except ValueError:
+        joining_open = 1
+
+    if start_mode not in {'when_full', 'fixed', ''}:
+        start_mode = ''
+    if start_mode != 'fixed':
+        start_date = ''
+    if start_date and not _parse_iso_date(start_date):
+        start_date = ''
+
     if status not in {'formation', 'active', 'completed', ''}:
         status = ''
     if max_members <= 0:
@@ -3942,8 +3987,8 @@ def owner_update_group():
     conn = get_db()
     c = conn.cursor()
     c.execute(
-        'UPDATE groups SET name=?, description=?, monthly_amount=?, max_members=?, receiver_name=?, receiver_upi=?, status=? WHERE id=?',
-        (name, description, monthly_amount, max_members, receiver_name, receiver_upi, status, group_id),
+        'UPDATE groups SET name=?, description=?, monthly_amount=?, max_members=?, receiver_name=?, receiver_upi=?, status=?, joining_open=?, start_mode=?, start_date=? WHERE id=?',
+        (name, description, monthly_amount, max_members, receiver_name, receiver_upi, status, int(1 if joining_open else 0), start_mode, start_date, group_id),
     )
     conn.commit()
     conn.close()
@@ -4696,7 +4741,11 @@ def _fetch_available_groups(username: str):
                g.description,
                g.monthly_amount,
                COALESCE(g.max_members, 10) as max_members,
-               COUNT(gm2.id) as joined_members
+             COUNT(gm2.id) as joined_members,
+             COALESCE(g.joining_open, 1) as joining_open,
+             COALESCE(g.start_mode, 'when_full') as start_mode,
+             COALESCE(g.start_date, '') as start_date,
+             COALESCE(g.status, '') as status
         FROM groups g
         LEFT JOIN group_members gm2 ON gm2.group_id = g.id AND gm2.status='joined'
         WHERE g.id NOT IN (
@@ -4718,9 +4767,132 @@ def _fetch_available_groups(username: str):
             'monthly_amount': r[3],
             'max_members': int(r[4] or 10),
             'joined_members': int(r[5] or 0),
+            'joining_open': int(r[6] if r[6] is not None else 1),
+            'start_mode': (r[7] or 'when_full').strip().lower(),
+            'start_date': (r[8] or '').strip(),
+            'status': (r[9] or '').strip().lower(),
         }
         for r in rows
     ]
+
+
+def _format_start_label(start_mode: str, start_date: str, activated_at: str = '') -> str:
+    mode = (start_mode or '').strip().lower()
+    candidate = ((start_date or '').strip() or (activated_at or '').strip())
+    if mode == 'when_full' and not candidate:
+        return 'When full'
+    if not candidate:
+        return '—'
+    try:
+        # Accept YYYY-MM-DD or ISO timestamp.
+        if len(candidate) >= 10 and candidate[4] == '-' and candidate[7] == '-':
+            dt = datetime.fromisoformat(candidate[:19]) if 'T' in candidate else datetime.fromisoformat(candidate)
+        else:
+            dt = datetime.fromisoformat(candidate)
+        month_name = calendar.month_abbr[int(dt.month)]
+        return f"{month_name} {dt.year}"
+    except Exception:
+        return '—'
+
+
+def _auto_group_name(monthly_amount: int, max_members: int, start_mode: str, start_date: str) -> str:
+    try:
+        amt = int(monthly_amount or 0)
+    except Exception:
+        amt = 0
+    try:
+        members = int(max_members or 10)
+    except Exception:
+        members = 10
+    members = max(1, members)
+    starts_label = _format_start_label((start_mode or 'when_full').strip().lower(), (start_date or '').strip())
+    if not starts_label:
+        starts_label = 'When full'
+    return f"₹{amt} Savings Circle • {members}M • {starts_label}"
+
+
+def _group_join_status_for_customer(group_row: dict) -> str:
+    """Return one of: open, formation, active, full."""
+    try:
+        joined_members = int(group_row.get('joined_members') or 0)
+        max_members = int(group_row.get('max_members') or 10)
+    except Exception:
+        joined_members = 0
+        max_members = 10
+    joining_open = int(group_row.get('joining_open') or 0)
+    status = (group_row.get('status') or '').strip().lower()
+
+    if joined_members >= max(1, max_members):
+        return 'full'
+    if joining_open == 1:
+        return 'open'
+    if status == 'active':
+        return 'active'
+    return 'formation'
+
+
+def _customer_join_guard(conn, group_id: int, username: str):
+    """Return (ok: bool, message: str, group_row: dict|None)."""
+    c = conn.cursor()
+    try:
+        c.execute(
+            """
+            SELECT g.id,
+                   COALESCE(g.name,''),
+                   COALESCE(g.description,''),
+                   COALESCE(g.monthly_amount,0),
+                   COALESCE(g.max_members,10),
+                   COALESCE(g.is_paused,0),
+                   COALESCE(g.joining_open,1),
+                   COALESCE(g.start_mode,'when_full'),
+                   COALESCE(g.start_date,''),
+                   COALESCE(g.status,''),
+                   COALESCE(g.activated_at,''),
+                   COUNT(gm2.id) as joined_members
+            FROM groups g
+            LEFT JOIN group_members gm2 ON gm2.group_id=g.id AND gm2.status='joined'
+            WHERE g.id=?
+            GROUP BY g.id
+            """,
+            (int(group_id or 0),),
+        )
+        row = c.fetchone()
+    except sqlite3.OperationalError:
+        row = None
+    if not row:
+        return False, 'Invalid group.', None
+
+    group = {
+        'id': int(row[0] or 0),
+        'name': row[1] or '',
+        'description': row[2] or '',
+        'monthly_amount': int(row[3] or 0),
+        'max_members': int(row[4] or 10),
+        'is_paused': int(row[5] or 0),
+        'joining_open': int(row[6] if row[6] is not None else 1),
+        'start_mode': (row[7] or 'when_full').strip().lower(),
+        'start_date': (row[8] or '').strip(),
+        'status': (row[9] or '').strip().lower(),
+        'activated_at': (row[10] or '').strip(),
+        'joined_members': int(row[11] or 0),
+    }
+
+    if int(group.get('is_paused') or 0) == 1:
+        return False, 'Joining is closed for this group.', group
+
+    # Already joined?
+    try:
+        c.execute("SELECT 1 FROM group_members WHERE group_id=? AND username=? AND status='joined' LIMIT 1", (int(group_id or 0), username))
+        if c.fetchone() is not None:
+            return False, 'You are already in this group.', group
+    except sqlite3.OperationalError:
+        pass
+
+    if int(group.get('joined_members') or 0) >= max(1, int(group.get('max_members') or 10)):
+        return False, 'Group Full', group
+    if int(group.get('joining_open') or 0) != 1:
+        return False, 'Joining Closed', group
+    return True, '', group
 
 
 @app.route('/home')
@@ -4770,21 +4942,41 @@ def home_tab():
 @require_customer
 def groups_tab():
     username = session['username']
-    my_groups = _fetch_my_groups(username)
-    for g in my_groups:
-        try:
-            gid = int(g.get('id') or 0)
-        except (TypeError, ValueError):
-            gid = 0
-        g['members'] = _fetch_group_members_with_trust(gid) if gid > 0 else []
     available_groups = _fetch_available_groups(username)
-    user = get_user_row(username) or {}
+
+    amount_raw = (request.args.get('amount') or '').strip()
+    status_raw = (request.args.get('status') or '').strip().lower()
+
+    allowed_amounts = [500, 1000, 2000, 5000, 10000]
+    try:
+        amount_filter = int(amount_raw) if amount_raw else 0
+    except ValueError:
+        amount_filter = 0
+    if amount_filter and amount_filter not in allowed_amounts:
+        amount_filter = 0
+
+    allowed_status = {'', 'open', 'formation', 'active', 'full'}
+    if status_raw not in allowed_status:
+        status_raw = ''
+
+    filtered = []
+    for g in available_groups or []:
+        if amount_filter and int(g.get('monthly_amount') or 0) != amount_filter:
+            continue
+        s = _group_join_status_for_customer(g)
+        if status_raw and s != status_raw:
+            continue
+        g['status_filter'] = s
+        g['starts_label'] = _format_start_label(g.get('start_mode') or '', g.get('start_date') or '')
+        g['duration_months'] = int(g.get('max_members') or 10)
+        filtered.append(g)
 
     return render_template(
         'groups_tab.html',
-        my_groups=my_groups,
-        available_groups=available_groups,
-        upi_id=(user.get('upi_id') or '').strip(),
+        available_groups=filtered,
+        amount_filter=str(amount_filter) if amount_filter else '',
+        status_filter=status_raw,
+        allowed_amounts=allowed_amounts,
         active_tab='groups',
     )
 
@@ -4806,6 +4998,9 @@ def join_group_customer():
     if group_id <= 0:
         flash('Invalid group.')
         return redirect(url_for('groups_tab'))
+
+    # Always go through confirm-join screen
+    return redirect(url_for('group_preview', group_id=group_id))
 
     username = session['username']
     if is_join_blocked(username):
@@ -4944,7 +5139,26 @@ def groups_by_amount(amount):
 @app.route('/group/<int:group_id>')
 @require_customer
 def group_preview(group_id):
-    return redirect(url_for('groups_tab'))
+    username = session['username']
+    conn = get_db()
+    ok, message, group = _customer_join_guard(conn, int(group_id or 0), username)
+    conn.close()
+
+    if not group:
+        flash('Invalid group.')
+        return redirect(url_for('groups_tab'))
+
+    group['starts_label'] = _format_start_label(group.get('start_mode') or '', group.get('start_date') or '', group.get('activated_at') or '')
+    group['duration_months'] = int(group.get('max_members') or 10)
+    group['status_filter'] = _group_join_status_for_customer(group)
+
+    return render_template(
+        'group_preview.html',
+        group=group,
+        can_join=bool(ok),
+        join_error=(message or ''),
+        active_tab='groups',
+    )
 
 
 @app.route('/add-upi', methods=['GET', 'POST'])
@@ -4962,20 +5176,42 @@ def request_join_group(group_id):
         return redirect(url_for('groups_tab'))
 
     conn = get_db()
+    ok, message, _group = _customer_join_guard(conn, int(group_id or 0), username)
+    if not ok:
+        conn.close()
+        flash(message or 'Unable to join this group.')
+        return redirect(url_for('group_preview', group_id=group_id))
+
+    join_group_with_status(group_id, username, status='joined')
+    conn.commit()
+    conn.close()
+    return redirect(url_for('join_success', group_id=group_id))
+
+
+@app.route('/join-success/<int:group_id>')
+@require_customer
+def join_success(group_id: int):
+    conn = get_db()
     c = conn.cursor()
     try:
-        c.execute('SELECT COALESCE(is_paused, 0) FROM groups WHERE id=?', (group_id,))
+        c.execute(
+            "SELECT id, COALESCE(name,''), COALESCE(monthly_amount,0), COALESCE(max_members,10) FROM groups WHERE id=?",
+            (int(group_id or 0),),
+        )
         row = c.fetchone()
     except sqlite3.OperationalError:
         row = None
     conn.close()
-    if row and int(row[0] if row[0] is not None else 0) == 1:
-        flash('This group is currently paused.')
+    if not row:
         return redirect(url_for('groups_tab'))
 
-    join_group_with_status(group_id, username, status='joined')
-    flash('You joined the group.')
-    return redirect(url_for('groups_tab'))
+    group = {
+        'id': int(row[0] or 0),
+        'name': row[1] or '',
+        'monthly_amount': int(row[2] or 0),
+        'max_members': int(row[3] or 10),
+    }
+    return render_template('join_success.html', group=group, active_tab='groups')
 
 
 @app.route('/join_group', methods=['POST'])

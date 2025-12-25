@@ -23,78 +23,72 @@
       {% endif %}
     {% endwith %}
 
-    <h2 style="margin:0;">{{ t('groups_title') }}</h2>
+    <h2 style="margin:0;">Available Groups</h2>
+    <div class="muted" style="margin-top:6px; line-height:1.45;">Choose a group created by D-CONT. Join with one tap.</div>
 
-    <div class="notice" style="margin-top:12px;">
-      <div style="font-weight:800;">{{ t('benefit_simple_saving_title') }}</div>
-      <div class="muted" style="margin-top:6px; line-height:1.45;">{{ t('benefit_simple_saving_body') }}</div>
-      <div class="muted" style="margin-top:8px; line-height:1.45;"><strong>{{ t('benefit_transparent_title') }}:</strong> {{ t('benefit_transparent_body') }}</div>
-      <div class="muted" style="margin-top:6px; line-height:1.45;">{{ t('benefit_one_liner') }}</div>
-    </div>
-
-    <h3 class="sectionTitle" style="margin-top:18px;">{{ t('my_groups') }}</h3>
-    {% if my_groups and my_groups|length > 0 %}
-      <ul style="list-style:none; padding:0; margin:0;">
-        {% for g in my_groups %}
-          <li class="card-pro" style="margin-bottom:12px; padding:14px;">
-            <div style="font-weight:900;">{{ g.name }}</div>
-            <div><strong>₹{{ g.monthly_amount }}</strong> {{ t('label_per_month') }}</div>
-            <div class="muted" style="margin-top:6px; font-size:0.95em;"><strong>{{ t('status') }}:</strong> {{ g.status }} · <strong>{{ t('members') }}:</strong> {{ g.joined_members }}/{{ g.max_members }}</div>
-
-            <details style="margin-top:10px;">
-              <summary style="cursor:pointer; color: var(--accent);">{{ t('view_details') }}</summary>
-              {% if g.description %}<div class="muted" style="margin-top:8px;">{{ g.description }}</div>{% endif %}
-              <div class="muted" style="margin-top:8px;"><strong>{{ t('label_receiver_name') }}</strong> {% if g.receiver_name %}{{ g.receiver_name }}{% else %}<span class="muted">{{ t('not_set') }}</span>{% endif %}</div>
-              <div class="muted" style="margin-top:4px;"><strong>{{ t('label_receiver_upi') }}</strong> {% if g.receiver_upi %}{{ g.receiver_upi }}{% else %}<span class="muted">{{ t('not_set') }}</span>{% endif %}</div>
-              <div class="muted" style="margin-top:8px; line-height:1.45;">{{ t('info_payout_label') }}</div>
-
-              <div style="margin-top:12px; font-weight:bold;">{{ t('members') }}</div>
-              {% if g.members and g.members|length > 0 %}
-                <div style="margin-top:8px; display:flex; flex-direction:column; gap:8px;">
-                  {% for m in g.members %}
-                    <div class="card-pro" style="display:flex; justify-content:space-between; align-items:center; gap:10px; border-radius:10px; padding:10px;">
-                      <div>{{ m.full_name or m.username }}</div>
-                      <span class="{{ m.trust_score|trust_badge_class }}">{{ m.trust_score|trust_band }}</span>
-                    </div>
-                  {% endfor %}
-                </div>
-              {% else %}
-                <div class="muted" style="margin-top:8px;">{{ t('members_list_unavailable') }}</div>
-              {% endif %}
-
-              <a href="/payments" class="btn btn-secondary btn-sm" style="display:inline-block; margin-top:10px; width:auto;">{{ t('go_to_payments') }}</a>
-            </details>
-          </li>
+    <form method="get" action="/groups" style="margin-top:14px; display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;">
+      <div>
+        <div class="muted small" style="margin-bottom:6px;">Filter by Monthly Amount</div>
+        <select class="input" name="amount" style="margin:0; width:200px; padding:12px 12px;">
+          <option value="" {% if not amount_filter %}selected{% endif %}>All amounts</option>
+        {% for a in allowed_amounts %}
+          <option value="{{ a }}" {% if amount_filter == (a|string) %}selected{% endif %}>₹{{ a }}</option>
         {% endfor %}
-      </ul>
-    {% else %}
-      <div class="notice" style="margin-top:10px;">{{ t('no_joined_groups_yet') }}</div>
-    {% endif %}
+        </select>
+      </div>
 
-    <h3 class="sectionTitle" style="margin-top:22px;">{{ t('join_a_group') }}</h3>
+      <div>
+        <div class="muted small" style="margin-bottom:6px;">Filter by Status</div>
+        <select class="input" name="status" style="margin:0; width:220px; padding:12px 12px;">
+          <option value="" {% if not status_filter %}selected{% endif %}>All statuses</option>
+          <option value="open" {% if status_filter=='open' %}selected{% endif %}>Open to Join</option>
+          <option value="formation" {% if status_filter=='formation' %}selected{% endif %}>Formation (Not Started)</option>
+          <option value="active" {% if status_filter=='active' %}selected{% endif %}>Active (Running)</option>
+          <option value="full" {% if status_filter=='full' %}selected{% endif %}>Full</option>
+        </select>
+      </div>
+
+      <button type="submit" class="btn btn-secondary btn-sm" style="width:auto; padding:8px 12px;">Apply</button>
+    </form>
+
     {% if available_groups and available_groups|length > 0 %}
-      <ul style="list-style:none; padding:0; margin:0;">
+      <ul style="list-style:none; padding:0; margin:14px 0 0 0;">
         {% for g in available_groups %}
           <li class="card-pro" style="margin-bottom:12px; padding:14px;">
-            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
-              <div>
-                <div style="font-weight:900;">{{ g.name }}</div>
-                <div><strong>₹{{ g.monthly_amount }}</strong> {{ t('label_per_month') }}</div>
-                {% if g.description %}<div class="muted" style="margin-top:4px;">{{ g.description }}</div>{% endif %}
-                <div class="muted" style="margin-top:6px; font-size:0.95em;"><strong>{{ t('members') }}:</strong> {{ g.joined_members }}/{{ g.max_members }}</div>
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
+              <div style="min-width:0;">
+                <div style="font-weight:900;">₹{{ g.monthly_amount }} Savings Circle • {{ g.max_members }} Members • Monthly</div>
+                <div class="muted" style="margin-top:6px; font-size:0.95em; line-height:1.45;">
+                  Joining:
+                  {% if g.status_filter == 'open' %}Open{% elif g.status_filter == 'full' %}Full{% elif g.status_filter == 'active' %}Active (Running){% else %}Closed{% endif %}
+                  <br>
+                  Members: {{ g.joined_members }}/{{ g.max_members }}
+                  <br>
+                  Starts: {{ g.starts_label }}
+                  <br>
+                  Duration: {{ g.duration_months }} months
+                </div>
+                {% if g.description %}<div class="muted" style="margin-top:6px; line-height:1.45;">{{ g.description }}</div>{% endif %}
               </div>
-              <div style="min-width:110px; text-align:right;">
-                <form method="POST" action="/groups/join" style="margin:0;">
-                  <input type="hidden" name="group_id" value="{{ g.id }}" />
-                  <button type="submit" class="btn btn-sm" style="width:auto;">{{ t('btn_join') }}</button>
-                </form>
+
+              <div style="min-width:140px; text-align:right;">
+                {% if g.status_filter == 'open' %}
+                  <form method="POST" action="/groups/join" style="margin:0;">
+                    <input type="hidden" name="group_id" value="{{ g.id }}" />
+                    <button type="submit" class="btn btn-sm" style="width:auto;">Join Group</button>
+                  </form>
+                {% elif g.status_filter == 'full' %}
+                  <button class="btn btn-secondary btn-sm" disabled style="width:auto; opacity:.7;">Group Full</button>
+                {% else %}
+                  <button class="btn btn-secondary btn-sm" disabled style="width:auto; opacity:.7;">Joining Closed</button>
+                {% endif %}
               </div>
             </div>
           </li>
         {% endfor %}
       </ul>
     {% else %}
-      <div class="notice" style="margin-top:10px;">{{ t('no_groups_available_to_join') }}</div>
+      <div class="notice" style="margin-top:14px;">No groups found for the selected filters.</div>
     {% endif %}
     </div>
   </div>
