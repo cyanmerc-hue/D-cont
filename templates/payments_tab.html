@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Payments - D-cont</title>
+  <title>{{ t('payments_title') }} - D-cont</title>
   <meta name="theme-color" content="#05060A">
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css', v=asset_version) }}">
   <link rel="manifest" href="{{ url_for('static', filename='manifest.json', v=asset_version) }}">
@@ -14,16 +14,16 @@
 
   <div class="container">
     <div class="card">
-    <h2 style="margin:0;">Payments</h2>
+    <h2 style="margin:0;">{{ t('payments_title') }}</h2>
 
     <div class="notice" style="margin-top:14px;">
-      <div><strong>Your UPI:</strong> {% if upi_id %}{{ upi_id }}{% else %}<span class="muted">Not set</span>{% endif %}</div>
+      <div><strong>{{ 'आपका UPI:' if current_lang=='hi' else 'Your UPI:' }}</strong> {% if upi_id %}{{ upi_id }}{% else %}<span class="muted">{{ t('not_set') }}</span>{% endif %}</div>
       {% if not upi_id %}
-        <a href="/profile" class="btn" style="display:inline-block; margin-top:10px; width:auto;">Add UPI in Profile</a>
+        <a href="/profile" class="btn" style="display:inline-block; margin-top:10px; width:auto;">{{ 'प्रोफ़ाइल में UPI जोड़ें' if current_lang=='hi' else 'Add UPI in Profile' }}</a>
       {% endif %}
     </div>
 
-    <h3 class="sectionTitle" style="margin-top:18px;">Who to Pay</h3>
+    <h3 class="sectionTitle" style="margin-top:18px;">{{ t('who_to_pay') }}</h3>
     {% if pay_to and pay_to|length > 0 %}
       <ul style="list-style:none; padding:0; margin:0;">
         {% for item in pay_to %}
@@ -35,20 +35,20 @@
                 <strong>Due today:</strong> {{ item.due_date }} • Please pay before <strong>{{ item.pay_cutoff_time }}</strong>
               </div>
             {% endif %}
-            <div class="muted" style="margin-top:6px;"><strong>Receiver:</strong> {{ item.receiver_name }}</div>
-            <div class="muted" style="margin-top:4px;"><strong>UPI:</strong> {% if item.receiver_upi %}{{ item.receiver_upi }}{% else %}<span class="muted">Not set</span>{% endif %}</div>
+            <div class="muted" style="margin-top:6px;"><strong>{{ 'रिसीवर:' if current_lang=='hi' else 'Receiver:' }}</strong> {{ item.receiver_name }}</div>
+            <div class="muted" style="margin-top:4px;"><strong>UPI:</strong> {% if item.receiver_upi %}{{ item.receiver_upi }}{% else %}<span class="muted">{{ t('not_set') }}</span>{% endif %}</div>
 
             {% if item.pay_url %}
-              <a href="{{ item.pay_url }}" style="display:inline-block; margin-top:10px; background:#2D9CDB; color:#fff; padding:10px 14px; border-radius:8px; text-decoration:none;">Pay via UPI</a>
+              <a href="{{ item.pay_url }}" style="display:inline-block; margin-top:10px; background:#2D9CDB; color:#fff; padding:10px 14px; border-radius:8px; text-decoration:none;">{{ t('pay_via_upi') }}</a>
             {% else %}
-              <div class="muted" style="margin-top:10px;">Payment link unavailable (receiver UPI not set).</div>
+              <div class="muted" style="margin-top:10px;">{{ t('payment_link_unavailable') }}</div>
             {% endif %}
           </li>
         {% endfor %}
       </ul>
     {% else %}
-      <div class="muted">Join a group to see payment instructions.</div>
-      <a href="/groups" class="btn" style="display:inline-block; margin-top:10px; width:auto;">Go to Groups</a>
+      <div class="muted">{{ 'पेमेंट निर्देश देखने के लिए किसी समूह में जॉइन करें।' if current_lang=='hi' else 'Join a group to see payment instructions.' }}</div>
+      <a href="/groups" class="btn" style="display:inline-block; margin-top:10px; width:auto;">{{ t('go_to_groups') }}</a>
     {% endif %}
     </div>
   </div>

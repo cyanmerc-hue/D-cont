@@ -22,24 +22,24 @@
       {% endif %}
     {% endwith %}
 
-    <h2 style="margin:0;">Groups</h2>
+    <h2 style="margin:0;">{{ t('groups_title') }}</h2>
 
-    <h3 class="sectionTitle" style="margin-top:18px;">My Groups</h3>
+    <h3 class="sectionTitle" style="margin-top:18px;">{{ t('my_groups') }}</h3>
     {% if my_groups and my_groups|length > 0 %}
       <ul style="list-style:none; padding:0; margin:0;">
         {% for g in my_groups %}
           <li class="card-pro" style="margin-bottom:12px; padding:14px;">
             <div style="font-weight:bold; color:#2D9CDB;">{{ g.name }}</div>
             <div><strong>₹{{ g.monthly_amount }}</strong> / month</div>
-            <div class="muted" style="margin-top:6px; font-size:0.95em;"><strong>Status:</strong> {{ g.status }} · <strong>Members:</strong> {{ g.joined_members }}/{{ g.max_members }}</div>
+            <div class="muted" style="margin-top:6px; font-size:0.95em;"><strong>{{ t('status') }}:</strong> {{ g.status }} · <strong>{{ t('members') }}:</strong> {{ g.joined_members }}/{{ g.max_members }}</div>
 
             <details style="margin-top:10px;">
-              <summary style="cursor:pointer; color:#2D9CDB;">View details</summary>
+              <summary style="cursor:pointer; color:#2D9CDB;">{{ t('view_details') }}</summary>
               {% if g.description %}<div class="muted" style="margin-top:8px;">{{ g.description }}</div>{% endif %}
-              <div class="muted" style="margin-top:8px;"><strong>Receiver name:</strong> {% if g.receiver_name %}{{ g.receiver_name }}{% else %}<span class="muted">Not set</span>{% endif %}</div>
-              <div class="muted" style="margin-top:4px;"><strong>Receiver UPI:</strong> {% if g.receiver_upi %}{{ g.receiver_upi }}{% else %}<span class="muted">Not set</span>{% endif %}</div>
+              <div class="muted" style="margin-top:8px;"><strong>{{ 'रिसीवर नाम' if current_lang=='hi' else 'Receiver name' }}:</strong> {% if g.receiver_name %}{{ g.receiver_name }}{% else %}<span class="muted">{{ t('not_set') }}</span>{% endif %}</div>
+              <div class="muted" style="margin-top:4px;"><strong>{{ 'रिसीवर UPI' if current_lang=='hi' else 'Receiver UPI' }}:</strong> {% if g.receiver_upi %}{{ g.receiver_upi }}{% else %}<span class="muted">{{ t('not_set') }}</span>{% endif %}</div>
 
-              <div style="margin-top:12px; font-weight:bold;">Members</div>
+              <div style="margin-top:12px; font-weight:bold;">{{ t('members') }}</div>
               {% if g.members and g.members|length > 0 %}
                 <div style="margin-top:8px; display:flex; flex-direction:column; gap:8px;">
                   {% for m in g.members %}
@@ -53,16 +53,16 @@
                 <div class="muted" style="margin-top:8px;">Members list unavailable.</div>
               {% endif %}
 
-              <a href="/payments" style="display:inline-block; margin-top:10px; background:#2D9CDB; color:#fff; padding:8px 12px; border-radius:8px; text-decoration:none;">Go to Payments</a>
+              <a href="/payments" style="display:inline-block; margin-top:10px; background:#2D9CDB; color:#fff; padding:8px 12px; border-radius:8px; text-decoration:none;">{{ t('go_to_payments') }}</a>
             </details>
           </li>
         {% endfor %}
       </ul>
     {% else %}
-      <div class="muted">You haven’t joined any group yet.</div>
+      <div class="muted">{{ 'आपने अभी तक कोई समूह जॉइन नहीं किया है।' if current_lang=='hi' else 'You haven’t joined any group yet.' }}</div>
     {% endif %}
 
-    <h3 class="sectionTitle" style="margin-top:22px;">Join a Group</h3>
+    <h3 class="sectionTitle" style="margin-top:22px;">{{ t('join_a_group') }}</h3>
     {% if available_groups and available_groups|length > 0 %}
       <ul style="list-style:none; padding:0; margin:0;">
         {% for g in available_groups %}
@@ -72,12 +72,12 @@
                 <div style="font-weight:bold; color:#2D9CDB;">{{ g.name }}</div>
                 <div><strong>₹{{ g.monthly_amount }}</strong> / month</div>
                 {% if g.description %}<div class="muted" style="margin-top:4px;">{{ g.description }}</div>{% endif %}
-                <div class="muted" style="margin-top:6px; font-size:0.95em;"><strong>Members:</strong> {{ g.joined_members }}/{{ g.max_members }}</div>
+                <div class="muted" style="margin-top:6px; font-size:0.95em;"><strong>{{ t('members') }}:</strong> {{ g.joined_members }}/{{ g.max_members }}</div>
               </div>
               <div style="min-width:110px; text-align:right;">
                 <form method="POST" action="/groups/join" style="margin:0;">
                   <input type="hidden" name="group_id" value="{{ g.id }}" />
-                  <button type="submit" style="background:#2D9CDB; color:#fff; border:none; padding:8px 12px; border-radius:8px; cursor:pointer;">Join</button>
+                  <button type="submit" style="background:#2D9CDB; color:#fff; border:none; padding:8px 12px; border-radius:8px; cursor:pointer;">{{ 'जॉइन' if current_lang=='hi' else 'Join' }}</button>
                 </form>
               </div>
             </div>
@@ -85,7 +85,7 @@
         {% endfor %}
       </ul>
     {% else %}
-      <div class="muted">No groups available to join right now.</div>
+      <div class="muted">{{ 'अभी जॉइन करने के लिए कोई समूह उपलब्ध नहीं है।' if current_lang=='hi' else 'No groups available to join right now.' }}</div>
     {% endif %}
     </div>
   </div>

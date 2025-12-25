@@ -22,7 +22,7 @@
       {% endif %}
     {% endwith %}
 
-    <h2 style="margin:0;">Profile</h2>
+    <h2 style="margin:0;">{{ t('profile_title') }}</h2>
 
     <div class="card-pro" style="margin-top:12px; padding:14px;">
       <div class="muted" style="font-size:0.95em;">App Fee Paid</div>
@@ -41,28 +41,28 @@
     </div>
 
     <form method="POST" action="/profile" enctype="multipart/form-data" class="card-pro" style="margin-top:14px; padding:14px;">
-      <label class="muted" style="display:block; font-size:0.95em;">Full Name</label>
+      <label class="muted" style="display:block; font-size:0.95em;">{{ 'पूरा नाम' if current_lang=='hi' else 'Full Name' }}</label>
       <input name="full_name" type="text" value="{{ full_name }}" class="input" />
 
-      <label class="muted" style="display:block; font-size:0.95em; margin-top:10px;">Mobile (read-only)</label>
+      <label class="muted" style="display:block; font-size:0.95em; margin-top:10px;">{{ 'मोबाइल (केवल पढ़ने हेतु)' if current_lang=='hi' else 'Mobile (read-only)' }}</label>
       <input type="text" value="{{ mobile }}" readonly class="input" style="margin:0;" />
 
       <label class="muted" style="display:block; font-size:0.95em; margin-top:10px;">UPI ID</label>
       <input name="upi_id" type="text" value="{{ upi_id }}" placeholder="example@upi" class="input" />
 
       <div style="margin-top:14px; padding-top:14px; border-top:1px solid #eef3f5;">
-        <div class="sectionTitle" style="margin-top:0;">Important documents</div>
+        <div class="sectionTitle" style="margin-top:0;">{{ 'महत्वपूर्ण दस्तावेज़' if current_lang=='hi' else 'Important documents' }}</div>
         <div class="muted" style="font-size:0.95em; margin-top:6px; line-height:1.4;">
-          Upload PDF/JPG/PNG/WEBP. Your documents are stored privately and can only be downloaded when you are logged in.
+          {{ 'PDF/JPG/PNG/WEBP अपलोड करें। आपके दस्तावेज़ निजी रूप से सुरक्षित हैं और केवल लॉगिन के बाद डाउनलोड हो सकते हैं।' if current_lang=='hi' else 'Upload PDF/JPG/PNG/WEBP. Your documents are stored privately and can only be downloaded when you are logged in.' }}
         </div>
 
         <div class="card-pro" style="margin-top:12px; padding:12px;">
           <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
             <div style="font-weight:bold;">Aadhaar</div>
             {% if aadhaar_doc %}
-              <a href="/profile/doc/aadhaar" style="color:#2D9CDB; text-decoration:none;">Download</a>
+              <a href="/profile/doc/aadhaar" style="color:#2D9CDB; text-decoration:none;">{{ 'डाउनलोड' if current_lang=='hi' else 'Download' }}</a>
             {% else %}
-              <span class="muted" style="font-size:0.9em;">Not uploaded</span>
+              <span class="muted" style="font-size:0.9em;">{{ 'अपलोड नहीं हुआ' if current_lang=='hi' else 'Not uploaded' }}</span>
             {% endif %}
           </div>
           <input type="file" name="aadhaar_file" accept=".pdf,image/*" style="width:100%; margin-top:10px;" />
@@ -72,9 +72,9 @@
           <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
             <div style="font-weight:bold;">PAN</div>
             {% if pan_doc %}
-              <a href="/profile/doc/pan" style="color:#2D9CDB; text-decoration:none;">Download</a>
+              <a href="/profile/doc/pan" style="color:#2D9CDB; text-decoration:none;">{{ 'डाउनलोड' if current_lang=='hi' else 'Download' }}</a>
             {% else %}
-              <span class="muted" style="font-size:0.9em;">Not uploaded</span>
+              <span class="muted" style="font-size:0.9em;">{{ 'अपलोड नहीं हुआ' if current_lang=='hi' else 'Not uploaded' }}</span>
             {% endif %}
           </div>
           <input type="file" name="pan_file" accept=".pdf,image/*" style="width:100%; margin-top:10px;" />
@@ -84,16 +84,16 @@
           <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
             <div style="font-weight:bold;">Passport</div>
             {% if passport_doc %}
-              <a href="/profile/doc/passport" style="color:#2D9CDB; text-decoration:none;">Download</a>
+              <a href="/profile/doc/passport" style="color:#2D9CDB; text-decoration:none;">{{ 'डाउनलोड' if current_lang=='hi' else 'Download' }}</a>
             {% else %}
-              <span class="muted" style="font-size:0.9em;">Not uploaded</span>
+              <span class="muted" style="font-size:0.9em;">{{ 'अपलोड नहीं हुआ' if current_lang=='hi' else 'Not uploaded' }}</span>
             {% endif %}
           </div>
           <input type="file" name="passport_file" accept=".pdf,image/*" style="width:100%; margin-top:10px;" />
         </div>
       </div>
 
-      <button type="submit" style="margin-top:12px; width:100%; background:#2D9CDB; color:#fff; border:none; padding:10px 14px; border-radius:8px; cursor:pointer;">Save</button>
+      <button type="submit" style="margin-top:12px; width:100%; background:#2D9CDB; color:#fff; border:none; padding:10px 14px; border-radius:8px; cursor:pointer;">{{ t('save') }}</button>
     </form>
 
     <div class="card-pro" id="early-payout" style="margin-top:14px; padding:14px;">
@@ -175,12 +175,12 @@
     </div>
 
     <div class="card-pro" style="margin-top:14px; padding:14px;">
-      <div class="sectionTitle" style="margin-top:0;">Support</div>
-      <div class="muted" style="margin-top:6px;">Have a question? Chat with the D-CONT Bot.</div>
-      <a href="/chat" class="btn btn-secondary" style="display:inline-block; margin-top:10px; width:auto;">Open Chat</a>
+      <div class="sectionTitle" style="margin-top:0;">{{ 'सपोर्ट' if current_lang=='hi' else 'Support' }}</div>
+      <div class="muted" style="margin-top:6px;">{{ 'कोई सवाल है? D-CONT बॉट से चैट करें।' if current_lang=='hi' else 'Have a question? Chat with the D-CONT Bot.' }}</div>
+      <a href="/chat" class="btn btn-secondary" style="display:inline-block; margin-top:10px; width:auto;">{{ 'चैट खोलें' if current_lang=='hi' else 'Open Chat' }}</a>
     </div>
 
-    <a href="/logout" class="btn" style="display:block; margin-top:14px;">Logout</a>
+    <a href="/logout" class="btn" style="display:block; margin-top:14px;">{{ t('logout') }}</a>
     </div>
   </div>
 

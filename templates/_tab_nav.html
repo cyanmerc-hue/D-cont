@@ -8,10 +8,10 @@
       <span class="brandText">D-CONT</span>
     </div>
     <div class="nav-inner">
-      <a href="/home" class="nav-link {{ 'active' if t=='home' else '' }}">Home</a>
-      <a href="/groups" class="nav-link {{ 'active' if t=='groups' else '' }}">Groups</a>
-      <a href="/payments" class="nav-link {{ 'active' if t=='payments' else '' }}">Payments</a>
-      <a href="/profile" class="nav-link {{ 'active' if t=='profile' else '' }}">Profile</a>
+      <a href="/home" class="nav-link {{ 'active' if t=='home' else '' }}">{{ t('nav_home') }}</a>
+      <a href="/groups" class="nav-link {{ 'active' if t=='groups' else '' }}">{{ t('nav_groups') }}</a>
+      <a href="/payments" class="nav-link {{ 'active' if t=='payments' else '' }}">{{ t('nav_payments') }}</a>
+      <a href="/profile" class="nav-link {{ 'active' if t=='profile' else '' }}">{{ t('nav_profile') }}</a>
     </div>
     {% if nav_user_pill %}
       <div class="pill">{{ nav_user_pill }}</div>

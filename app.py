@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash, abort, send_from_directory
+from flask import Flask, render_template, request, redirect, url_for, session, flash, abort, send_from_directory, g
 import sqlite3
 import os
 import random
@@ -53,6 +53,171 @@ ADMIN_PASSWORD = os.environ.get('DCONT_ADMIN_PASSWORD', 'Bond1010#')
 ADMIN_MOBILE = os.environ.get('DCONT_ADMIN_MOBILE', '9999999999')
 
 WHATSAPP_SUPPORT_NUMBER = '917506680031'  # +91 7506680031
+
+# ---- Language (EN/HI) ----
+SUPPORTED_LANGS = {
+    'en': 'English (EN)',
+    'hi': 'हिंदी',
+}
+
+
+def _normalize_lang(value: str) -> str:
+    v = (value or '').strip().lower()
+    if v in {'hi', 'hindi', 'हिंदी'}:
+        return 'hi'
+    if v in {'en', 'english', 'eng', 'en-us', 'en-in'}:
+        return 'en'
+    # Back-compat values stored in DB (English/Hindi/Hinglish)
+    if v == 'hinglish':
+        return 'en'
+    return 'en'
+
+
+def _get_user_language(username: str) -> str:
+    username = (username or '').strip()
+    if not username:
+        return 'en'
+    conn = get_db()
+    c = conn.cursor()
+    try:
+        c.execute('SELECT COALESCE(language,\'\') FROM users WHERE username=?', (username,))
+        row = c.fetchone()
+    except sqlite3.OperationalError:
+        row = None
+    conn.close()
+    return _normalize_lang(row[0] if row else '')
+
+
+@app.before_request
+def _set_request_language():
+    # Owner/admin UI stays English.
+    if session.get('role') == 'admin':
+        g.lang = 'en'
+        return
+
+    lang = session.get('lang')
+    if not lang and session.get('username'):
+        lang = _get_user_language(session.get('username'))
+        session['lang'] = lang
+    g.lang = _normalize_lang(lang)
+
+
+TRANSLATIONS = {
+    'en': {
+        'brand_tagline': 'Smart Savings Circle',
+        'nav_home': 'Home',
+        'nav_groups': 'Groups',
+        'nav_payments': 'Payments',
+        'nav_profile': 'Profile',
+        'login_title': 'Login',
+        'login_identifier_label': 'Username / Mobile',
+        'login_identifier_ph': 'Enter username or mobile',
+        'login_password_label': 'Password',
+        'login_password_ph': 'Enter password',
+        'login_btn': 'Login',
+        'login_language': 'Language',
+        'login_admin_title': 'Admin Login',
+        'login_admin_user': 'User ID',
+        'login_admin_user_ph': 'Enter admin user id',
+        'login_admin_pw': 'Password',
+        'login_admin_btn': 'Login as Admin',
+        'login_no_account': "Don’t have an account?",
+        'login_register': 'Register',
+        'terms': 'Terms & Conditions',
+        'trust_notice_title': 'Trust:',
+        'trust_notice_line1': 'D-cont never holds money. Payments happen directly between members.',
+        'trust_notice_line2': 'We will never ask for your password or UPI PIN.',
+        'home_greeting': 'Hi, {name}!',
+        'non_custodial': 'Non-custodial:',
+        'non_custodial_line': 'D-cont does not hold money. You contribute directly via your UPI.',
+        'need_help': 'Need help?',
+        'chat_with_bot': 'Chat with BOT',
+        'join_group': 'Join Group',
+        'go_to_groups': 'Go to Groups',
+        'go_to_payments': 'Go to Payments',
+        'groups_title': 'Groups',
+        'my_groups': 'My Groups',
+        'join_a_group': 'Join a Group',
+        'view_details': 'View details',
+        'members': 'Members',
+        'status': 'Status',
+        'not_set': 'Not set',
+        'profile_title': 'Profile',
+        'save': 'Save',
+        'logout': 'Logout',
+        'payments_title': 'Payments',
+        'who_to_pay': 'Who to Pay',
+        'pay_via_upi': 'Pay via UPI',
+        'payment_link_unavailable': 'Payment link unavailable (receiver UPI not set).',
+    },
+    'hi': {
+        'brand_tagline': 'स्मार्ट बचत समूह',
+        'nav_home': 'होम',
+        'nav_groups': 'समूह',
+        'nav_payments': 'भुगतान',
+        'nav_profile': 'प्रोफ़ाइल',
+        'login_title': 'लॉगिन',
+        'login_identifier_label': 'यूज़रनेम / मोबाइल',
+        'login_identifier_ph': 'यूज़रनेम या मोबाइल दर्ज करें',
+        'login_password_label': 'पासवर्ड',
+        'login_password_ph': 'पासवर्ड दर्ज करें',
+        'login_btn': 'लॉगिन करें',
+        'login_language': 'भाषा',
+        'login_admin_title': 'एडमिन लॉगिन',
+        'login_admin_user': 'यूज़र आईडी',
+        'login_admin_user_ph': 'एडमिन यूज़र आईडी दर्ज करें',
+        'login_admin_pw': 'पासवर्ड',
+        'login_admin_btn': 'एडमिन के रूप में लॉगिन',
+        'login_no_account': 'अकाउंट नहीं है?',
+        'login_register': 'रजिस्टर करें',
+        'terms': 'नियम और शर्तें',
+        'trust_notice_title': 'विश्वास:',
+        'trust_notice_line1': 'D-cont कभी पैसे नहीं रखता। भुगतान सीधे सदस्यों के बीच होता है।',
+        'trust_notice_line2': 'हम कभी आपका पासवर्ड या UPI PIN नहीं पूछेंगे।',
+        'home_greeting': 'नमस्ते, {name}!',
+        'non_custodial': 'नॉन-कस्टोडियल:',
+        'non_custodial_line': 'D-cont पैसे नहीं रखता। आप अपने UPI से सीधे योगदान करते हैं।',
+        'need_help': 'मदद चाहिए?',
+        'chat_with_bot': 'बॉट से चैट करें',
+        'join_group': 'समूह जॉइन करें',
+        'go_to_groups': 'समूह देखें',
+        'go_to_payments': 'भुगतान देखें',
+        'groups_title': 'समूह',
+        'my_groups': 'मेरे समूह',
+        'join_a_group': 'समूह जॉइन करें',
+        'view_details': 'विवरण देखें',
+        'members': 'सदस्य',
+        'status': 'स्थिति',
+        'not_set': 'सेट नहीं है',
+        'profile_title': 'प्रोफ़ाइल',
+        'save': 'सेव करें',
+        'logout': 'लॉगआउट',
+        'payments_title': 'भुगतान',
+        'who_to_pay': 'किसको भुगतान करना है',
+        'pay_via_upi': 'UPI से भुगतान करें',
+        'payment_link_unavailable': 'पेमेंट लिंक उपलब्ध नहीं (रिसीवर UPI सेट नहीं है)।',
+    },
+}
+
+
+def t(key: str, **kwargs) -> str:
+    lang = _normalize_lang(getattr(g, 'lang', None) or session.get('lang') or 'en')
+    base = TRANSLATIONS.get('en', {})
+    table = TRANSLATIONS.get(lang, {})
+    text = table.get(key) or base.get(key) or key
+    try:
+        return text.format(**kwargs)
+    except Exception:
+        return text
+
+
+@app.context_processor
+def _inject_i18n():
+    return {
+        't': t,
+        'current_lang': _normalize_lang(getattr(g, 'lang', None) or session.get('lang') or 'en'),
+        'supported_langs': SUPPORTED_LANGS,
+    }
 
 ALLOWED_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "webp", "gif"}
 ALLOWED_DOCUMENT_EXTENSIONS = {"png", "jpg", "jpeg", "webp", "pdf"}
@@ -2840,6 +3005,8 @@ def login():
     if request.method == 'POST':
         login_type = (request.form.get('login_type') or '').strip().lower()
 
+        requested_lang = _normalize_lang(request.form.get('lang') or '')
+
         # Read both forms' fields up-front (browser autofill can populate hidden/unused fields)
         identifier = (request.form.get('username') or '').strip()
         password = request.form.get('password') or ''
@@ -2891,6 +3058,7 @@ def login():
 
             session['username'] = row[0]
             session['role'] = 'admin'
+            session['lang'] = 'en'
             return redirect(url_for('dashboard'))
 
         # Customer login (username OR mobile + password)
@@ -2981,6 +3149,21 @@ def login():
 
         session['username'] = matched[0]
         session['role'] = matched[1]
+
+        # Store preferred language for customer UI
+        if requested_lang in SUPPORTED_LANGS:
+            session['lang'] = requested_lang
+            try:
+                conn = get_db()
+                c = conn.cursor()
+                c.execute('UPDATE users SET language=? WHERE username=?', (requested_lang, matched[0]))
+                conn.commit()
+                conn.close()
+            except sqlite3.OperationalError:
+                pass
+        else:
+            session['lang'] = _get_user_language(matched[0])
+
         return redirect(url_for('home'))
 
     return render_template('login.html')
@@ -2999,7 +3182,7 @@ def register():
         # users can log in even if they type +91/spaces/dashes later.
         mobile = _normalize_mobile_digits(mobile_raw) or (mobile_raw or '').strip()
         full_name = request.form.get('full_name')
-        language = request.form.get('language')
+        language = _normalize_lang(request.form.get('language'))
         city_state = request.form.get('city_state')
         email = request.form.get('email')
 
