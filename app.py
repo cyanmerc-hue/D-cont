@@ -4099,10 +4099,20 @@ def join_group():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    # Allow pre-login language switching (updates immediately on page reload).
+    if request.method == 'GET':
+        requested = _normalize_lang(request.args.get('lang') or '')
+        if requested in SUPPORTED_LANGS:
+            session['lang'] = requested
+        return render_template('login.html')
+
     if request.method == 'POST':
         login_type = (request.form.get('login_type') or '').strip().lower()
 
         requested_lang = _normalize_lang(request.form.get('lang') or '')
+        if requested_lang in SUPPORTED_LANGS:
+            # Persist early so error states render in the selected language.
+            session['lang'] = requested_lang
 
         # Read both forms' fields up-front (browser autofill can populate hidden/unused fields)
         identifier = (request.form.get('username') or '').strip()
