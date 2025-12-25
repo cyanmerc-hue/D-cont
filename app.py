@@ -4293,12 +4293,33 @@ def home_tab():
     active_count = sum(1 for g in my_groups if g.get('status') == 'Active')
     formation_count = sum(1 for g in my_groups if g.get('status') == 'Formation')
 
+    # Monthly app-fee preview (credit is applied when owner verifies payment)
+    conn = get_db()
+    _ensure_app_fee_current_month(conn, username)
+    app_fee_amount = _get_app_fee_amount_int(conn)
+    credit_balance = _available_app_fee_credit(conn, username)
+    credit_preview = _preview_app_fee_credit_apply(conn, username, app_fee_amount)
+    net_due = max(0, int(app_fee_amount) - int(credit_preview))
+    conn.commit()
+    conn.close()
+
+    try:
+        trust_score = int(user.get('trust_score') if user.get('trust_score') is not None else 50)
+    except Exception:
+        trust_score = 50
+    trust_score = max(0, min(100, trust_score))
+
     return render_template(
         'home_tab.html',
         full_name=(user.get('full_name') or user.get('username') or '').strip(),
         has_groups=len(my_groups) > 0,
         active_count=active_count,
         formation_count=formation_count,
+        trust_score=trust_score,
+        app_fee_amount=int(app_fee_amount or 0),
+        app_fee_credit_balance=int(credit_balance or 0),
+        app_fee_credit_preview=int(credit_preview or 0),
+        app_fee_net_due=int(net_due or 0),
         active_tab='home',
     )
 

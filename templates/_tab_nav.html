@@ -18,3 +18,41 @@
     {% endif %}
   </div>
 </div>
+
+<nav class="tabbar" aria-label="Primary">
+  {% set tab = active_tab|default('') %}
+  <a href="/home" class="tabItem {{ 'active' if tab=='home' else '' }}" aria-label="{{ t('nav_home') }}">
+    <svg class="tabIcon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M3 10.5L12 3l9 7.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M5 9.5V21h14V9.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <span class="tabLabel">{{ t('nav_home') }}</span>
+  </a>
+
+  <a href="/groups" class="tabItem {{ 'active' if tab=='groups' else '' }}" aria-label="{{ t('nav_groups') }}">
+    <svg class="tabIcon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <span class="tabLabel">{{ t('nav_groups') }}</span>
+  </a>
+
+  <a href="/payments" class="tabItem {{ 'active' if tab=='payments' else '' }}" aria-label="{{ t('nav_payments') }}">
+    <svg class="tabIcon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M3 7h18v10H3V7Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M3 10h18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M7 14h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <span class="tabLabel">{{ t('nav_payments') }}</span>
+  </a>
+
+  <a href="/profile" class="tabItem {{ 'active' if tab=='profile' else '' }}" aria-label="{{ t('nav_profile') }}">
+    <svg class="tabIcon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <span class="tabLabel">{{ t('nav_profile') }}</span>
+  </a>
+</nav>
