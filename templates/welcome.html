@@ -10,27 +10,36 @@
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png', v=asset_version) }}">
 </head>
 <body class="app-body">
-    <div style="background: #fff; box-shadow: 0 2px 8px #e0e0e0; padding: 16px 0 8px 0; text-align: center;">
-        <img src="/static/logo.png" onerror="this.onerror=null;this.src='/static/logo.svg';" alt="D-cont Logo" style="height:60px;"/>
+    <div class="topbar">
+        <div class="topbarInner">
+            <div class="brand">
+                <div class="brandWrap">
+                    <img src="/static/logo.png" onerror="this.onerror=null;this.src='/static/logo.svg';" alt="D-CONT" />
+                </div>
+                <span class="brandText">D-CONT</span>
+            </div>
+            <div class="pill">Smart Savings Circle</div>
+        </div>
     </div>
 
-    <div style="max-width: 520px; margin: 28px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px #e0e0e0; padding: 28px;">
-        <h2 style="color:#2D9CDB; margin-top:0;">Welcome to D-cont</h2>
-        <p style="color:#333; line-height:1.5;">Your circle. Your savings.</p>
-        <div style="background:#eaf6fb; border-radius:10px; padding:14px; border:1px solid #2D9CDB;">
-            <p style="margin:0; color:#222; line-height:1.5;"><strong>Important:</strong> D-cont is non-custodial. We don’t collect or hold your money. You contribute directly to your group using your own UPI.</p>
-        </div>
+    <div class="container">
+        <div class="card card-pro card-lg">
+            <h2>Welcome to D-cont</h2>
+            <p class="muted" style="line-height:1.5;">Your circle. Your savings.</p>
 
-        <div style="margin-top:18px; display:flex; gap:10px;">
-            <a href="/how-it-works" style="flex:1; text-align:center; background:#2D9CDB; color:#fff; padding:10px 16px; border-radius:8px; text-decoration:none;">Get Started</a>
-            <a href="/terms" style="flex:1; text-align:center; background:#eaf6fb; color:#2D9CDB; padding:10px 16px; border-radius:8px; text-decoration:none; border:1px solid #2D9CDB;">Terms</a>
-        </div>
+            <div class="notice">
+                <p style="margin:0;"><strong>Important:</strong> D-cont is non-custodial. We don’t collect or hold your money. You contribute directly to your group using your own UPI.</p>
+            </div>
 
-        <div style="margin-top:14px; text-align:center;">
-            <a href="/logout" style="color:#2D9CDB; text-decoration:none;">Logout</a>
-        </div>
+            <div class="btn-row">
+                <a class="btn btnPrimary" href="/how-it-works">Get Started</a>
+                <a class="btn btn-secondary" href="/terms">Terms</a>
+            </div>
 
-        
+            <div style="margin-top:14px; text-align:center;">
+                <a href="/logout">Logout</a>
+            </div>
+        </div>
     </div>
 </body>
 </html>

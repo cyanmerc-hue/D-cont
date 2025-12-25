@@ -2,36 +2,48 @@
 <html>
 <head>
     <title>Documents - D-cont</title>
+    <meta name="theme-color" content="#05060A">
     <link rel="stylesheet" href="{{ url_for('static', filename='app.css', v=asset_version) }}">
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json', v=asset_version) }}">
+    <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icons/icon-192.png', v=asset_version) }}">
+    <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='icons/icon-512.png', v=asset_version) }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png', v=asset_version) }}">
 </head>
 <body class="app-body">
-    <div style="background: #fff; box-shadow: 0 2px 8px #e0e0e0; padding: 16px 0 8px 0; text-align: center;">
-        <img src="/static/logo.png" onerror="this.onerror=null;this.src='/static/logo.svg';" alt="D-cont Logo" style="height:60px; margin-bottom: 0;"/>
+    <div class="topbar">
+        <div class="topbarInner">
+            <div class="brand">
+                <div class="brandWrap">
+                    <img src="/static/logo.png" onerror="this.onerror=null;this.src='/static/logo.svg';" alt="D-CONT" />
+                </div>
+                <span class="brandText">D-CONT</span>
+            </div>
+            <div class="pill">Documents</div>
+        </div>
     </div>
 
-    <div style="max-width: 950px; margin: 24px auto 48px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px #e0e0e0; padding: 28px; color: #222;">
-        <div style="display:flex; justify-content: space-between; align-items:center; gap: 12px;">
-            <h2 style="margin:0; color:#2D9CDB;">Documents</h2>
-            <div style="display:flex; gap: 10px; align-items:center;">
-                <a href="{% if session.get('role') == 'admin' %}/dashboard{% else %}/home{% endif %}" style="color:#2D9CDB; text-decoration:none;">Back</a>
-                <a href="/logout" style="color:#fff; background:#2D9CDB; padding:6px 16px; border-radius:6px; text-decoration:none;">Logout</a>
+    <div class="container container-wide">
+        <div class="card card-pro card-lg">
+        <div class="row" style="justify-content: space-between; align-items:center; gap: 12px;">
+            <h2 class="pageTitle">Documents</h2>
+            <div class="btn-row" style="margin-top:0; width:auto;">
+                <a href="{% if session.get('role') == 'admin' %}/dashboard{% else %}/home{% endif %}" class="btn btn-secondary btn-sm" style="width:auto;">Back</a>
+                <a href="/logout" class="btn btn-sm" style="width:auto;">Logout</a>
             </div>
         </div>
 
-        {% with messages = get_flashed_messages() %}
-          {% if messages %}
-            <ul style="margin-top:12px; color:#222;">
-            {% for message in messages %}
-              <li>{{ message }}</li>
-            {% endfor %}
-            </ul>
-          {% endif %}
-        {% endwith %}
+                {% with messages = get_flashed_messages() %}
+                    {% if messages %}
+                        <div class="notice" style="margin-top:12px; padding:10px 12px;">
+                            {{ messages[0] }}
+                        </div>
+                    {% endif %}
+                {% endwith %}
 
-        <div style="margin-top:14px; background:#fff; border:1px solid #e8eef0; border-radius:10px; padding:14px;">
-            <div style="font-weight:bold; color:#222; margin-bottom:10px;">Upload document</div>
+        <div class="section" style="margin-top:14px;">
+            <div class="sectionTitle" style="margin-top:0;">Upload document</div>
             <form method="post" enctype="multipart/form-data" style="display:grid; grid-template-columns: 220px 1fr 220px; gap:10px; align-items:center; margin:0;">
-                <select name="doc_type" required style="width:100%; padding:10px; border-radius:8px; border:1px solid #ccc;">
+                <select name="doc_type" required class="input" style="margin:0;">
                     <option value="">Select type</option>
                     <option value="pan">PAN Card</option>
                     <option value="aadhaar">Aadhaar Card</option>
@@ -39,47 +51,47 @@
                     <option value="payment_screenshot">Payment Screenshot</option>
                     <option value="other">Other</option>
                 </select>
-                <input type="text" name="notes" placeholder="Notes (optional)" style="width:100%; padding:10px; border-radius:8px; border:1px solid #ccc;">
-                <input type="file" name="document" required accept="image/*,application/pdf" style="width:100%; padding:8px; border-radius:8px; border:1px solid #ccc; background:#fff;">
-                <button type="submit" style="grid-column: 1 / -1; background:#2D9CDB; color:#fff; border:none; padding:12px 16px; border-radius:8px; cursor:pointer;">Upload</button>
+                <input type="text" name="notes" placeholder="Notes (optional)" class="input" style="margin:0;">
+                <input type="file" name="document" required accept="image/*,application/pdf" class="input" style="margin:0; padding:10px;">
+                <button type="submit" class="btn" style="grid-column: 1 / -1;">Upload</button>
             </form>
-            <div style="margin-top:10px; color:#555; font-size:0.95em;">Allowed: PNG/JPG/JPEG/WEBP/GIF/PDF</div>
+            <div class="muted" style="margin-top:10px; font-size:0.95em;">Allowed: PNG/JPG/JPEG/WEBP/GIF/PDF</div>
         </div>
 
-        <h3 style="margin-top:22px;">All uploaded documents</h3>
+        <h3 class="sectionTitle" style="margin-top:22px;">All uploaded documents</h3>
         {% if docs and docs|length > 0 %}
-            <table style="width:100%; border-collapse: collapse;">
+            <table class="table">
                 <thead>
                     <tr>
-                        <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Type</th>
-                        <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Uploaded by</th>
-                        <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">File</th>
-                        <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Notes</th>
-                        <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Time</th>
+                        <th>Type</th>
+                        <th>Uploaded by</th>
+                        <th>File</th>
+                        <th>Notes</th>
+                        <th>Time</th>
                     </tr>
                 </thead>
                 <tbody>
                 {% for d in docs %}
                     <tr>
-                        <td style="padding:8px; border-bottom:1px solid #f2f2f2;">{{ d.doc_type }}</td>
-                        <td style="padding:8px; border-bottom:1px solid #f2f2f2;">{{ d.uploader_username }}</td>
-                        <td style="padding:8px; border-bottom:1px solid #f2f2f2;">
-                            <a href="/static/{{ d.stored_path }}" target="_blank" rel="noopener" style="color:#2D9CDB; text-decoration:none;">View / Download</a>
+                        <td>{{ d.doc_type }}</td>
+                        <td>{{ d.uploader_username }}</td>
+                        <td>
+                            <a href="/static/{{ d.stored_path }}" target="_blank" rel="noopener">View / Download</a>
                             {% if d.original_filename %}
-                                <div style="color:#777; font-size:0.9em; margin-top:4px;">{{ d.original_filename }}</div>
+                                <div class="muted" style="font-size:0.9em; margin-top:4px;">{{ d.original_filename }}</div>
                             {% endif %}
                         </td>
-                        <td style="padding:8px; border-bottom:1px solid #f2f2f2; color:#444;">{{ d.notes }}</td>
-                        <td style="padding:8px; border-bottom:1px solid #f2f2f2; color:#444;">{{ d.created_at }}</td>
+                        <td class="muted">{{ d.notes }}</td>
+                        <td class="muted">{{ d.created_at }}</td>
                     </tr>
                 {% endfor %}
                 </tbody>
             </table>
         {% else %}
-            <p style="color:#555;">No documents uploaded yet.</p>
+            <p class="muted">No documents uploaded yet.</p>
         {% endif %}
 
-        
+        </div>
     </div>
 </body>
 </html>

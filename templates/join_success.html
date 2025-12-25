@@ -2,25 +2,39 @@
 <html>
 <head>
     <title>Request Sent - D-cont</title>
+    <meta name="theme-color" content="#05060A">
     <link rel="stylesheet" href="{{ url_for('static', filename='app.css', v=asset_version) }}">
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json', v=asset_version) }}">
+    <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icons/icon-192.png', v=asset_version) }}">
+    <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='icons/icon-512.png', v=asset_version) }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png', v=asset_version) }}">
 </head>
 <body class="app-body">
-    <div class="app-header">
-        <img src="/static/logo.png" onerror="this.onerror=null;this.src='/static/logo.svg';" alt="D-cont Logo" class="app-logo"/>
+    <div class="topbar">
+        <div class="topbarInner">
+            <div class="brand">
+                <div class="brandWrap">
+                    <img src="/static/logo.png" onerror="this.onerror=null;this.src='/static/logo.svg';" alt="D-CONT" />
+                </div>
+                <span class="brandText">D-CONT</span>
+            </div>
+            <div class="pill">Smart Savings Circle</div>
+        </div>
     </div>
 
-    <div style="max-width: 520px; margin: 28px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px #e0e0e0; padding: 28px; text-align:center;">
-        <h2 style="color:#2D9CDB; margin-top:0;">Request sent</h2>
-        <p style="color:#222; line-height:1.6; margin:0;"><strong>{{ group.name }}</strong></p>
-        <p style="color:#444; line-height:1.6; margin:10px 0 0 0;">Monthly contribution: <strong>₹{{ group.monthly_amount }}</strong></p>
+    <div class="container" style="max-width: 520px;">
+        <div class="card card-pro card-lg" style="text-align:center;">
+            <h2 style="margin-top:0;">Request sent</h2>
+            <p style="line-height:1.6; margin:0;"><strong>{{ group.name }}</strong></p>
+            <p class="muted" style="line-height:1.6; margin:10px 0 0 0;">Monthly contribution: <strong>₹{{ group.monthly_amount }}</strong></p>
 
-        <div style="margin-top:16px; background:#eaf6fb; border-radius:10px; padding:14px; border:1px solid #2D9CDB; text-align:left;">
-            <p style="margin:0; color:#222; line-height:1.5;"><strong>Status:</strong> {{ (member_status or 'pending')|status_label }}</p>
-            <p style="margin:10px 0 0 0; color:#222; line-height:1.5;">{{ (member_status or 'pending')|status_hint }}</p>
+            <div class="notice" style="margin-top:16px; text-align:left;">
+                <p style="margin:0; line-height:1.5;"><strong>Status:</strong> {{ (member_status or 'pending')|status_label }}</p>
+                <p class="muted" style="margin:10px 0 0 0; line-height:1.5;">{{ (member_status or 'pending')|status_hint }}</p>
+            </div>
+
+            <a href="/home" class="btn" style="display:inline-block; margin-top:18px; width:auto;">Go to Home</a>
         </div>
-
-        <a href="/home" style="display:inline-block; margin-top:18px; background:#2D9CDB; color:#fff; padding:10px 16px; border-radius:8px; text-decoration:none;">Go to Home</a>
-        
     </div>
 </body>
 </html>

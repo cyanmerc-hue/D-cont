@@ -385,6 +385,44 @@ h3 {
   letter-spacing: 0.4px;
 }
 
+/* Premium logo container (glass) */
+.brandWrap {
+  display: grid;
+  place-items: center;
+  height: 40px;
+  width: 40px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  backdrop-filter: blur(8px);
+}
+
+.brandWrap:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.brandWrap img {
+  height: 26px;
+  width: auto;
+  display: block;
+}
+
+.brandText {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+}
+
+@media (max-width: 480px) {
+  .brandWrap {
+    height: 36px;
+    width: 36px;
+  }
+  .brandWrap img {
+    height: 22px;
+  }
+}
+
 .logoMark,
 .brandMark {
   width: 34px;

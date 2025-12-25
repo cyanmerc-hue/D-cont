@@ -2,14 +2,28 @@
 <html>
 <head>
     <title>{{ group.name }} - Preview - D-cont</title>
+    <meta name="theme-color" content="#05060A">
     <link rel="stylesheet" href="{{ url_for('static', filename='app.css', v=asset_version) }}">
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json', v=asset_version) }}">
+    <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icons/icon-192.png', v=asset_version) }}">
+    <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='icons/icon-512.png', v=asset_version) }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png', v=asset_version) }}">
 </head>
 <body class="app-body">
-    <div class="app-header">
-        <img src="/static/logo.png" onerror="this.onerror=null;this.src='/static/logo.svg';" alt="D-cont Logo" class="app-logo"/>
+    <div class="topbar">
+        <div class="topbarInner">
+            <div class="brand">
+                <div class="brandWrap">
+                    <img src="/static/logo.png" onerror="this.onerror=null;this.src='/static/logo.svg';" alt="D-CONT" />
+                </div>
+                <span class="brandText">D-CONT</span>
+            </div>
+            <div class="pill">Smart Savings Circle</div>
+        </div>
     </div>
 
-    <div style="max-width: 600px; margin: 28px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px #e0e0e0; padding: 28px;">
+    <div class="container">
+        <div class="card card-pro card-lg">
         {% with messages = get_flashed_messages() %}
           {% if messages %}
             <ul>
@@ -21,35 +35,36 @@
         {% endwith %}
 
         <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
-            <h2 style="color:#2D9CDB; margin:0;">{{ group.name }}</h2>
+            <h2 style="margin:0;">{{ group.name }}</h2>
             <div style="display:flex; gap:10px; align-items:center;">
-                <a href="/groups" style="color:#2D9CDB; text-decoration:none;">Back</a>
+                <a href="/groups">Back</a>
             </div>
         </div>
 
-        <div style="margin-top:10px; color:#222;"><strong>Monthly contribution:</strong> ₹{{ group.monthly_amount }}</div>
-        <div style="margin-top:8px; color:#444; line-height:1.5;">{{ group.description }}</div>
+        <div style="margin-top:10px;"><strong>Monthly contribution:</strong> ₹{{ group.monthly_amount }}</div>
+        <div class="muted" style="margin-top:8px; line-height:1.5;">{{ group.description }}</div>
 
-        <div style="margin-top:16px; background:#eaf6fb; border-radius:10px; padding:14px; border:1px solid #2D9CDB;">
-            <p style="margin:0; color:#222; line-height:1.5;"><strong>Non-custodial:</strong> Contributions are paid directly via UPI. D-cont never holds your money.</p>
+        <div class="notice" style="margin-top:16px;">
+            <p style="margin:0; line-height:1.5;"><strong>Non-custodial:</strong> Contributions are paid directly via UPI. D-cont never holds your money.</p>
         </div>
 
         <div style="margin-top:18px;">
             {% if member_status %}
-                <div style="font-weight:bold; color:#222;">Status: {{ member_status|status_label }}</div>
-                <div style="color:#555; margin-top:6px;">{{ member_status|status_hint }}</div>
-                <a href="/home" style="display:inline-block; margin-top:10px; background:#2D9CDB; color:#fff; padding:10px 16px; border-radius:8px; text-decoration:none;">Go to Home</a>
+                <div style="font-weight:bold;">Status: {{ member_status|status_label }}</div>
+                <div class="muted" style="margin-top:6px;">{{ member_status|status_hint }}</div>
+                <a href="/home" class="btn" style="display:inline-block; margin-top:10px; width:auto;">Go to Home</a>
             {% else %}
                 {% if not user.upi_id %}
-                    <p style="color:#555;">Add your UPI ID to request joining this group.</p>
-                    <a href="/profile" style="display:inline-block; background:#2D9CDB; color:#fff; padding:10px 16px; border-radius:8px; text-decoration:none;">Add UPI ID</a>
+                    <p class="muted">Add your UPI ID to request joining this group.</p>
+                    <a href="/profile" class="btn" style="display:inline-block; width:auto;">Add UPI ID</a>
                 {% else %}
                     <form method="post" action="/groups/join" style="margin:0;">
                         <input type="hidden" name="group_id" value="{{ group.id }}" />
-                        <button type="submit" style="width:100%; background:#2D9CDB; color:#fff; border:none; padding:12px 16px; border-radius:8px; cursor:pointer;">Join Group</button>
+                        <button type="submit" class="btn">Join Group</button>
                     </form>
                 {% endif %}
             {% endif %}
+        </div>
         </div>
     </div>
 </body>

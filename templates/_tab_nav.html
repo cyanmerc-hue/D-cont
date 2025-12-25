@@ -2,8 +2,10 @@
   {% set t = active_tab|default('') %}
   <div class="topbarInner">
     <div class="brand">
-      <span class="brandMark">D</span>
-      <span>D-cont</span>
+      <div class="brandWrap">
+        <img src="/static/logo.png" onerror="this.onerror=null;this.src='/static/logo.svg';" alt="D-CONT" />
+      </div>
+      <span class="brandText">D-CONT</span>
     </div>
     <div class="nav-inner">
       <a href="/home" class="nav-link {{ 'active' if t=='home' else '' }}">Home</a>

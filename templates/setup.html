@@ -2,15 +2,29 @@
 <html>
 <head>
     <title>Setup - D-cont</title>
+    <meta name="theme-color" content="#05060A">
     <link rel="stylesheet" href="{{ url_for('static', filename='app.css', v=asset_version) }}">
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json', v=asset_version) }}">
+    <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icons/icon-192.png', v=asset_version) }}">
+    <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='icons/icon-512.png', v=asset_version) }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png', v=asset_version) }}">
 </head>
 <body class="app-body">
-    <div style="background: #fff; box-shadow: 0 2px 8px #e0e0e0; padding: 16px 0 8px 0; text-align: center;">
-        <img src="/static/logo.png" onerror="this.onerror=null;this.src='/static/logo.svg';" alt="D-cont Logo" style="height:60px;"/>
+  <div class="topbar">
+    <div class="topbarInner">
+      <div class="brand">
+        <div class="brandWrap">
+          <img src="/static/logo.png" onerror="this.onerror=null;this.src='/static/logo.svg';" alt="D-CONT" />
+        </div>
+        <span class="brandText">D-CONT</span>
+      </div>
+      <div class="pill">Smart Savings Circle</div>
     </div>
+  </div>
 
-    <div style="max-width: 520px; margin: 28px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px #e0e0e0; padding: 28px;">
-        <h2 style="color:#2D9CDB; margin-top:0;">Basic setup</h2>
+    <div class="container">
+        <div class="card card-pro card-lg">
+        <h2>Basic setup</h2>
 
         {% with messages = get_flashed_messages() %}
           {% if messages %}
@@ -23,31 +37,31 @@
         {% endwith %}
 
         <form method="post">
-            <label style="display:block; font-weight:bold; color:#2D9CDB;">Full Name *</label>
-            <input type="text" name="full_name" value="{{ (user.full_name if user else '') or '' }}" required style="width:100%; padding:10px; margin:8px 0 14px; border-radius:8px; border:1px solid #ccc;">
+                        <label class="label">Full Name *</label>
+                        <input class="input" type="text" name="full_name" value="{{ (user.full_name if user else '') or '' }}" required>
 
-            <label style="display:block; font-weight:bold; color:#2D9CDB;">Preferred Language *</label>
-            <select name="language" required style="width:100%; padding:10px; margin:8px 0 14px; border-radius:8px; border:1px solid #ccc;">
+                        <label class="label">Preferred Language *</label>
+                        <select class="input" name="language" required>
                 <option value="">Select</option>
                 <option value="English" {% if user and user.language == 'English' %}selected{% endif %}>English</option>
                 <option value="Hindi" {% if user and user.language == 'Hindi' %}selected{% endif %}>Hindi</option>
                 <option value="Hinglish" {% if user and user.language == 'Hinglish' %}selected{% endif %}>Hinglish</option>
             </select>
 
-            <label style="display:block; font-weight:bold; color:#2D9CDB;">City / State (optional)</label>
-            <input type="text" name="city_state" value="{{ (user.city_state if user else '') or '' }}" style="width:100%; padding:10px; margin:8px 0 14px; border-radius:8px; border:1px solid #ccc;">
+                        <label class="label">City / State (optional)</label>
+                        <input class="input" type="text" name="city_state" value="{{ (user.city_state if user else '') or '' }}">
 
-            <label style="display:block; font-weight:bold; color:#2D9CDB;">Email (optional)</label>
-            <input type="email" name="email" value="{{ (user.email if user else '') or '' }}" style="width:100%; padding:10px; margin:8px 0 18px; border-radius:8px; border:1px solid #ccc;">
+                        <label class="label">Email (optional)</label>
+                        <input class="input" type="email" name="email" value="{{ (user.email if user else '') or '' }}">
 
-            <button type="submit" style="width:100%; background:#2D9CDB; color:#fff; border:none; padding:12px 16px; border-radius:8px; cursor:pointer;">Finish</button>
+                        <button class="btn btnPrimary" type="submit">Finish</button>
         </form>
 
         <div style="margin-top:14px; text-align:center;">
-            <a href="/how-it-works" style="color:#2D9CDB; text-decoration:none;">Back</a>
+                        <a href="/how-it-works">Back</a>
         </div>
 
-        
-    </div>
+                </div>
+        </div>
 </body>
 </html>

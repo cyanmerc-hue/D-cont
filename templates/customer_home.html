@@ -5,10 +5,6 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='app.css', v=asset_version) }}">
 </head>
 <body class="app-body">
-    <div class="app-header">
-        <img src="/static/logo.png" onerror="this.onerror=null;this.src='/static/logo.svg';" alt="D-cont Logo" class="app-logo"/>
-    </div>
-
     {% include '_tab_nav.html' %}
 
     <div style="max-width: 600px; margin: 28px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px #e0e0e0; padding: 28px;">

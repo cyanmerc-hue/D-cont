@@ -2,15 +2,29 @@
 <html>
 <head>
     <title>Terms & Conditions - D-CONT</title>
+    <meta name="theme-color" content="#05060A">
     <link rel="stylesheet" href="{{ url_for('static', filename='app.css', v=asset_version) }}">
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json', v=asset_version) }}">
+    <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icons/icon-192.png', v=asset_version) }}">
+    <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='icons/icon-512.png', v=asset_version) }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png', v=asset_version) }}">
 </head>
 <body class="app-body">
-    <div style="background: #fff; box-shadow: 0 2px 8px #e0e0e0; padding: 16px 0 8px 0; text-align: center;">
-        <img src="/static/logo.png" onerror="this.onerror=null;this.src='/static/logo.svg';" alt="D-cont Logo" style="height:60px; margin-bottom: 0;"/>
+    <div class="topbar">
+        <div class="topbarInner">
+            <div class="brand">
+                <div class="brandWrap">
+                    <img src="/static/logo.png" onerror="this.onerror=null;this.src='/static/logo.svg';" alt="D-CONT" />
+                </div>
+                <span class="brandText">D-CONT</span>
+            </div>
+            <div class="pill">Smart Savings Circle</div>
+        </div>
     </div>
 
-    <div style="max-width: 900px; margin: 24px auto 48px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px #e0e0e0; padding: 28px 28px; line-height: 1.55; color: #222;">
-        <h1 style="margin-top: 0; color: #2D9CDB;">D-CONT – Terms &amp; Conditions</h1>
+    <div class="container container-pro" style="max-width: 980px;">
+    <div class="card card-pro card-lg" style="line-height: 1.55;">
+        <h1 style="margin-top: 0;">D-CONT – Terms &amp; Conditions</h1>
         <p><strong>Last Updated:</strong> {{ last_updated }}</p>
 
         <p>Welcome to <strong>D-CONT</strong> (“App”, “Platform”, “we”, “our”, “us”).
@@ -216,15 +230,15 @@
         </ul>
 
         <h3 style="margin-top: 24px;">Final user confirmation text (use during signup)</h3>
-        <div style="background:#eaf6fb; border-left: 4px solid #2D9CDB; padding: 12px 14px; border-radius: 8px;">
+        <div class="notice">
             <p style="margin: 0;"><em>“I confirm that I understand D-CONT does not handle money and only helps track contributions between members.”</em></p>
         </div>
 
         <div style="margin-top: 18px; text-align: center;">
-            <a href="/login" style="color:#2D9CDB; text-decoration:none;">Back to Login</a>
+            <a href="/login">Back to Login</a>
         </div>
 
-        
+    </div>
     </div>
 </body>
 </html>
