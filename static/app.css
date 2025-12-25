@@ -14,8 +14,6 @@
   --warning: #F7B84B;
   --danger: #FF4D6D;
 
-  --success-rgb: 46, 229, 157;
-
   /* Accent (yellow) */
   --accent: var(--warning);
   --warning-rgb: 247, 184, 75;
@@ -120,10 +118,10 @@ body.app-body {
     gap: 10px;
     padding: 12px 14px;
     border-radius: 18px;
-    background: linear-gradient(135deg, rgba(var(--success-rgb), 1), rgba(var(--success-rgb), 0.62));
-    border: 1px solid rgba(var(--success-rgb), 0.55);
+    background: linear-gradient(135deg, rgba(124, 92, 255, 1), rgba(45, 212, 255, 1));
+    border: 1px solid rgba(124, 92, 255, 0.38);
     color: var(--text);
-    box-shadow: 0 14px 34px rgba(var(--success-rgb), 0.16);
+    box-shadow: 0 14px 34px rgba(124, 92, 255, 0.18);
   }
 
   .tabItem.pay .tabIcon {
@@ -137,8 +135,8 @@ body.app-body {
 
   .tabItem.pay.active {
     color: var(--text);
-    background: linear-gradient(135deg, rgba(var(--success-rgb), 1), rgba(var(--success-rgb), 0.72));
-    border: 1px solid rgba(var(--success-rgb), 0.80);
+    background: linear-gradient(135deg, rgba(124, 92, 255, 1), rgba(45, 212, 255, 1));
+    border: 1px solid rgba(45, 212, 255, 0.55);
   }
 
   /* Reduce top desktop nav on small screens */
