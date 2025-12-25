@@ -5,13 +5,12 @@ import random
 import uuid
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import date
+from datetime import date, datetime, timedelta
 from functools import wraps
 from urllib.parse import quote
 import smtplib
 from email.message import EmailMessage
 import re
-from datetime import datetime
 import time
 
 app = Flask(__name__)
@@ -717,9 +716,110 @@ def join_group_with_status(group_id, username, status="joined"):
         return existing[1] or 'joined'
 
     c.execute('INSERT INTO group_members (group_id, username, status) VALUES (?, ?, ?)', (group_id, username, status))
+
+    # If this join completes the group, auto-activate it and schedule the first due date.
+    if (status or '').strip().lower() == 'joined':
+        _maybe_activate_group(conn, group_id)
+
     conn.commit()
     conn.close()
     return status
+
+
+DEFAULT_PAY_CUTOFF_TIME = '15:00'  # 3 PM
+
+
+def _maybe_activate_group(conn, group_id) -> bool:
+    """Auto-activate the group once it reaches max members.
+
+    Rule:
+    - When max_members (default 10) have status='joined', group becomes active.
+    - First payment due date is exactly 30 days after the join that completes the group.
+    """
+    try:
+        gid = int(group_id)
+    except (TypeError, ValueError):
+        return False
+    if gid <= 0:
+        return False
+
+    c = conn.cursor()
+    try:
+        c.execute(
+            """
+            SELECT COALESCE(g.max_members,10),
+                   COALESCE(g.status,''),
+                   COALESCE(g.is_paused,0),
+                   COALESCE(g.activated_at,''),
+                   COALESCE(g.next_due_date,''),
+                   COALESCE(g.pay_cutoff_time,'')
+            FROM groups g
+            WHERE g.id=?
+            """,
+            (gid,),
+        )
+        row = c.fetchone()
+    except sqlite3.OperationalError:
+        return False
+
+    if not row:
+        return False
+
+    max_members, status, is_paused, activated_at, next_due_date, pay_cutoff_time = row
+    try:
+        max_members_int = int(max_members or 10)
+    except (TypeError, ValueError):
+        max_members_int = 10
+    max_members_int = max(1, max_members_int)
+
+    if int(is_paused or 0) == 1:
+        return False
+
+    status_code = (status or '').strip().lower()
+    if status_code == 'completed':
+        return False
+
+    # If already scheduled, nothing to do.
+    if (activated_at or '').strip() and (next_due_date or '').strip():
+        return False
+
+    try:
+        c.execute(
+            "SELECT COUNT(1) FROM group_members WHERE group_id=? AND status='joined'",
+            (gid,),
+        )
+        joined_count = int((c.fetchone() or [0])[0] or 0)
+    except sqlite3.OperationalError:
+        joined_count = 0
+
+    if joined_count < max_members_int:
+        return False
+
+    today = date.today()
+    activated = today.isoformat()
+    due = (today + timedelta(days=30)).isoformat()
+    cutoff = (pay_cutoff_time or '').strip() or DEFAULT_PAY_CUTOFF_TIME
+
+    try:
+        c.execute(
+            """
+            UPDATE groups
+            SET status=?,
+                activated_at=COALESCE(NULLIF(activated_at,''), ?),
+                next_due_date=COALESCE(NULLIF(next_due_date,''), ?),
+                pay_cutoff_time=COALESCE(NULLIF(pay_cutoff_time,''), ?),
+                payout_receiver_username=NULL,
+                payout_receiver_name=NULL,
+                payout_receiver_upi=NULL,
+                receiver_selected_at=NULL
+            WHERE id=?
+            """,
+            ('active' if status_code in {'', 'formation', 'active'} else status_code, activated, due, cutoff, gid),
+        )
+    except sqlite3.OperationalError:
+        return False
+
+    return True
 
 
 def _mobile_candidates(raw: str):
@@ -1274,6 +1374,22 @@ def init_db():
     if "is_paused" not in existing_group_cols:
         c.execute("ALTER TABLE groups ADD COLUMN is_paused INTEGER")
 
+    # Group cycle automation fields
+    if "activated_at" not in existing_group_cols:
+        c.execute("ALTER TABLE groups ADD COLUMN activated_at TEXT")
+    if "next_due_date" not in existing_group_cols:
+        c.execute("ALTER TABLE groups ADD COLUMN next_due_date TEXT")
+    if "pay_cutoff_time" not in existing_group_cols:
+        c.execute("ALTER TABLE groups ADD COLUMN pay_cutoff_time TEXT")
+    if "payout_receiver_username" not in existing_group_cols:
+        c.execute("ALTER TABLE groups ADD COLUMN payout_receiver_username TEXT")
+    if "payout_receiver_name" not in existing_group_cols:
+        c.execute("ALTER TABLE groups ADD COLUMN payout_receiver_name TEXT")
+    if "payout_receiver_upi" not in existing_group_cols:
+        c.execute("ALTER TABLE groups ADD COLUMN payout_receiver_upi TEXT")
+    if "receiver_selected_at" not in existing_group_cols:
+        c.execute("ALTER TABLE groups ADD COLUMN receiver_selected_at TEXT")
+
     # Ensure users table has required columns (auto-migration)
     c.execute("PRAGMA table_info(users)")
     existing_cols = {row[1] for row in c.fetchall()}  # row[1] = column name
@@ -1302,6 +1418,32 @@ def init_db():
     c.execute("UPDATE users SET is_active=1 WHERE is_active IS NULL")
     c.execute("UPDATE group_members SET status='joined' WHERE status IS NULL OR status='' ")
     c.execute("UPDATE groups SET is_paused=0 WHERE is_paused IS NULL")
+
+    # Best-effort: if a group is already full but has no activation schedule yet, start it now.
+    try:
+        c.execute(
+            """
+            SELECT g.id, COALESCE(g.max_members,10)
+            FROM groups g
+            WHERE COALESCE(NULLIF(g.activated_at,''),'')='' OR COALESCE(NULLIF(g.next_due_date,''),'')=''
+            """
+        )
+        candidates = c.fetchall()
+        for gid, max_members in candidates:
+            try:
+                max_m = int(max_members or 10)
+            except (TypeError, ValueError):
+                max_m = 10
+            max_m = max(1, max_m)
+            c.execute(
+                "SELECT COUNT(1) FROM group_members WHERE group_id=? AND status='joined'",
+                (gid,),
+            )
+            joined_count = int((c.fetchone() or [0])[0] or 0)
+            if joined_count >= max_m:
+                _maybe_activate_group(conn, gid)
+    except sqlite3.OperationalError:
+        pass
 
     # Backfill roles for existing users
     c.execute("UPDATE users SET role='customer' WHERE role IS NULL OR role='' ")
@@ -1780,16 +1922,26 @@ def owner_groups():
                COALESCE(g.max_members,10) as max_members,
                COALESCE(g.receiver_name,'') as receiver_name,
                COALESCE(g.receiver_upi,'') as receiver_upi,
+               COALESCE(g.activated_at,'') as activated_at,
+               COALESCE(g.next_due_date,'') as next_due_date,
+               COALESCE(g.pay_cutoff_time,'') as pay_cutoff_time,
+               COALESCE(g.payout_receiver_username,'') as payout_receiver_username,
+               COALESCE(g.payout_receiver_name,'') as payout_receiver_name,
+               COALESCE(g.payout_receiver_upi,'') as payout_receiver_upi,
                COALESCE(g.status,'') as status,
                COALESCE(g.is_paused,0) as is_paused,
                COUNT(gm.id) as joined_members
         FROM groups g
         LEFT JOIN group_members gm ON gm.group_id=g.id AND gm.status='joined'
-        GROUP BY g.id, g.name, g.description, g.monthly_amount, g.max_members, g.receiver_name, g.receiver_upi, g.status, g.is_paused
+        GROUP BY g.id, g.name, g.description, g.monthly_amount, g.max_members, g.receiver_name, g.receiver_upi,
+                 g.activated_at, g.next_due_date, g.pay_cutoff_time,
+                 g.payout_receiver_username, g.payout_receiver_name, g.payout_receiver_upi,
+                 g.status, g.is_paused
         ORDER BY g.monthly_amount, g.id
         """
     )
     groups = []
+    today_iso = _today_iso()
     for r in c.fetchall():
         groups.append(
             {
@@ -1800,11 +1952,44 @@ def owner_groups():
                 'max_members': int(r[4] or 10),
                 'receiver_name': r[5] or '',
                 'receiver_upi': r[6] or '',
-                'status': (r[7] or '').strip().lower(),
-                'is_paused': int(r[8] or 0),
-                'joined_members': int(r[9] or 0),
+                'activated_at': (r[7] or '').strip(),
+                'next_due_date': (r[8] or '').strip(),
+                'pay_cutoff_time': (r[9] or '').strip(),
+                'payout_receiver_username': (r[10] or '').strip(),
+                'payout_receiver_name': (r[11] or '').strip(),
+                'payout_receiver_upi': (r[12] or '').strip(),
+                'status': (r[13] or '').strip().lower(),
+                'is_paused': int(r[14] or 0),
+                'joined_members': int(r[15] or 0),
+                'is_due_today': ((r[8] or '').strip() == today_iso),
             }
         )
+
+    receiver_candidates = {}
+    due_group_ids = [g['id'] for g in groups if g.get('is_due_today') and not (g.get('payout_receiver_username') or '').strip()]
+    if due_group_ids:
+        placeholders = ','.join(['?'] * len(due_group_ids))
+        try:
+            c.execute(
+                f"""
+                SELECT gm.group_id, u.username, COALESCE(u.full_name,''), COALESCE(u.upi_id,'')
+                FROM group_members gm
+                LEFT JOIN users u ON u.username = gm.username
+                WHERE gm.status='joined' AND gm.group_id IN ({placeholders})
+                ORDER BY COALESCE(u.full_name,''), u.username
+                """,
+                tuple(due_group_ids),
+            )
+            for gid, uname, full_name, upi_id in c.fetchall():
+                receiver_candidates.setdefault(int(gid), []).append(
+                    {
+                        'username': uname or '',
+                        'full_name': full_name or '',
+                        'upi_id': upi_id or '',
+                    }
+                )
+        except sqlite3.OperationalError:
+            receiver_candidates = {}
 
     c.execute(
         """
@@ -1833,7 +2018,14 @@ def owner_groups():
         for row in c.fetchall()
     ]
     conn.close()
-    return render_template('owner_groups.html', active_owner_tab='groups', groups=groups, join_requests=join_requests)
+    return render_template(
+        'owner_groups.html',
+        active_owner_tab='groups',
+        groups=groups,
+        join_requests=join_requests,
+        receiver_candidates=receiver_candidates,
+        today_iso=today_iso,
+    )
 
 
 @app.route('/owner/groups/add', methods=['POST'])
@@ -1927,6 +2119,114 @@ def owner_toggle_group_pause():
     conn.commit()
     conn.close()
     flash('Group updated.')
+    return redirect(url_for('owner_groups'))
+
+
+@app.route('/owner/groups/select_receiver', methods=['POST'])
+@admin_required
+def owner_select_group_receiver():
+    group_id_raw = (request.form.get('group_id') or '').strip()
+    receiver_username = (request.form.get('receiver_username') or '').strip()
+    try:
+        group_id = int(group_id_raw)
+    except ValueError:
+        group_id = 0
+    if group_id <= 0 or not receiver_username:
+        flash('Missing group or receiver.')
+        return redirect(url_for('owner_groups'))
+
+    conn = get_db()
+    c = conn.cursor()
+    try:
+        c.execute(
+            """
+            SELECT COALESCE(g.next_due_date,''), COALESCE(g.status,''), COALESCE(g.is_paused,0)
+            FROM groups g
+            WHERE g.id=?
+            """,
+            (group_id,),
+        )
+        row = c.fetchone()
+    except sqlite3.OperationalError:
+        row = None
+
+    if not row:
+        conn.close()
+        flash('Group not found.')
+        return redirect(url_for('owner_groups'))
+
+    next_due_date, status, is_paused = row
+    if int(is_paused or 0) == 1:
+        conn.close()
+        flash('This group is paused.')
+        return redirect(url_for('owner_groups'))
+
+    status_code = (status or '').strip().lower()
+    if status_code != 'active':
+        conn.close()
+        flash('Receiver can be selected only for active groups.')
+        return redirect(url_for('owner_groups'))
+
+    due = (next_due_date or '').strip()
+    today_iso = _today_iso()
+    if due and today_iso < due:
+        conn.close()
+        flash('Receiver can be selected on the due date.')
+        return redirect(url_for('owner_groups'))
+
+    # Validate receiver is a joined member
+    try:
+        c.execute(
+            "SELECT 1 FROM group_members WHERE group_id=? AND username=? AND status='joined'",
+            (group_id, receiver_username),
+        )
+        is_member = c.fetchone()
+    except sqlite3.OperationalError:
+        is_member = None
+    if not is_member:
+        conn.close()
+        flash('Selected receiver is not a joined member of this group.')
+        return redirect(url_for('owner_groups'))
+
+    # Pull receiver payment details
+    try:
+        c.execute(
+            "SELECT COALESCE(full_name,''), COALESCE(upi_id,'') FROM users WHERE username=?",
+            (receiver_username,),
+        )
+        urow = c.fetchone()
+    except sqlite3.OperationalError:
+        urow = None
+
+    full_name = (urow[0] if urow else '') or ''
+    upi_id = (urow[1] if urow else '') or ''
+    if not upi_id.strip():
+        conn.close()
+        flash('Receiver must have a UPI ID set in Profile.')
+        return redirect(url_for('owner_groups'))
+
+    receiver_name = (full_name or receiver_username).strip()
+
+    try:
+        c.execute(
+            """
+            UPDATE groups
+            SET payout_receiver_username=?,
+                payout_receiver_name=?,
+                payout_receiver_upi=?,
+                receiver_selected_at=?
+            WHERE id=?
+            """,
+            (receiver_username, receiver_name, upi_id.strip(), today_iso, group_id),
+        )
+        conn.commit()
+    except sqlite3.OperationalError:
+        conn.close()
+        flash('Unable to set receiver right now.')
+        return redirect(url_for('owner_groups'))
+
+    conn.close()
+    flash('Receiver selected for today’s payout.')
     return redirect(url_for('owner_groups'))
 
 
@@ -2222,6 +2522,12 @@ def _fetch_my_groups(username: str):
                COALESCE(g.max_members, 10) as max_members,
                COALESCE(g.receiver_name, '') as receiver_name,
                COALESCE(g.receiver_upi, '') as receiver_upi,
+               COALESCE(g.payout_receiver_username, '') as payout_receiver_username,
+               COALESCE(g.payout_receiver_name, '') as payout_receiver_name,
+               COALESCE(g.payout_receiver_upi, '') as payout_receiver_upi,
+               COALESCE(g.activated_at, '') as activated_at,
+               COALESCE(g.next_due_date, '') as next_due_date,
+               COALESCE(g.pay_cutoff_time, '') as pay_cutoff_time,
                COALESCE(g.status, '') as group_status,
                COALESCE(g.is_paused, 0) as is_paused,
                COUNT(gm2.id) as joined_members
@@ -2229,7 +2535,10 @@ def _fetch_my_groups(username: str):
         JOIN groups g ON g.id = gm.group_id
         LEFT JOIN group_members gm2 ON gm2.group_id = g.id AND gm2.status='joined'
         WHERE gm.username=? AND gm.status='joined'
-        GROUP BY g.id, g.name, g.description, g.monthly_amount, g.max_members, g.receiver_name, g.receiver_upi, g.status, g.is_paused
+        GROUP BY g.id, g.name, g.description, g.monthly_amount, g.max_members, g.receiver_name, g.receiver_upi,
+                 g.payout_receiver_username, g.payout_receiver_name, g.payout_receiver_upi,
+                 g.activated_at, g.next_due_date, g.pay_cutoff_time,
+                 g.status, g.is_paused
         ORDER BY g.monthly_amount, g.id
         ''',
         (username,),
@@ -2239,7 +2548,24 @@ def _fetch_my_groups(username: str):
 
     groups = []
     for row in rows:
-        group_id, name, description, monthly_amount, max_members, receiver_name, receiver_upi, group_status, is_paused, joined_members = row
+        (
+            group_id,
+            name,
+            description,
+            monthly_amount,
+            max_members,
+            receiver_name,
+            receiver_upi,
+            payout_receiver_username,
+            payout_receiver_name,
+            payout_receiver_upi,
+            activated_at,
+            next_due_date,
+            pay_cutoff_time,
+            group_status,
+            is_paused,
+            joined_members,
+        ) = row
         computed_status = 'Active' if int(joined_members or 0) >= int(max_members or 10) else 'Formation'
         status = (group_status or '').strip().lower()
         if int(is_paused or 0) == 1:
@@ -2259,6 +2585,12 @@ def _fetch_my_groups(username: str):
                 'status': status_label,
                 'receiver_name': receiver_name or '',
                 'receiver_upi': receiver_upi or '',
+                'payout_receiver_username': (payout_receiver_username or '').strip(),
+                'payout_receiver_name': (payout_receiver_name or '').strip(),
+                'payout_receiver_upi': (payout_receiver_upi or '').strip(),
+                'activated_at': (activated_at or '').strip(),
+                'next_due_date': (next_due_date or '').strip(),
+                'pay_cutoff_time': (pay_cutoff_time or '').strip(),
             }
         )
     return groups
@@ -2394,15 +2726,38 @@ def payments_tab():
     upi_id = (user.get('upi_id') or '').strip()
     my_groups = _fetch_my_groups(username)
 
+    today_iso = _today_iso()
+
     pay_to = []
     for g in my_groups:
-        receiver_upi = (g.get('receiver_upi') or '').strip()
-        receiver_name = (g.get('receiver_name') or '').strip() or 'Receiver'
+        # Show payment details only on the due date when a receiver is selected.
+        due_date = (g.get('next_due_date') or '').strip()
+        if not due_date or due_date != today_iso:
+            continue
+
+        # Must have reached max members (default 10)
+        try:
+            joined_members = int(g.get('joined_members') or 0)
+            max_members = int(g.get('max_members') or 10)
+        except (TypeError, ValueError):
+            joined_members = 0
+            max_members = 10
+        if joined_members < max(1, max_members):
+            continue
+
+        receiver_username = (g.get('payout_receiver_username') or '').strip()
+        if receiver_username and receiver_username == username:
+            continue
+
+        receiver_upi = (g.get('payout_receiver_upi') or '').strip() or (g.get('receiver_upi') or '').strip()
+        receiver_name = (g.get('payout_receiver_name') or '').strip() or (g.get('receiver_name') or '').strip() or 'Receiver'
         amount = g.get('monthly_amount')
         note = f"D-CONT - {g.get('name') or 'Group'}"
         pay_url = ''
         if receiver_upi:
             pay_url = f"upi://pay?pa={quote(receiver_upi)}&pn={quote(receiver_name)}&am={quote(str(amount))}&tn={quote(note)}"
+
+        cutoff = (g.get('pay_cutoff_time') or '').strip() or DEFAULT_PAY_CUTOFF_TIME
         pay_to.append(
             {
                 'group': g,
@@ -2410,6 +2765,8 @@ def payments_tab():
                 'receiver_name': receiver_name,
                 'amount': amount,
                 'pay_url': pay_url,
+                'due_date': due_date,
+                'pay_cutoff_time': cutoff,
             }
         )
 
@@ -2798,7 +3155,18 @@ def admin_update_membership_status():
 
     conn = get_db()
     c = conn.cursor()
+    try:
+        c.execute('SELECT group_id FROM group_members WHERE id=?', (membership_id,))
+        row = c.fetchone()
+        group_id = int(row[0] or 0) if row else 0
+    except (TypeError, ValueError, sqlite3.OperationalError):
+        group_id = 0
+
     c.execute('UPDATE group_members SET status=? WHERE id=?', (new_status, membership_id))
+
+    if new_status == 'joined' and group_id > 0:
+        _maybe_activate_group(conn, group_id)
+
     conn.commit()
     conn.close()
     flash(f'Updated request: {new_status}.')

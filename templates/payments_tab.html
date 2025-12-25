@@ -30,6 +30,11 @@
           <li class="card-pro" style="margin-bottom:12px; padding:14px;">
             <div style="font-weight:bold; color:#2D9CDB;">{{ item.group.name }}</div>
             <div><strong>₹{{ item.amount }}</strong> / month</div>
+            {% if item.due_date %}
+              <div class="notice" style="margin-top:10px;">
+                <strong>Due today:</strong> {{ item.due_date }} • Please pay before <strong>{{ item.pay_cutoff_time }}</strong>
+              </div>
+            {% endif %}
             <div class="muted" style="margin-top:6px;"><strong>Receiver:</strong> {{ item.receiver_name }}</div>
             <div class="muted" style="margin-top:4px;"><strong>UPI:</strong> {% if item.receiver_upi %}{{ item.receiver_upi }}{% else %}<span class="muted">Not set</span>{% endif %}</div>
 

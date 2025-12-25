@@ -128,7 +128,39 @@
                             </td>
                             <td>{{ g.joined_members }}/{{ g.max_members }}</td>
                             <td>₹{{ g.monthly_amount }}</td>
-                            <td>{{ g.receiver_name }}<div class="muted" style="font-size:0.9em;">{{ g.receiver_upi }}</div></td>
+                            <td>
+                                <div>
+                                    {% if g.payout_receiver_name %}
+                                        <div style="font-weight:800;">{{ g.payout_receiver_name }}</div>
+                                        <div class="muted" style="font-size:0.9em;">{{ g.payout_receiver_upi }}</div>
+                                    {% else %}
+                                        {{ g.receiver_name }}
+                                        <div class="muted" style="font-size:0.9em;">{{ g.receiver_upi }}</div>
+                                    {% endif %}
+                                </div>
+
+                                {% if g.next_due_date %}
+                                    <div class="muted" style="margin-top:8px; font-size:0.9em;">
+                                        <strong>Next due:</strong> {{ g.next_due_date }}
+                                        {% if g.pay_cutoff_time %}
+                                            <span class="muted"> • Pay before {{ g.pay_cutoff_time }}</span>
+                                        {% endif %}
+                                    </div>
+                                {% endif %}
+
+                                {% if g.is_due_today and (not g.payout_receiver_username) %}
+                                    <form method="post" action="/owner/groups/select_receiver" style="margin:10px 0 0; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                                        <input type="hidden" name="group_id" value="{{ g.id }}">
+                                        <select class="input" name="receiver_username" style="margin:0; width:260px; padding:12px 12px;">
+                                            <option value="">Select receiver (due today)</option>
+                                            {% for u in (receiver_candidates.get(g.id) or []) %}
+                                                <option value="{{ u.username }}">{{ u.full_name or u.username }}{% if u.upi_id %} — {{ u.upi_id }}{% endif %}</option>
+                                            {% endfor %}
+                                        </select>
+                                        <button type="submit" class="btn btn-sm" style="width:auto; padding:8px 12px;">Set receiver</button>
+                                    </form>
+                                {% endif %}
+                            </td>
                             <td>
                                 <div style="display:flex; gap:8px; flex-wrap:wrap;">
                                     <form method="post" action="/owner/groups/update" style="margin:0; display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
