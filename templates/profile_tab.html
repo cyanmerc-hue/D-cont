@@ -155,7 +155,9 @@
                   statusEl.textContent = 'Fingerprint login enabled.';
                   window.location.reload();
                 } catch (e) {
-                  statusEl.textContent = 'Fingerprint setup cancelled or failed.';
+                  const name = (e && (e.name || e.constructor && e.constructor.name)) ? (e.name || e.constructor.name) : 'Error';
+                  const msg = (e && e.message) ? e.message : '';
+                  statusEl.textContent = msg ? `Fingerprint setup failed (${name}): ${msg}` : `Fingerprint setup failed (${name}).`;
                 }
               }
 

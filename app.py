@@ -1393,15 +1393,24 @@ def _is_valid_mpin(raw: str) -> bool:
 
 def _webauthn_rp_id() -> str:
     # RP ID must be the effective domain without port.
-    host = (request.host or '').strip()
+    # When behind a reverse proxy (e.g., Render), rely on forwarded headers.
+    xf_host = (request.headers.get('X-Forwarded-Host') or '').split(',', 1)[0].strip()
+    host = xf_host or (request.host or '').strip()
     if not host:
         return ''
     return host.split(':', 1)[0]
 
 
 def _webauthn_origin() -> str:
-    # e.g., https://example.com
-    return (request.host_url or '').rstrip('/')
+    # e.g., https://example.com (must match browser location.origin)
+    xf_proto = (request.headers.get('X-Forwarded-Proto') or '').split(',', 1)[0].strip().lower()
+    xf_host = (request.headers.get('X-Forwarded-Host') or '').split(',', 1)[0].strip()
+    proto = xf_proto or (request.scheme or 'http')
+    host = xf_host or (request.host or '')
+    host = (host or '').strip()
+    if not host:
+        return ''
+    return f"{proto}://{host}".rstrip('/')
 
 
 def _lookup_customer_candidates_by_mobile(conn: sqlite3.Connection, mobile_identifier: str):
