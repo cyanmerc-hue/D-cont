@@ -31,8 +31,8 @@
 
     {% if not has_groups %}
       <div class="section">
-        <div class="sectionTitle" style="margin-top:0;">{{ 'अभी क्या करें?' if current_lang=='hi' else 'What should I do right now?' }}</div>
-        <div class="muted" style="margin-top:6px;">{{ 'मालिक द्वारा बनाए गए समूह को जॉइन करें।' if current_lang=='hi' else 'Join an existing group created by the owner.' }}</div>
+        <div class="sectionTitle" style="margin-top:0;">{{ t('home_what_do_now_title') }}</div>
+        <div class="muted" style="margin-top:6px;">{{ t('home_what_do_now_body') }}</div>
 
         <div class="card-pro" style="margin-top:12px; padding:12px;">
           <div style="font-weight:800;">{{ t('benefit_simple_saving_title') }}</div>
@@ -51,12 +51,12 @@
       </div>
     {% else %}
       <div class="section">
-        <div class="sectionTitle" style="margin-top:0;">{{ 'आपके समूहों की स्थिति' if current_lang=='hi' else 'Your groups status' }}</div>
+        <div class="sectionTitle" style="margin-top:0;">{{ t('home_groups_status_title') }}</div>
         <div class="row" style="margin-top:10px;">
           <div class="col" style="min-width: 220px;">
             <div class="card-pro" style="padding:14px;">
               <div class="kpi">
-                <div class="kpiLabel">{{ 'सक्रिय समूह' if current_lang=='hi' else 'Active Groups' }}</div>
+                <div class="kpiLabel">{{ t('home_kpi_active_groups') }}</div>
                 <div class="kpiValue">{{ active_count }}</div>
               </div>
             </div>
@@ -64,7 +64,7 @@
           <div class="col" style="min-width: 220px;">
             <div class="card-pro" style="padding:14px;">
               <div class="kpi">
-                <div class="kpiLabel">{{ 'फॉर्मेशन समूह' if current_lang=='hi' else 'Formation Groups' }}</div>
+                <div class="kpiLabel">{{ t('home_kpi_formation_groups') }}</div>
                 <div class="kpiValue">{{ formation_count }}</div>
               </div>
             </div>
@@ -77,17 +77,17 @@
       </div>
 
       <div class="section">
-        <div class="sectionTitle" style="margin-top:0;">{{ 'अर्ली पेआउट चाहिए?' if current_lang=='hi' else 'Want Early Payout?' }}</div>
-        <div class="muted" style="margin-top:6px;">{{ 'यदि आप योग्य हैं, तो प्रोफ़ाइल से अर्ली पेआउट रिक्वेस्ट करें।' if current_lang=='hi' else 'If eligible, request early payout from your Profile.' }}</div>
+        <div class="sectionTitle" style="margin-top:0;">{{ t('home_want_early_payout_title') }}</div>
+        <div class="muted" style="margin-top:6px;">{{ t('home_want_early_payout_body') }}</div>
         <div class="btn-row">
-          <a href="/profile#early-payout" class="btn btn-secondary">{{ 'अर्ली पेआउट खोलें' if current_lang=='hi' else 'Open Early Payout' }}</a>
+          <a href="/profile#early-payout" class="btn btn-secondary">{{ t('home_open_early_payout') }}</a>
         </div>
       </div>
     {% endif %}
 
     <div class="section">
       <div class="sectionTitle" style="margin-top:0;">{{ t('need_help') }}</div>
-      <div class="muted" style="margin-top:6px;">{{ 'स्टेप्स, सुरक्षा टिप्स और सपोर्ट के लिए D-CONT बॉट से चैट करें।' if current_lang=='hi' else 'Chat with the D-CONT Bot for steps, safety tips, and support.' }}</div>
+      <div class="muted" style="margin-top:6px;">{{ t('home_chat_bot_help') }}</div>
       <div class="btn-row">
         <a href="/chat" class="btn btn-secondary">{{ t('chat_with_bot') }}</a>
       </div>

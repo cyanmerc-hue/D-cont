@@ -17,9 +17,9 @@
     <h2 style="margin:0;">{{ t('payments_title') }}</h2>
 
     <div class="notice" style="margin-top:14px;">
-      <div><strong>{{ 'आपका UPI:' if current_lang=='hi' else 'Your UPI:' }}</strong> {% if upi_id %}{{ upi_id }}{% else %}<span class="muted">{{ t('not_set') }}</span>{% endif %}</div>
+      <div><strong>{{ t('label_your_upi') }}</strong> {% if upi_id %}{{ upi_id }}{% else %}<span class="muted">{{ t('not_set') }}</span>{% endif %}</div>
       {% if not upi_id %}
-        <a href="/profile" class="btn" style="display:inline-block; margin-top:10px; width:auto;">{{ 'प्रोफ़ाइल में UPI जोड़ें' if current_lang=='hi' else 'Add UPI in Profile' }}</a>
+        <a href="/profile" class="btn" style="display:inline-block; margin-top:10px; width:auto;">{{ t('btn_add_upi_in_profile') }}</a>
       {% endif %}
     </div>
 
@@ -29,21 +29,21 @@
         {% for item in pay_to %}
           <li class="card-pro" style="margin-bottom:12px; padding:14px;">
             <div style="font-weight:bold; color:#2D9CDB;">{{ item.group.name }}</div>
-            <div><strong>₹{{ item.amount }}</strong> / month</div>
+            <div><strong>₹{{ item.amount }}</strong> {{ t('label_per_month') }}</div>
             {% if item.due_date %}
               <div class="notice" style="margin-top:10px;">
-                <strong>Due today:</strong> {{ item.due_date }} • Please pay before <strong>{{ item.pay_cutoff_time }}</strong>
+                <strong>{{ t('label_due_today') }}</strong> {{ item.due_date }} • {{ t('label_pay_before') }} <strong>{{ item.pay_cutoff_time }}</strong>
               </div>
             {% endif %}
-            <div class="muted" style="margin-top:6px;"><strong>{{ 'रिसीवर:' if current_lang=='hi' else 'Receiver:' }}</strong> {{ item.receiver_name }}</div>
-            <div class="muted" style="margin-top:4px;"><strong>UPI:</strong> {% if item.receiver_upi %}{{ item.receiver_upi }}{% else %}<span class="muted">{{ t('not_set') }}</span>{% endif %}</div>
+            <div class="muted" style="margin-top:6px;"><strong>{{ t('label_receiver') }}</strong> {{ item.receiver_name }}</div>
+            <div class="muted" style="margin-top:4px;"><strong>{{ t('label_upi_short') }}</strong> {% if item.receiver_upi %}{{ item.receiver_upi }}{% else %}<span class="muted">{{ t('not_set') }}</span>{% endif %}</div>
 
             <div class="muted" style="margin-top:10px; line-height:1.45;">
               {{ t('benefit_one_liner') }}
             </div>
 
             {% if item.pay_url %}
-              <div class="muted" style="margin-top:6px;">{{ 'Pay directly to the receiver shown above.' if current_lang!='hi' else 'ऊपर दिखाए गए रिसीवर को सीधे भुगतान करें।' }}</div>
+              <div class="muted" style="margin-top:6px;">{{ t('payments_pay_directly') }}</div>
               <a href="{{ item.pay_url }}" style="display:inline-block; margin-top:10px; background:#2D9CDB; color:#fff; padding:10px 14px; border-radius:8px; text-decoration:none;">{{ t('pay_via_upi') }}</a>
             {% else %}
               <div class="muted" style="margin-top:10px;">{{ t('payment_link_unavailable') }}</div>
@@ -52,7 +52,7 @@
         {% endfor %}
       </ul>
     {% else %}
-      <div class="muted">{{ 'पेमेंट निर्देश देखने के लिए किसी समूह में जॉइन करें।' if current_lang=='hi' else 'Join a group to see payment instructions.' }}</div>
+      <div class="muted">{{ t('payments_join_to_see') }}</div>
       <a href="/groups" class="btn" style="display:inline-block; margin-top:10px; width:auto;">{{ t('go_to_groups') }}</a>
     {% endif %}
     </div>

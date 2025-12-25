@@ -12,7 +12,7 @@
   {% include '_tab_nav.html' %}
 
   <div style="max-width: 600px; margin: 22px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px #e0e0e0; padding: 22px;">
-    <a href="/groups" style="color:#2D9CDB; text-decoration:none;">← Back to Groups</a>
+    <a href="/groups" style="color:#2D9CDB; text-decoration:none;">← {{ t('back_to_groups') }}</a>
 
     <h2 style="color:#2D9CDB; margin:10px 0 0 0;">{{ group.name }}</h2>
     {% if group.description %}
@@ -20,10 +20,10 @@
     {% endif %}
 
     <div style="margin-top:14px; border:1px solid #e8eef0; border-radius:10px; padding:14px;">
-      <div style="color:#222;"><strong>₹{{ group.monthly_amount }}</strong> / month</div>
-      <div style="color:#555; margin-top:6px;"><strong>Status:</strong> {{ status }}</div>
-      <div style="color:#555; margin-top:6px;"><strong>Members:</strong> {{ joined_members }}/{{ group.max_members }}</div>
-      <div style="color:#555; margin-top:6px;"><strong>Receiver UPI:</strong> {% if group.receiver_upi %}{{ group.receiver_upi }}{% else %}<span style="color:#999;">Not set</span>{% endif %}</div>
+      <div style="color:#222;"><strong>₹{{ group.monthly_amount }}</strong> {{ t('label_per_month') }}</div>
+      <div style="color:#555; margin-top:6px;"><strong>{{ t('status') }}:</strong> {{ status }}</div>
+      <div style="color:#555; margin-top:6px;"><strong>{{ t('members') }}:</strong> {{ joined_members }}/{{ group.max_members }}</div>
+      <div style="color:#555; margin-top:6px;"><strong>{{ t('label_receiver_upi') }}</strong> {% if group.receiver_upi %}{{ group.receiver_upi }}{% else %}<span style="color:#999;">{{ t('not_set') }}</span>{% endif %}</div>
     </div>
 
     <div style="margin-top:14px; border:1px solid #e8eef0; border-radius:10px; padding:14px;">

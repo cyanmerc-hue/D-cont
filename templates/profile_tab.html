@@ -25,14 +25,14 @@
     <h2 style="margin:0;">{{ t('profile_title') }}</h2>
 
     <div class="card-pro" style="margin-top:12px; padding:14px;">
-      <div class="muted" style="font-size:0.95em;">App Fee Paid</div>
-      <div style="font-size:18px; font-weight:bold;">{{ 'Yes' if app_fee_paid else 'No' }}</div>
+      <div class="muted" style="font-size:0.95em;">{{ t('profile_app_fee_paid') }}</div>
+      <div style="font-size:18px; font-weight:bold;">{{ t('yes') if app_fee_paid else t('no') }}</div>
     </div>
 
     <div class="card-pro" style="margin-top:12px; padding:14px;">
       <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
         <div>
-          <div class="muted" style="font-size:0.95em;">Trust Score</div>
+          <div class="muted" style="font-size:0.95em;">{{ t('trust_score_label') }}</div>
           <div style="font-size:18px; font-weight:bold;">{{ trust_score }} • {{ trust_score|trust_band }}</div>
         </div>
         <span class="{{ trust_score|trust_badge_class }}">{{ trust_score|trust_band }}</span>
@@ -42,28 +42,28 @@
     </div>
 
     <form method="POST" action="/profile" enctype="multipart/form-data" class="card-pro" style="margin-top:14px; padding:14px;">
-      <label class="muted" style="display:block; font-size:0.95em;">{{ 'पूरा नाम' if current_lang=='hi' else 'Full Name' }}</label>
+      <label class="muted" style="display:block; font-size:0.95em;">{{ t('label_full_name') }}</label>
       <input name="full_name" type="text" value="{{ full_name }}" class="input" />
 
-      <label class="muted" style="display:block; font-size:0.95em; margin-top:10px;">{{ 'मोबाइल (केवल पढ़ने हेतु)' if current_lang=='hi' else 'Mobile (read-only)' }}</label>
+      <label class="muted" style="display:block; font-size:0.95em; margin-top:10px;">{{ t('label_mobile_read_only') }}</label>
       <input type="text" value="{{ mobile }}" readonly class="input" style="margin:0;" />
 
-      <label class="muted" style="display:block; font-size:0.95em; margin-top:10px;">UPI ID</label>
+      <label class="muted" style="display:block; font-size:0.95em; margin-top:10px;">{{ t('label_upi_id') }}</label>
       <input name="upi_id" type="text" value="{{ upi_id }}" placeholder="example@upi" class="input" />
 
       <div style="margin-top:14px; padding-top:14px; border-top:1px solid #eef3f5;">
-        <div class="sectionTitle" style="margin-top:0;">{{ 'महत्वपूर्ण दस्तावेज़' if current_lang=='hi' else 'Important documents' }}</div>
+        <div class="sectionTitle" style="margin-top:0;">{{ t('documents_title') }}</div>
         <div class="muted" style="font-size:0.95em; margin-top:6px; line-height:1.4;">
-          {{ 'PDF/JPG/PNG/WEBP अपलोड करें। आपके दस्तावेज़ निजी रूप से सुरक्षित हैं और केवल लॉगिन के बाद डाउनलोड हो सकते हैं।' if current_lang=='hi' else 'Upload PDF/JPG/PNG/WEBP. Your documents are stored privately and can only be downloaded when you are logged in.' }}
+          {{ t('documents_help') }}
         </div>
 
         <div class="card-pro" style="margin-top:12px; padding:12px;">
           <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
             <div style="font-weight:bold;">Aadhaar</div>
             {% if aadhaar_doc %}
-              <a href="/profile/doc/aadhaar" style="color:#2D9CDB; text-decoration:none;">{{ 'डाउनलोड' if current_lang=='hi' else 'Download' }}</a>
+              <a href="/profile/doc/aadhaar" style="color:#2D9CDB; text-decoration:none;">{{ t('download') }}</a>
             {% else %}
-              <span class="muted" style="font-size:0.9em;">{{ 'अपलोड नहीं हुआ' if current_lang=='hi' else 'Not uploaded' }}</span>
+              <span class="muted" style="font-size:0.9em;">{{ t('not_uploaded') }}</span>
             {% endif %}
           </div>
           <input type="file" name="aadhaar_file" accept=".pdf,image/*" style="width:100%; margin-top:10px;" />
@@ -73,9 +73,9 @@
           <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
             <div style="font-weight:bold;">PAN</div>
             {% if pan_doc %}
-              <a href="/profile/doc/pan" style="color:#2D9CDB; text-decoration:none;">{{ 'डाउनलोड' if current_lang=='hi' else 'Download' }}</a>
+              <a href="/profile/doc/pan" style="color:#2D9CDB; text-decoration:none;">{{ t('download') }}</a>
             {% else %}
-              <span class="muted" style="font-size:0.9em;">{{ 'अपलोड नहीं हुआ' if current_lang=='hi' else 'Not uploaded' }}</span>
+              <span class="muted" style="font-size:0.9em;">{{ t('not_uploaded') }}</span>
             {% endif %}
           </div>
           <input type="file" name="pan_file" accept=".pdf,image/*" style="width:100%; margin-top:10px;" />
@@ -85,9 +85,9 @@
           <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
             <div style="font-weight:bold;">Passport</div>
             {% if passport_doc %}
-              <a href="/profile/doc/passport" style="color:#2D9CDB; text-decoration:none;">{{ 'डाउनलोड' if current_lang=='hi' else 'Download' }}</a>
+              <a href="/profile/doc/passport" style="color:#2D9CDB; text-decoration:none;">{{ t('download') }}</a>
             {% else %}
-              <span class="muted" style="font-size:0.9em;">{{ 'अपलोड नहीं हुआ' if current_lang=='hi' else 'Not uploaded' }}</span>
+              <span class="muted" style="font-size:0.9em;">{{ t('not_uploaded') }}</span>
             {% endif %}
           </div>
           <input type="file" name="passport_file" accept=".pdf,image/*" style="width:100%; margin-top:10px;" />
@@ -98,10 +98,9 @@
     </form>
 
     <div class="card-pro" id="early-payout" style="margin-top:14px; padding:14px;">
-      <div class="sectionTitle" style="margin-top:0;">Early Payout</div>
+      <div class="sectionTitle" style="margin-top:0;">{{ t('early_payout_title') }}</div>
       <div class="muted" style="margin-top:6px; line-height:1.45;">
-        Early payout is a <strong>schedule/priority request</strong> (not a loan). If eligible, you can request to receive earlier than your current turn.
-        A <strong>security deposit</strong> may be required and is verified by the owner.
+        {{ t('early_payout_intro') }}
       </div>
 
       <div class="notice" style="margin-top:12px;">
@@ -118,74 +117,74 @@
               <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
                 <div>
                   <div style="font-weight:800;">{{ g.group_name }}</div>
-                  <div class="muted" style="font-size:0.95em;">Monthly amount: ₹{{ g.monthly_amount }}</div>
+                  <div class="muted" style="font-size:0.95em;">{{ t('monthly_amount_label') }} ₹{{ g.monthly_amount }}</div>
                 </div>
                 <div class="muted" style="font-size:0.95em; text-align:right;">
-                  Deposit: <strong>₹{{ g.deposit_amount }}</strong>
+                  {{ t('deposit_label') }} <strong>₹{{ g.deposit_amount }}</strong>
                 </div>
               </div>
 
               {% if g.eligible %}
-                <div class="muted" style="margin-top:8px;">Eligible for early payout.</div>
+                <div class="muted" style="margin-top:8px;">{{ t('eligible_for_early_payout') }}</div>
                 <form method="POST" action="/early-payout/request" style="margin-top:10px;">
                   <input type="hidden" name="group_id" value="{{ g.group_id }}" />
-                  <input class="input" name="reason" placeholder="Reason (optional)" style="margin:0;" />
-                  <button type="submit" class="btn" style="margin-top:10px; width:100%;">Request Early Payout</button>
+                  <input class="input" name="reason" placeholder="{{ t('placeholder_reason_optional') }}" style="margin:0;" />
+                  <button type="submit" class="btn" style="margin-top:10px; width:100%;">{{ t('btn_request_early_payout') }}</button>
                 </form>
               {% else %}
-                <div class="muted" style="margin-top:8px;">Not eligible: {{ g.reason }}</div>
+                <div class="muted" style="margin-top:8px;">{{ t('not_eligible_prefix') }} {{ g.reason }}</div>
               {% endif %}
             </div>
           {% endfor %}
         </div>
       {% else %}
-        <div class="muted" style="margin-top:10px;">Join a group to request early payout.</div>
+        <div class="muted" style="margin-top:10px;">{{ t('join_group_for_early_payout') }}</div>
       {% endif %}
 
-      <div class="sectionTitle" style="margin-top:14px;">Your requests</div>
+      <div class="sectionTitle" style="margin-top:14px;">{{ t('your_requests_title') }}</div>
       {% if early_payout_requests and early_payout_requests|length > 0 %}
         {% for r in early_payout_requests %}
           <div class="card-pro" style="padding:12px; margin-top:10px;">
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
               <div>
                 <div style="font-weight:800;">{{ r.group_name or ('Group #' ~ r.group_id) }}</div>
-                <div class="muted" style="font-size:0.95em;">Created: {{ r.created_at }}</div>
+                <div class="muted" style="font-size:0.95em;">{{ t('created_label') }} {{ r.created_at }}</div>
               </div>
               <div class="muted" style="font-size:0.95em; text-align:right;">
-                Status: <strong>{{ r.status }}</strong><br/>
-                Deposit: <strong>{{ r.deposit_status }}</strong>
+                {{ t('status_label_short') }} <strong>{{ r.status }}</strong><br/>
+                {{ t('deposit_status_label') }} <strong>{{ r.deposit_status }}</strong>
               </div>
             </div>
-            <div class="muted" style="margin-top:8px;">Deposit amount: ₹{{ r.deposit_amount }}</div>
+            <div class="muted" style="margin-top:8px;">{{ t('deposit_amount_label') }} ₹{{ r.deposit_amount }}</div>
 
             {% if company_upi_id %}
               <div class="muted" style="margin-top:6px; line-height:1.4;">
-                Pay the security deposit to <strong>{{ company_upi_id }}</strong>, then submit the UTR/reference.
+                {{ t('deposit_pay_instruction', upi=company_upi_id) | safe }}
               </div>
             {% else %}
-              <div class="muted" style="margin-top:6px;">Security deposit payment UPI is not set. Please contact support.</div>
+              <div class="muted" style="margin-top:6px;">{{ t('deposit_upi_not_set') }}</div>
             {% endif %}
 
             {% if r.deposit_status != 'verified' %}
               <form method="POST" action="/early-payout/deposit" style="margin-top:10px;">
                 <input type="hidden" name="request_id" value="{{ r.id }}" />
-                <input class="input" name="utr" value="{{ r.utr }}" placeholder="Enter UTR/reference" style="margin:0;" />
-                <button type="submit" class="btn btn-secondary" style="margin-top:10px; width:100%;">Submit Deposit UTR</button>
+                <input class="input" name="utr" value="{{ r.utr }}" placeholder="{{ t('placeholder_utr_reference') }}" style="margin:0;" />
+                <button type="submit" class="btn btn-secondary" style="margin-top:10px; width:100%;">{{ t('submit_deposit_utr') }}</button>
               </form>
             {% else %}
-              <div class="muted" style="margin-top:8px;">Deposit verified. Your request is under review.</div>
+              <div class="muted" style="margin-top:8px;">{{ t('deposit_verified_under_review') }}</div>
             {% endif %}
           </div>
         {% endfor %}
       {% else %}
-        <div class="muted" style="margin-top:10px;">No early payout requests yet.</div>
+        <div class="muted" style="margin-top:10px;">{{ t('no_early_payout_requests') }}</div>
       {% endif %}
     </div>
 
     <div class="card-pro" style="margin-top:14px; padding:14px;">
-      <div class="sectionTitle" style="margin-top:0;">{{ 'सपोर्ट' if current_lang=='hi' else 'Support' }}</div>
-      <div class="muted" style="margin-top:6px;">{{ 'कोई सवाल है? D-CONT बॉट से चैट करें।' if current_lang=='hi' else 'Have a question? Chat with the D-CONT Bot.' }}</div>
-      <a href="/chat" class="btn btn-secondary" style="display:inline-block; margin-top:10px; width:auto;">{{ 'चैट खोलें' if current_lang=='hi' else 'Open Chat' }}</a>
+      <div class="sectionTitle" style="margin-top:0;">{{ t('support_title') }}</div>
+      <div class="muted" style="margin-top:6px;">{{ t('support_body') }}</div>
+      <a href="/chat" class="btn btn-secondary" style="display:inline-block; margin-top:10px; width:auto;">{{ t('open_chat') }}</a>
     </div>
 
     <a href="/logout" class="btn" style="display:block; margin-top:14px;">{{ t('logout') }}</a>
