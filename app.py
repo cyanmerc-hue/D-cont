@@ -52,6 +52,289 @@ ADMIN_USERNAME = os.environ.get('DCONT_ADMIN_USERNAME', 'cyanmerc')
 ADMIN_PASSWORD = os.environ.get('DCONT_ADMIN_PASSWORD', 'Bond1010#')
 ADMIN_MOBILE = os.environ.get('DCONT_ADMIN_MOBILE', '9999999999')
 
+# Referral system
+REFERRAL_REWARD_AMOUNT = 10  # ₹10 one-time
+# Referral rewards are app-fee credits (not withdrawable cash).
+APP_FEE_CREDIT_EXPIRY_DAYS = 183  # ~6 months
+APP_FEE_CREDIT_MAX_APPLY_PER_MONTH = 30
+
+
+def _current_month_key() -> str:
+    # YYYY-MM
+    return date.today().strftime('%Y-%m')
+
+
+def _get_app_fee_amount_int(conn: sqlite3.Connection | None = None) -> int:
+    # Uses owner setting `app_fee_amount` (defaults to 0 if missing/invalid)
+    raw = (get_setting('app_fee_amount', '0') or '0').strip()
+    try:
+        v = int(raw)
+    except ValueError:
+        v = 0
+    return max(0, v)
+
+
+def _available_app_fee_credit(conn: sqlite3.Connection, username: str) -> int:
+    uname = (username or '').strip()
+    if not uname:
+        return 0
+    now = datetime.now().isoformat(timespec='seconds')
+    c = conn.cursor()
+    try:
+        c.execute(
+            """
+            SELECT COALESCE(SUM(COALESCE(credit_amount,0)),0)
+            FROM referrals
+            WHERE referrer_username=?
+              AND UPPER(COALESCE(status,''))='CREDITED'
+              AND COALESCE(credit_used,0)=0
+              AND COALESCE(credit_expires_at,'') > ?
+            """,
+            (uname, now),
+        )
+        return int((c.fetchone() or [0])[0] or 0)
+    except sqlite3.OperationalError:
+        return 0
+
+
+def _preview_app_fee_credit_apply(conn: sqlite3.Connection, username: str, gross_fee: int) -> int:
+    # Preview how much credit can be applied this month (does not consume credits).
+    available = _available_app_fee_credit(conn, username)
+    cap = max(0, int(APP_FEE_CREDIT_MAX_APPLY_PER_MONTH))
+    gross = max(0, int(gross_fee or 0))
+    possible = min(available, cap, gross)
+    # Credits are minted in ₹10 chunks, so apply in ₹10 increments.
+    if REFERRAL_REWARD_AMOUNT > 0:
+        possible = (possible // int(REFERRAL_REWARD_AMOUNT)) * int(REFERRAL_REWARD_AMOUNT)
+    return int(possible)
+
+
+def _apply_app_fee_credit_for_month(conn: sqlite3.Connection, username: str, month_key: str, gross_fee: int) -> int:
+    uname = (username or '').strip()
+    mkey = (month_key or '').strip()
+    if not uname or not mkey:
+        return 0
+
+    gross = max(0, int(gross_fee or 0))
+    if gross <= 0:
+        return 0
+
+    target = min(gross, int(APP_FEE_CREDIT_MAX_APPLY_PER_MONTH))
+    if REFERRAL_REWARD_AMOUNT > 0:
+        target = (target // int(REFERRAL_REWARD_AMOUNT)) * int(REFERRAL_REWARD_AMOUNT)
+    if target <= 0:
+        return 0
+
+    now = datetime.now().isoformat(timespec='seconds')
+    c = conn.cursor()
+    try:
+        c.execute(
+            """
+            SELECT id, COALESCE(credit_amount,0)
+            FROM referrals
+            WHERE referrer_username=?
+              AND UPPER(COALESCE(status,''))='CREDITED'
+              AND COALESCE(credit_used,0)=0
+              AND COALESCE(credit_expires_at,'') > ?
+            ORDER BY COALESCE(credited_at,''), id ASC
+            """,
+            (uname, now),
+        )
+        rows = c.fetchall() or []
+    except sqlite3.OperationalError:
+        rows = []
+
+    applied = 0
+    for rid, amt in rows:
+        try:
+            amount = int(amt or 0)
+        except (TypeError, ValueError):
+            amount = 0
+        if amount <= 0:
+            continue
+        if applied + amount > target:
+            continue
+        try:
+            c.execute(
+                """
+                UPDATE referrals
+                SET credit_used=1, credit_used_at=?, credit_used_month=?
+                WHERE id=? AND COALESCE(credit_used,0)=0
+                """,
+                (now, mkey, int(rid or 0)),
+            )
+            if c.rowcount and int(c.rowcount) > 0:
+                applied += amount
+        except sqlite3.OperationalError:
+            continue
+        if applied >= target:
+            break
+    return int(applied)
+
+
+def _ensure_app_fee_current_month(conn: sqlite3.Connection, username: str) -> None:
+    # If a previous month was marked paid, reset app_fee_paid for the new month.
+    uname = (username or '').strip()
+    if not uname:
+        return
+    c = conn.cursor()
+    month_key = _current_month_key()
+    try:
+        c.execute(
+            "SELECT COALESCE(app_fee_paid,0), COALESCE(app_fee_paid_month,'') FROM users WHERE username=?",
+            (uname,),
+        )
+        row = c.fetchone()
+    except sqlite3.OperationalError:
+        row = None
+    if not row:
+        return
+    paid_flag = int(row[0] or 0)
+    paid_month = (row[1] or '').strip()
+    if paid_flag == 1 and paid_month and paid_month != month_key:
+        try:
+            c.execute("UPDATE users SET app_fee_paid=0 WHERE username=?", (uname,))
+        except sqlite3.OperationalError:
+            return
+
+
+def _verify_app_fee_payment(conn: sqlite3.Connection, username: str) -> tuple[int, int, int, str]:
+    """Marks the monthly app fee as verified for `username`.
+
+    Returns: (gross_amount, credit_applied, net_amount, month_key)
+    """
+    uname = (username or '').strip()
+    if not uname:
+        return (0, 0, 0, _current_month_key())
+
+    month_key = _current_month_key()
+    gross = _get_app_fee_amount_int(conn)
+    now = datetime.now().isoformat(timespec='seconds')
+    c = conn.cursor()
+
+    # Ensure ledger table exists (init_db should create it; this is a safety net)
+    try:
+        c.execute(
+            '''CREATE TABLE IF NOT EXISTS app_fee_payments (
+                id INTEGER PRIMARY KEY,
+                username TEXT,
+                month TEXT,
+                gross_amount INTEGER,
+                credit_applied INTEGER,
+                net_amount INTEGER,
+                verified_at TEXT,
+                UNIQUE(username, month)
+            )'''
+        )
+    except sqlite3.OperationalError:
+        pass
+
+    # If already verified for this month, don't consume credits again.
+    try:
+        c.execute(
+            "SELECT gross_amount, credit_applied, net_amount FROM app_fee_payments WHERE username=? AND month=?",
+            (uname, month_key),
+        )
+        existing = c.fetchone()
+    except sqlite3.OperationalError:
+        existing = None
+    if existing:
+        try:
+            eg, ec, en = existing
+        except Exception:
+            eg, ec, en = gross, 0, gross
+        c.execute(
+            "UPDATE users SET app_fee_paid=1, app_fee_paid_month=?, first_app_fee_verified=1 WHERE username=?",
+            (month_key, uname),
+        )
+        return (int(eg or 0), int(ec or 0), int(en or 0), month_key)
+
+    credit_applied = _apply_app_fee_credit_for_month(conn, uname, month_key, gross)
+    net = max(0, int(gross) - int(credit_applied))
+    try:
+        c.execute(
+            "INSERT INTO app_fee_payments (username, month, gross_amount, credit_applied, net_amount, verified_at) VALUES (?,?,?,?,?,?)",
+            (uname, month_key, int(gross), int(credit_applied), int(net), now),
+        )
+    except sqlite3.OperationalError:
+        # Best-effort: keep going
+        pass
+
+    c.execute(
+        "UPDATE users SET app_fee_paid=1, app_fee_paid_month=?, first_app_fee_verified=1 WHERE username=?",
+        (month_key, uname),
+    )
+    return (int(gross), int(credit_applied), int(net), month_key)
+
+
+def _normalize_referral_code(raw: str) -> str:
+    code = (raw or '').strip().upper()
+    return re.sub(r'[^A-Z0-9]', '', code)
+
+
+def _make_referral_code_from_user_id(user_id: int) -> str:
+    try:
+        uid = int(user_id)
+    except (TypeError, ValueError):
+        uid = 0
+    uid = max(0, uid)
+    return f"DC{uid:06d}"
+
+
+def _user_has_joined_any_group(conn: sqlite3.Connection, username: str) -> bool:
+    uname = (username or '').strip()
+    if not uname:
+        return False
+    c = conn.cursor()
+    try:
+        c.execute(
+            "SELECT 1 FROM group_members WHERE username=? AND status='joined' LIMIT 1",
+            (uname,),
+        )
+        return c.fetchone() is not None
+    except sqlite3.OperationalError:
+        return False
+
+
+def _maybe_mark_referral_eligible(conn: sqlite3.Connection, new_username: str) -> None:
+    uname = (new_username or '').strip()
+    if not uname:
+        return
+    c = conn.cursor()
+    try:
+        c.execute(
+            "SELECT id, COALESCE(status,'') FROM referrals WHERE new_username=?",
+            (uname,),
+        )
+        row = c.fetchone()
+    except sqlite3.OperationalError:
+        row = None
+    if not row:
+        return
+
+    referral_id = int(row[0] or 0)
+    status = (row[1] or '').strip().upper()
+    if referral_id <= 0 or status in {'ELIGIBLE', 'CREDITED'}:
+        return
+
+    # Eligible only when the new user has joined a group AND first app fee is verified.
+    try:
+        c.execute("SELECT COALESCE(first_app_fee_verified,0) FROM users WHERE username=?", (uname,))
+        u = c.fetchone()
+    except sqlite3.OperationalError:
+        u = None
+    first_verified = int((u[0] if u else 0) or 0)
+    if first_verified != 1:
+        return
+    if not _user_has_joined_any_group(conn, uname):
+        return
+
+    now = datetime.now().isoformat(timespec='seconds')
+    try:
+        c.execute("UPDATE referrals SET status=?, eligible_at=? WHERE id=?", ('ELIGIBLE', now, referral_id))
+    except sqlite3.OperationalError:
+        return
+
 WHATSAPP_SUPPORT_NUMBER = '917506680031'  # +91 7506680031
 
 # ---- Language (EN/HI) ----
@@ -212,6 +495,33 @@ TRANSLATIONS = {
         'home_open_early_payout': 'Open Early Payout',
         'home_chat_bot_help': 'Chat with the D-CONT Bot for steps, safety tips, and support.',
 
+        # --- Referral (customer UI) ---
+        'referral_card_title': 'Invite & Earn ₹10',
+        'referral_card_body': 'Earn ₹10 app fee credit when your friend joins a group and pays their first app fee. Rewards are credited after payment verification.',
+        'referral_credit_disclaimer': 'Referral rewards are given as app fee credits. Credits reduce your monthly platform fee and are not withdrawable as cash.',
+        'referral_your_code': 'Your referral code:',
+        'referral_share': 'Share',
+        'referral_total_rewards': 'Total Rewards:',
+        'referral_app_fee_credit_balance': 'Current Credit Balance:',
+        'referral_list_title': 'Your referrals',
+        'referral_status_pending': 'Pending',
+        'referral_status_eligible': 'Eligible',
+        'referral_status_paid': 'Paid',
+        'referral_status_credited': 'Credited',
+        'referral_stage_joined_group': 'Joined group',
+        'referral_stage_not_joined': 'Not joined yet',
+        'referral_stage_fee_paid': 'Paid app fee',
+        'referral_stage_fee_pending': 'Pending payment',
+        'referral_none_yet': 'No referrals yet. Share your code to invite friends.',
+        'home_referral_small_title': 'Invite friends. Earn ₹10.',
+        'home_referral_small_cta': 'Open in Profile',
+
+        'app_fee_card_title': 'Monthly App Fee',
+        'app_fee_monthly_fee': 'Monthly App Fee:',
+        'app_fee_credit_applied': 'Credit Applied:',
+        'app_fee_you_pay': 'You Pay:',
+        'app_fee_paid_this_month': 'Paid (this month)',
+
         'profile_app_fee_paid': 'App Fee Paid',
         'yes': 'Yes',
         'no': 'No',
@@ -353,6 +663,33 @@ TRANSLATIONS = {
         'home_want_early_payout_body': 'यदि आप योग्य हैं, तो प्रोफ़ाइल से अर्ली पेआउट रिक्वेस्ट करें।',
         'home_open_early_payout': 'अर्ली पेआउट खोलें',
         'home_chat_bot_help': 'स्टेप्स, सुरक्षा टिप्स और सपोर्ट के लिए D-CONT बॉट से चैट करें।',
+
+        # --- Referral (customer UI) ---
+        'referral_card_title': 'इनवाइट करें और ₹10 कमाएँ',
+        'referral_card_body': 'जब आपका दोस्त समूह जॉइन करे और पहली ऐप फ़ीस का भुगतान करे, तब आपको ₹10 ऐप फ़ीस क्रेडिट मिलता है। रिवॉर्ड पेमेंट वेरिफिकेशन के बाद क्रेडिट होता है।',
+        'referral_credit_disclaimer': 'Referral rewards are given as app fee credits. Credits reduce your monthly platform fee and are not withdrawable as cash.',
+        'referral_your_code': 'आपका रेफरल कोड:',
+        'referral_share': 'शेयर करें',
+        'referral_total_rewards': 'कुल रिवॉर्ड:',
+        'referral_app_fee_credit_balance': 'Current Credit Balance:',
+        'referral_list_title': 'आपके रेफरल',
+        'referral_status_pending': 'पेंडिंग',
+        'referral_status_eligible': 'योग्य',
+        'referral_status_paid': 'पेड',
+        'referral_status_credited': 'क्रेडिटेड',
+        'referral_stage_joined_group': 'समूह जॉइन',
+        'referral_stage_not_joined': 'अभी जॉइन नहीं किया',
+        'referral_stage_fee_paid': 'ऐप फ़ीस भुगतान',
+        'referral_stage_fee_pending': 'भुगतान पेंडिंग',
+        'referral_none_yet': 'अभी कोई रेफरल नहीं है। दोस्तों को इनवाइट करने के लिए अपना कोड शेयर करें।',
+        'home_referral_small_title': 'दोस्तों को इनवाइट करें। ₹10 कमाएँ।',
+        'home_referral_small_cta': 'प्रोफ़ाइल में खोलें',
+
+        'app_fee_card_title': 'Monthly App Fee',
+        'app_fee_monthly_fee': 'Monthly App Fee:',
+        'app_fee_credit_applied': 'Credit Applied:',
+        'app_fee_you_pay': 'You Pay:',
+        'app_fee_paid_this_month': 'Paid (this month)',
 
         'profile_app_fee_paid': 'ऐप फ़ीस भुगतान',
         'yes': 'हाँ',
@@ -951,6 +1288,8 @@ USER_COLUMNS = {
     "upi_id": "TEXT",
     "onboarding_completed": "INTEGER",
     "app_fee_paid": "INTEGER",
+    "app_fee_paid_month": "TEXT",
+    "first_app_fee_verified": "INTEGER",
     "trust_score": "INTEGER",
     "join_blocked": "INTEGER",
     "is_active": "INTEGER",
@@ -958,6 +1297,12 @@ USER_COLUMNS = {
     "aadhaar_doc": "TEXT",
     "pan_doc": "TEXT",
     "passport_doc": "TEXT",
+
+    # Referral system
+    "referral_code": "TEXT",
+    "referred_by": "TEXT",
+    # Legacy field (deprecated). Referral rewards are not cash.
+    "wallet_credit": "INTEGER",
 }
 
 
@@ -1022,7 +1367,7 @@ def get_user_row(username):
     conn = get_db()
     c = conn.cursor()
     c.execute(
-        'SELECT username, full_name, mobile, language, city_state, email, role, upi_id, onboarding_completed, app_fee_paid, trust_score, join_blocked, is_active FROM users WHERE username=?',
+        'SELECT username, full_name, mobile, language, city_state, email, role, upi_id, onboarding_completed, app_fee_paid, app_fee_paid_month, first_app_fee_verified, trust_score, join_blocked, is_active FROM users WHERE username=?',
         (username,),
     )
     row = c.fetchone()
@@ -1040,9 +1385,11 @@ def get_user_row(username):
         'upi_id': row[7] or '',
         'onboarding_completed': int(row[8] or 0),
         'app_fee_paid': int(row[9] if row[9] is not None else 0),
-        'trust_score': int(row[10] if row[10] is not None else 50),
-        'join_blocked': int(row[11] if row[11] is not None else 0),
-        'is_active': int(row[12] if row[12] is not None else 1),
+        'app_fee_paid_month': (row[10] or '').strip(),
+        'first_app_fee_verified': int(row[11] if row[11] is not None else 0),
+        'trust_score': int(row[12] if row[12] is not None else 50),
+        'join_blocked': int(row[13] if row[13] is not None else 0),
+        'is_active': int(row[14] if row[14] is not None else 1),
     }
 
 
@@ -1510,17 +1857,24 @@ def profile():
     recalculate_and_store_trust(username)
     conn = get_db()
     c = conn.cursor()
+
+    # Keep monthly app-fee flag aligned with current month.
+    _ensure_app_fee_current_month(conn, username)
+    conn.commit()
+
     c.execute(
-        'SELECT full_name, mobile, upi_id, app_fee_paid, aadhaar_doc, pan_doc, passport_doc, COALESCE(trust_score,50) FROM users WHERE username=?',
+        'SELECT full_name, mobile, upi_id, app_fee_paid, COALESCE(app_fee_paid_month,\'\'), aadhaar_doc, pan_doc, passport_doc, COALESCE(trust_score,50), COALESCE(referral_code,\'\') FROM users WHERE username=?',
         (username,),
     )
     row = c.fetchone()
     full_name = mobile = upi_id = None
     aadhaar_doc = pan_doc = passport_doc = None
     app_fee_paid = 0
+    app_fee_paid_month = ''
     trust_score = 50
+    referral_code = ''
     if row:
-        full_name, mobile, upi_id, app_fee_paid, aadhaar_doc, pan_doc, passport_doc, trust_score = row
+        full_name, mobile, upi_id, app_fee_paid, app_fee_paid_month, aadhaar_doc, pan_doc, passport_doc, trust_score, referral_code = row
     if request.method == 'POST':
         full_name = (request.form.get('full_name') or '').strip()
         upi_id = (request.form.get('upi_id') or '').strip()
@@ -1552,6 +1906,69 @@ def profile():
                 passport_doc = saved_name
         conn.commit()
         flash('Profile updated!')
+    # Referral list for this user as referrer
+    referrals = []
+    total_rewards_earned = 0
+    app_fee_credit_balance = 0
+    try:
+        app_fee_credit_balance = _available_app_fee_credit(conn, username)
+        c.execute(
+            """
+            SELECT r.id,
+                   r.new_username,
+                   COALESCE(u.full_name,''),
+                   COALESCE(u.app_fee_paid,0) as app_fee_paid,
+                   EXISTS(
+                     SELECT 1 FROM group_members gm
+                     WHERE gm.username = r.new_username AND gm.status='joined'
+                   ) as joined_group,
+                   COALESCE(r.status,''),
+                   COALESCE(r.created_at,''),
+                   COALESCE(r.eligible_at,''),
+                   COALESCE(r.paid_at,''),
+                   COALESCE(r.credited_at,''),
+                   COALESCE(r.credit_expires_at,''),
+                   COALESCE(r.credit_amount,0),
+                   COALESCE(r.credit_used,0),
+                   COALESCE(r.credit_used_month,'')
+            FROM referrals r
+            LEFT JOIN users u ON u.username = r.new_username
+            WHERE r.referrer_username=?
+            ORDER BY r.id DESC
+            LIMIT 200
+            """,
+            (username,),
+        )
+        for rid, new_username, new_full_name, fee_paid, joined_group, status, created_at, eligible_at, paid_at, credited_at, credit_expires_at, credit_amount, credit_used, credit_used_month in c.fetchall() or []:
+            normalized_status = (status or '').strip().upper() or 'PENDING'
+            if normalized_status == 'CREDITED':
+                try:
+                    total_rewards_earned += int(credit_amount or REFERRAL_REWARD_AMOUNT)
+                except (TypeError, ValueError):
+                    total_rewards_earned += int(REFERRAL_REWARD_AMOUNT)
+            referrals.append(
+                {
+                    'id': int(rid or 0),
+                    'new_username': (new_username or '').strip(),
+                    'new_full_name': (new_full_name or '').strip(),
+                    'app_fee_paid': int(fee_paid or 0),
+                    'joined_group': bool(joined_group),
+                    'status': normalized_status,
+                    'created_at': created_at or '',
+                    'eligible_at': eligible_at or '',
+                    'paid_at': paid_at or '',
+                    'credited_at': credited_at or '',
+                    'credit_expires_at': credit_expires_at or '',
+                    'credit_amount': int(credit_amount or 0),
+                    'credit_used': int(credit_used or 0),
+                    'credit_used_month': (credit_used_month or '').strip(),
+                }
+            )
+    except sqlite3.OperationalError:
+        referrals = []
+        total_rewards_earned = 0
+        app_fee_credit_balance = 0
+
     conn.close()
 
     my_groups = _fetch_my_groups(username)
@@ -1591,6 +2008,7 @@ def profile():
         mobile=mobile or '',
         upi_id=upi_id or '',
         app_fee_paid=int(app_fee_paid or 0),
+        app_fee_paid_month=(app_fee_paid_month or '').strip(),
         aadhaar_doc=aadhaar_doc or '',
         pan_doc=pan_doc or '',
         passport_doc=passport_doc or '',
@@ -1598,6 +2016,11 @@ def profile():
         early_payout_groups=early_payout_groups,
         early_payout_requests=early_payout_requests,
         company_upi_id=company_upi_id,
+        referral_code=_normalize_referral_code(referral_code or ''),
+        app_fee_credit_balance=int(app_fee_credit_balance or 0),
+        referrals=referrals,
+        referral_reward_amount=int(REFERRAL_REWARD_AMOUNT),
+        total_rewards_earned=int(total_rewards_earned or 0),
         active_tab='profile',
     )
 
@@ -1711,6 +2134,49 @@ def init_db():
         )'''
     )
 
+    # Referral records
+    c.execute(
+        '''CREATE TABLE IF NOT EXISTS referrals (
+            id INTEGER PRIMARY KEY,
+            referrer_username TEXT,
+            new_username TEXT,
+            status TEXT,
+            created_at TEXT,
+            eligible_at TEXT,
+            paid_at TEXT
+        )'''
+    )
+
+    # App-fee payments ledger (for monthly fee + credits applied)
+    c.execute(
+        '''CREATE TABLE IF NOT EXISTS app_fee_payments (
+            id INTEGER PRIMARY KEY,
+            username TEXT,
+            month TEXT,
+            gross_amount INTEGER,
+            credit_applied INTEGER,
+            net_amount INTEGER,
+            verified_at TEXT,
+            UNIQUE(username, month)
+        )'''
+    )
+
+    # Ensure referrals table has credit columns (auto-migration)
+    c.execute("PRAGMA table_info(referrals)")
+    existing_referral_cols = {row[1] for row in c.fetchall()}
+    if "credited_at" not in existing_referral_cols:
+        c.execute("ALTER TABLE referrals ADD COLUMN credited_at TEXT")
+    if "credit_expires_at" not in existing_referral_cols:
+        c.execute("ALTER TABLE referrals ADD COLUMN credit_expires_at TEXT")
+    if "credit_amount" not in existing_referral_cols:
+        c.execute("ALTER TABLE referrals ADD COLUMN credit_amount INTEGER")
+    if "credit_used" not in existing_referral_cols:
+        c.execute("ALTER TABLE referrals ADD COLUMN credit_used INTEGER")
+    if "credit_used_at" not in existing_referral_cols:
+        c.execute("ALTER TABLE referrals ADD COLUMN credit_used_at TEXT")
+    if "credit_used_month" not in existing_referral_cols:
+        c.execute("ALTER TABLE referrals ADD COLUMN credit_used_month TEXT")
+
     # Ensure groups table has monthly_amount column (auto-migration)
     c.execute("PRAGMA table_info(groups)")
     existing_group_cols = {row[1] for row in c.fetchall()}
@@ -1768,9 +2234,12 @@ def init_db():
     # The 4-tab UI doesn't require onboarding; default existing users to completed.
     c.execute("UPDATE users SET onboarding_completed=1 WHERE onboarding_completed IS NULL")
     c.execute("UPDATE users SET app_fee_paid=0 WHERE app_fee_paid IS NULL")
+    c.execute("UPDATE users SET app_fee_paid_month='' WHERE app_fee_paid_month IS NULL")
+    c.execute("UPDATE users SET first_app_fee_verified=0 WHERE first_app_fee_verified IS NULL")
     c.execute("UPDATE users SET trust_score=50 WHERE trust_score IS NULL")
     c.execute("UPDATE users SET join_blocked=0 WHERE join_blocked IS NULL")
     c.execute("UPDATE users SET is_active=1 WHERE is_active IS NULL")
+    c.execute("UPDATE users SET wallet_credit=0 WHERE wallet_credit IS NULL")
     c.execute("UPDATE group_members SET status='joined' WHERE status IS NULL OR status='' ")
     c.execute("UPDATE groups SET is_paused=0 WHERE is_paused IS NULL")
 
@@ -1803,6 +2272,53 @@ def init_db():
     # Backfill roles for existing users
     c.execute("UPDATE users SET role='customer' WHERE role IS NULL OR role='' ")
 
+    # If a user already has app_fee_paid=1 in the legacy schema, treat it as first verified.
+    try:
+        c.execute("UPDATE users SET first_app_fee_verified=1 WHERE COALESCE(first_app_fee_verified,0)=0 AND COALESCE(app_fee_paid,0)=1")
+    except sqlite3.OperationalError:
+        pass
+
+    # Best-effort: if app_fee_paid is set but month is empty, assume current month.
+    try:
+        month_key = _current_month_key()
+        c.execute(
+            "UPDATE users SET app_fee_paid_month=? WHERE COALESCE(app_fee_paid,0)=1 AND COALESCE(app_fee_paid_month,'')=''",
+            (month_key,),
+        )
+    except sqlite3.OperationalError:
+        pass
+
+    # Migrate any old 'PAID' referral rows to 'CREDITED' credits (non-withdrawable)
+    try:
+        c.execute(
+            "SELECT id, COALESCE(paid_at,''), COALESCE(eligible_at,''), COALESCE(created_at,'') FROM referrals WHERE UPPER(COALESCE(status,''))='PAID'"
+        )
+        old_paid = c.fetchall() or []
+        for rid, paid_at, eligible_at, created_at in old_paid:
+            credited_at = (paid_at or '').strip() or (eligible_at or '').strip() or (created_at or '').strip()
+            if not credited_at:
+                credited_at = datetime.now().isoformat(timespec='seconds')
+            try:
+                ca = datetime.fromisoformat(credited_at)
+            except ValueError:
+                ca = datetime.now()
+                credited_at = ca.isoformat(timespec='seconds')
+            expires_at = (ca + timedelta(days=int(APP_FEE_CREDIT_EXPIRY_DAYS))).isoformat(timespec='seconds')
+            c.execute(
+                """
+                UPDATE referrals
+                SET status='CREDITED',
+                    credited_at=?,
+                    credit_expires_at=?,
+                    credit_amount=?,
+                    credit_used=0
+                WHERE id=?
+                """,
+                (credited_at, expires_at, int(REFERRAL_REWARD_AMOUNT), int(rid or 0)),
+            )
+    except sqlite3.OperationalError:
+        pass
+
     # Ensure username/mobile uniqueness (best-effort; may fail if duplicates already exist)
     try:
         c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username)")
@@ -1810,6 +2326,54 @@ def init_db():
         pass
     try:
         c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_mobile ON users(mobile)")
+    except sqlite3.OperationalError:
+        pass
+
+    # Referral indexes
+    try:
+        c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_referral_code ON users(referral_code)")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_referrals_new_username ON referrals(new_username)")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        c.execute("CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON referrals(referrer_username)")
+    except sqlite3.OperationalError:
+        pass
+
+    # Backfill referral codes for existing customer users (best-effort)
+    try:
+        c.execute("SELECT id, username, COALESCE(NULLIF(role,''),'customer') as role, COALESCE(referral_code,'') FROM users")
+        rows = c.fetchall() or []
+        for uid, uname, role, rcode in rows:
+            uname = (uname or '').strip()
+            if not uname:
+                continue
+            if (role or '').strip().lower() == 'admin':
+                continue
+            if _normalize_referral_code(rcode):
+                continue
+
+            candidate = _make_referral_code_from_user_id(uid)
+            suffix = 0
+            while True:
+                try:
+                    c.execute("SELECT 1 FROM users WHERE referral_code=? LIMIT 1", (candidate,))
+                    taken = c.fetchone() is not None
+                except sqlite3.OperationalError:
+                    taken = False
+                if not taken:
+                    break
+                suffix += 1
+                candidate = f"{_make_referral_code_from_user_id(uid)}{suffix}"
+                if suffix > 9:
+                    break
+            try:
+                c.execute("UPDATE users SET referral_code=? WHERE username=?", (candidate, uname))
+            except sqlite3.OperationalError:
+                pass
     except sqlite3.OperationalError:
         pass
 
@@ -1957,8 +2521,17 @@ def owner_dashboard():
     c.execute("SELECT COUNT(*) FROM users WHERE COALESCE(NULLIF(role,''), 'customer') != 'admin'")
     total_users = int((c.fetchone() or [0])[0] or 0)
 
-    c.execute("SELECT COUNT(*) FROM users WHERE COALESCE(NULLIF(role,''), 'customer') != 'admin' AND COALESCE(app_fee_paid,0)=1")
-    app_fee_paid_count = int((c.fetchone() or [0])[0] or 0)
+    month_key = _current_month_key()
+    app_fee_paid_count = 0
+    try:
+        c.execute("SELECT COUNT(*) FROM app_fee_payments WHERE month=?", (month_key,))
+        app_fee_paid_count = int((c.fetchone() or [0])[0] or 0)
+    except sqlite3.OperationalError:
+        c.execute(
+            "SELECT COUNT(*) FROM users WHERE COALESCE(NULLIF(role,''), 'customer') != 'admin' AND COALESCE(app_fee_paid,0)=1 AND COALESCE(app_fee_paid_month,'')=?",
+            (month_key,),
+        )
+        app_fee_paid_count = int((c.fetchone() or [0])[0] or 0)
 
     app_fee_amount_raw = (get_setting('app_fee_amount', '0') or '0').strip()
     try:
@@ -1966,6 +2539,11 @@ def owner_dashboard():
     except ValueError:
         app_fee_amount = 0
     app_fee_collected = app_fee_paid_count * max(app_fee_amount, 0)
+    try:
+        c.execute("SELECT COALESCE(SUM(COALESCE(net_amount,0)),0) FROM app_fee_payments WHERE month=?", (month_key,))
+        app_fee_collected = int((c.fetchone() or [0])[0] or 0)
+    except sqlite3.OperationalError:
+        pass
 
     c.execute(
         """
@@ -2160,6 +2738,47 @@ def owner_user_profile(username):
         trust_breakdown=trust_details.get('breakdown', {}),
         trust_events=(trust_details.get('events', [])[:25]),
     )
+
+
+@app.route('/owner/users/verify_app_fee', methods=['POST'])
+@admin_required
+def owner_users_verify_app_fee():
+    target_username = (request.form.get('username') or '').strip()
+    if not target_username:
+        flash('Missing username.')
+        return redirect(url_for('owner_users'))
+
+    conn = get_db()
+    c = conn.cursor()
+    try:
+        c.execute("SELECT COALESCE(NULLIF(role,''),'customer') FROM users WHERE username=?", (target_username,))
+        row = c.fetchone()
+    except sqlite3.OperationalError:
+        row = None
+    if not row:
+        conn.close()
+        flash('User not found.')
+        return redirect(url_for('owner_users'))
+    if (row[0] or '').strip().lower() == 'admin':
+        conn.close()
+        flash('Admin users cannot be modified here.')
+        return redirect(url_for('owner_users'))
+
+    try:
+        gross, credit_applied, net, month_key = _verify_app_fee_payment(conn, target_username)
+        _maybe_mark_referral_eligible(conn, target_username)
+        conn.commit()
+    except sqlite3.OperationalError:
+        conn.close()
+        flash('Unable to verify app fee right now.')
+        return redirect(url_for('owner_user_profile', username=target_username))
+    conn.close()
+
+    if credit_applied > 0:
+        flash(f"App fee verified for {month_key}. Credit applied: ₹{credit_applied}. Net paid: ₹{net}.")
+    else:
+        flash(f"App fee verified for {month_key}.")
+    return redirect(url_for('owner_user_profile', username=target_username))
 
 
 @app.route('/owner/users/toggle_join_block', methods=['POST'])
@@ -2597,26 +3216,271 @@ def owner_payments():
 
     conn = get_db()
     c = conn.cursor()
-    c.execute(
-        """
-        SELECT username, full_name, mobile
-        FROM users
-        WHERE COALESCE(NULLIF(role,''), 'customer') != 'admin'
-          AND COALESCE(app_fee_paid,0)=1
-        ORDER BY id DESC
-        """
-    )
-    app_fee_payments = [
-        {
-            'username': r[0],
-            'full_name': r[1] or '',
-            'mobile': r[2] or '',
-            'amount': fee_amount,
-        }
-        for r in c.fetchall()
-    ]
+    month_key = _current_month_key()
+    app_fee_payments = []
+    try:
+        c.execute(
+            """
+            SELECT p.username,
+                   COALESCE(u.full_name,''),
+                   COALESCE(u.mobile,''),
+                   COALESCE(p.gross_amount,0),
+                   COALESCE(p.credit_applied,0),
+                   COALESCE(p.net_amount,0),
+                   COALESCE(p.verified_at,'')
+            FROM app_fee_payments p
+            LEFT JOIN users u ON u.username = p.username
+            WHERE p.month=?
+            ORDER BY p.id DESC
+            """,
+            (month_key,),
+        )
+        for uname, full_name, mobile, gross, credit_applied, net, verified_at in c.fetchall() or []:
+            app_fee_payments.append(
+                {
+                    'username': uname,
+                    'full_name': full_name or '',
+                    'mobile': mobile or '',
+                    'gross': int(gross or 0),
+                    'credit_applied': int(credit_applied or 0),
+                    'amount': int(net or 0),
+                    'verified_at': verified_at or '',
+                }
+            )
+    except sqlite3.OperationalError:
+        # Fallback legacy behavior
+        try:
+            c.execute(
+                """
+                SELECT username, full_name, mobile
+                FROM users
+                WHERE COALESCE(NULLIF(role,''), 'customer') != 'admin'
+                  AND COALESCE(app_fee_paid,0)=1
+                ORDER BY id DESC
+                """
+            )
+            app_fee_payments = [
+                {
+                    'username': r[0],
+                    'full_name': r[1] or '',
+                    'mobile': r[2] or '',
+                    'gross': fee_amount,
+                    'credit_applied': 0,
+                    'amount': fee_amount,
+                    'verified_at': '',
+                }
+                for r in c.fetchall()
+            ]
+        except sqlite3.OperationalError:
+            app_fee_payments = []
+
     conn.close()
-    return render_template('owner_payments.html', active_owner_tab='payments', app_fee_amount=fee_amount, app_fee_payments=app_fee_payments)
+    return render_template(
+        'owner_payments.html',
+        active_owner_tab='payments',
+        app_fee_amount=fee_amount,
+        app_fee_payments=app_fee_payments,
+        app_fee_month=month_key,
+    )
+
+
+@app.route('/owner/referrals')
+@admin_required
+def owner_referrals():
+    conn = get_db()
+    c = conn.cursor()
+    rows = []
+    try:
+        c.execute(
+            """
+            SELECT r.id,
+                   r.referrer_username,
+                   COALESCE(ru.full_name,''),
+                   r.new_username,
+                   COALESCE(nu.full_name,''),
+                   COALESCE(nu.mobile,''),
+                   COALESCE(nu.app_fee_paid,0) as app_fee_paid,
+                   EXISTS(
+                     SELECT 1 FROM group_members gm
+                     WHERE gm.username = r.new_username AND gm.status='joined'
+                   ) as joined_group,
+                   COALESCE(r.status,''),
+                   COALESCE(r.created_at,''),
+                   COALESCE(r.eligible_at,''),
+                   COALESCE(r.credited_at,''),
+                   COALESCE(r.credit_expires_at,''),
+                   COALESCE(r.credit_amount,0),
+                   COALESCE(r.credit_used,0),
+                   COALESCE(r.credit_used_month,'')
+            FROM referrals r
+            LEFT JOIN users ru ON ru.username = r.referrer_username
+            LEFT JOIN users nu ON nu.username = r.new_username
+            ORDER BY r.id DESC
+            LIMIT 300
+            """
+        )
+        rows = c.fetchall() or []
+    except sqlite3.OperationalError:
+        rows = []
+
+    referrals = []
+    for r in rows:
+        referrals.append(
+            {
+                'id': int(r[0] or 0),
+                'referrer_username': (r[1] or '').strip(),
+                'referrer_full_name': (r[2] or '').strip(),
+                'new_username': (r[3] or '').strip(),
+                'new_full_name': (r[4] or '').strip(),
+                'new_mobile': (r[5] or '').strip(),
+                'app_fee_paid': int(r[6] or 0),
+                'joined_group': bool(r[7]),
+                'status': (r[8] or '').strip().upper() or 'PENDING',
+                'created_at': r[9] or '',
+                'eligible_at': r[10] or '',
+                'credited_at': r[11] or '',
+                'credit_expires_at': r[12] or '',
+                'credit_amount': int(r[13] or 0),
+                'credit_used': int(r[14] or 0),
+                'credit_used_month': (r[15] or '').strip(),
+            }
+        )
+
+    conn.close()
+    return render_template(
+        'owner_referrals.html',
+        active_owner_tab='referrals',
+        referrals=referrals,
+        referral_reward_amount=int(REFERRAL_REWARD_AMOUNT),
+    )
+
+
+@app.route('/owner/referrals/verify-app-fee', methods=['POST'])
+@admin_required
+def owner_referrals_verify_app_fee():
+    new_username = (request.form.get('new_username') or '').strip()
+    if not new_username:
+        flash('Missing user.')
+        return redirect(url_for('owner_referrals'))
+
+    conn = get_db()
+    c = conn.cursor()
+    try:
+        c.execute("SELECT COALESCE(NULLIF(role,''),'customer') FROM users WHERE username=?", (new_username,))
+        row = c.fetchone()
+    except sqlite3.OperationalError:
+        row = None
+
+    if not row:
+        conn.close()
+        flash('User not found.')
+        return redirect(url_for('owner_referrals'))
+    if (row[0] or '').strip().lower() == 'admin':
+        conn.close()
+        flash('Invalid user.')
+        return redirect(url_for('owner_referrals'))
+
+    try:
+        gross, credit_applied, net, month_key = _verify_app_fee_payment(conn, new_username)
+        _maybe_mark_referral_eligible(conn, new_username)
+        conn.commit()
+    except sqlite3.OperationalError:
+        conn.close()
+        flash('Unable to verify app fee right now.')
+        return redirect(url_for('owner_referrals'))
+    conn.close()
+
+    if credit_applied > 0:
+        flash(f"App fee verified for {month_key}. Credit applied: ₹{credit_applied}. Net paid: ₹{net}.")
+    else:
+        flash('App fee marked as verified. Referral eligibility updated.')
+    return redirect(url_for('owner_referrals'))
+
+
+@app.route('/owner/referrals/refresh-eligibility', methods=['POST'])
+@admin_required
+def owner_referrals_refresh_eligibility():
+    new_username = (request.form.get('new_username') or '').strip()
+    if not new_username:
+        flash('Missing user.')
+        return redirect(url_for('owner_referrals'))
+    conn = get_db()
+    try:
+        _maybe_mark_referral_eligible(conn, new_username)
+        conn.commit()
+    except sqlite3.OperationalError:
+        conn.close()
+        flash('Unable to refresh eligibility right now.')
+        return redirect(url_for('owner_referrals'))
+    conn.close()
+    flash('Eligibility refreshed.')
+    return redirect(url_for('owner_referrals'))
+
+
+@app.route('/owner/referrals/mark-paid', methods=['POST'])
+@admin_required
+def owner_referrals_mark_paid():
+    try:
+        referral_id = int(request.form.get('referral_id') or 0)
+    except ValueError:
+        referral_id = 0
+    if referral_id <= 0:
+        flash('Invalid referral.')
+        return redirect(url_for('owner_referrals'))
+
+    conn = get_db()
+    c = conn.cursor()
+    try:
+        c.execute(
+            "SELECT id, COALESCE(status,''), COALESCE(referrer_username,''), COALESCE(new_username,'') FROM referrals WHERE id=?",
+            (referral_id,),
+        )
+        row = c.fetchone()
+    except sqlite3.OperationalError:
+        row = None
+
+    if not row:
+        conn.close()
+        flash('Referral not found.')
+        return redirect(url_for('owner_referrals'))
+
+    status = (row[1] or '').strip().upper()
+    referrer_username = (row[2] or '').strip()
+    new_username = (row[3] or '').strip()
+
+    if status != 'ELIGIBLE':
+        conn.close()
+        flash('Referral is not eligible yet.')
+        return redirect(url_for('owner_referrals'))
+    if not referrer_username or not new_username:
+        conn.close()
+        flash('Invalid referral data.')
+        return redirect(url_for('owner_referrals'))
+
+    now = datetime.now().isoformat(timespec='seconds')
+    expires_at = (datetime.now() + timedelta(days=int(APP_FEE_CREDIT_EXPIRY_DAYS))).isoformat(timespec='seconds')
+    try:
+        c.execute(
+            """
+            UPDATE referrals
+            SET status=?,
+                credited_at=?,
+                credit_expires_at=?,
+                credit_amount=?,
+                credit_used=0
+            WHERE id=?
+            """,
+            ('CREDITED', now, expires_at, int(REFERRAL_REWARD_AMOUNT), referral_id),
+        )
+        conn.commit()
+    except sqlite3.OperationalError:
+        conn.close()
+        flash('Unable to credit right now.')
+        return redirect(url_for('owner_referrals'))
+    conn.close()
+
+    flash('Referral reward credited as app fee credit and marked as CREDITED.')
+    return redirect(url_for('owner_referrals'))
 
 
 @app.route('/owner/risk')
@@ -3081,6 +3945,43 @@ def payments_tab():
     upi_id = (user.get('upi_id') or '').strip()
     my_groups = _fetch_my_groups(username)
 
+    conn = get_db()
+    c = conn.cursor()
+    _ensure_app_fee_current_month(conn, username)
+
+    month_key = _current_month_key()
+    app_fee_amount = _get_app_fee_amount_int(conn)
+    credit_balance = _available_app_fee_credit(conn, username)
+    credit_preview = _preview_app_fee_credit_apply(conn, username, app_fee_amount)
+    app_fee_paid_this_month = False
+    applied_credit_actual = 0
+    net_amount_actual = app_fee_amount
+    try:
+        c.execute(
+            "SELECT gross_amount, credit_applied, net_amount FROM app_fee_payments WHERE username=? AND month=?",
+            (username, month_key),
+        )
+        row = c.fetchone()
+        if row:
+            app_fee_paid_this_month = True
+            applied_credit_actual = int(row[1] or 0)
+            net_amount_actual = int(row[2] or 0)
+    except sqlite3.OperationalError:
+        row = None
+
+    if not app_fee_paid_this_month:
+        # Fallback to users flag if ledger is unavailable
+        try:
+            c.execute("SELECT COALESCE(app_fee_paid,0), COALESCE(app_fee_paid_month,'') FROM users WHERE username=?", (username,))
+            urow = c.fetchone()
+            if urow and int(urow[0] or 0) == 1 and (urow[1] or '').strip() == month_key:
+                app_fee_paid_this_month = True
+        except sqlite3.OperationalError:
+            pass
+
+    conn.commit()
+    conn.close()
+
     today_iso = _today_iso()
 
     pay_to = []
@@ -3129,6 +4030,12 @@ def payments_tab():
         'payments_tab.html',
         upi_id=upi_id,
         pay_to=pay_to,
+        app_fee_amount=int(app_fee_amount or 0),
+        app_fee_credit_balance=int(credit_balance or 0),
+        app_fee_credit_preview=int(credit_preview or 0),
+        app_fee_paid_this_month=bool(app_fee_paid_this_month),
+        app_fee_credit_applied_actual=int(applied_credit_actual or 0),
+        app_fee_net_amount_actual=int(net_amount_actual or 0),
         active_tab='payments',
     )
 
@@ -3375,6 +4282,7 @@ def register():
         language = _normalize_lang(request.form.get('language'))
         city_state = request.form.get('city_state')
         email = request.form.get('email')
+        referral_code_input = _normalize_referral_code(request.form.get('referral_code') or '')
 
         if not username:
             flash('Username is required.')
@@ -3389,8 +4297,66 @@ def register():
             password_hash = generate_password_hash(password)
             conn = get_db()
             c = conn.cursor()
-            c.execute('INSERT INTO users (username, password, mobile, full_name, language, city_state, email, role, upi_id, onboarding_completed, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                      (username, password_hash, mobile, full_name, language, city_state, email, 'customer', '', 0, 1))
+
+            c.execute(
+                'INSERT INTO users (username, password, mobile, full_name, language, city_state, email, role, upi_id, onboarding_completed, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                (username, password_hash, mobile, full_name, language, city_state, email, 'customer', '', 0, 1),
+            )
+            user_id = int(c.lastrowid or 0)
+
+            # Assign referral code for the new user (best-effort)
+            new_referral_code = _make_referral_code_from_user_id(user_id)
+            try:
+                c.execute(
+                    'UPDATE users SET referral_code=?, wallet_credit=COALESCE(wallet_credit,0) WHERE username=?',
+                    (new_referral_code, username),
+                )
+            except sqlite3.OperationalError:
+                pass
+
+            # If a referral code was provided, validate and create a PENDING record.
+            if referral_code_input:
+                try:
+                    c.execute(
+                        "SELECT username, COALESCE(mobile,''), COALESCE(NULLIF(role,''),'customer') FROM users WHERE upper(COALESCE(referral_code,''))=upper(?)",
+                        (referral_code_input,),
+                    )
+                    ref = c.fetchone()
+                except sqlite3.OperationalError:
+                    ref = None
+
+                if not ref or (ref[2] or '').strip().lower() == 'admin':
+                    conn.rollback()
+                    conn.close()
+                    flash('Invalid referral code. Please remove it or enter a valid code.')
+                    return render_template('register.html')
+
+                referrer_username = (ref[0] or '').strip()
+                referrer_mobile = _normalize_mobile_digits(ref[1] or '')
+                new_mobile_digits = _normalize_mobile_digits(mobile)
+
+                # Anti-fraud: self-referral blocked (username or phone)
+                if referrer_username.lower() == username.lower() or (
+                    referrer_mobile and new_mobile_digits and referrer_mobile == new_mobile_digits
+                ):
+                    conn.rollback()
+                    conn.close()
+                    flash('Self-referral is not allowed. Please remove the referral code.')
+                    return render_template('register.html')
+
+                now = datetime.now().isoformat(timespec='seconds')
+                try:
+                    # One user = one referral record (no chain commissions)
+                    c.execute(
+                        'INSERT INTO referrals (referrer_username, new_username, status, created_at) VALUES (?,?,?,?)',
+                        (referrer_username, username, 'PENDING', now),
+                    )
+                    c.execute('UPDATE users SET referred_by=? WHERE username=?', (referrer_username, username))
+                except sqlite3.IntegrityError:
+                    pass
+                except sqlite3.OperationalError:
+                    pass
+
             conn.commit()
             conn.close()
             flash('Registration successful! Please log in.')
@@ -3398,7 +4364,6 @@ def register():
         except sqlite3.IntegrityError:
             flash('Username or mobile already exists!')
     return render_template('register.html')
-
 
 @app.route('/owner/users/reset_password', methods=['POST'])
 @admin_required

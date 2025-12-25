@@ -84,6 +84,11 @@
         </div>
 
         <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;">
+            <form method="post" action="/owner/users/verify_app_fee" style="margin:0;">
+                <input type="hidden" name="username" value="{{ user.username }}">
+                <button type="submit" style="background:#16a34a; color:#fff; border:none; padding:8px 12px; border-radius:8px; cursor:pointer;">Verify App Fee (This Month)</button>
+            </form>
+
             <form method="post" action="/admin/toggle_user_active" style="margin:0;">
                 <input type="hidden" name="username" value="{{ user.username }}">
                 <input type="hidden" name="action" value="{{ 'block' if user.is_active else 'unblock' }}">

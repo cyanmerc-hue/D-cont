@@ -23,6 +23,26 @@
       {% endif %}
     </div>
 
+    <div class="card-pro" style="margin-top:14px; padding:14px;">
+      <div class="sectionTitle" style="margin-top:0;">{{ t('app_fee_card_title') }}</div>
+      <div class="muted" style="margin-top:6px; line-height:1.45;">{{ t('referral_credit_disclaimer') }}</div>
+
+      {% set credit_to_show = (app_fee_credit_applied_actual if app_fee_paid_this_month else app_fee_credit_preview) %}
+      {% set net_to_show = (app_fee_net_amount_actual if app_fee_paid_this_month else (app_fee_amount - app_fee_credit_preview)) %}
+
+      <div class="notice" style="margin-top:12px;">
+        <div style="display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+          <div><strong>{{ t('app_fee_monthly_fee') }}</strong> ₹{{ app_fee_amount }}</div>
+          <div><strong>{{ t('app_fee_credit_applied') }}</strong> -₹{{ credit_to_show or 0 }}</div>
+          <div><strong>{{ t('app_fee_you_pay') }}</strong> ₹{{ net_to_show if net_to_show > 0 else 0 }}</div>
+        </div>
+        <div class="muted" style="margin-top:8px;">{{ t('referral_app_fee_credit_balance') }} ₹{{ app_fee_credit_balance or 0 }}</div>
+        {% if app_fee_paid_this_month %}
+          <div style="margin-top:8px; font-weight:800;">{{ t('app_fee_paid_this_month') }}</div>
+        {% endif %}
+      </div>
+    </div>
+
     <h3 class="sectionTitle" style="margin-top:18px;">{{ t('who_to_pay') }}</h3>
     {% if pay_to and pay_to|length > 0 %}
       <ul style="list-style:none; padding:0; margin:0;">

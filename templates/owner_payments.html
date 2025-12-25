@@ -24,6 +24,9 @@
 
         <div class="notice" style="margin-top:14px;">
             <div><strong>App fee amount:</strong> ₹{{ app_fee_amount }}</div>
+                        {% if app_fee_month %}
+                            <div class="muted" style="font-size:0.95em; margin-top:4px;"><strong>Month:</strong> {{ app_fee_month }}</div>
+                        {% endif %}
             <div class="muted" style="font-size:0.95em; margin-top:4px;">This page records payments; D-CONT does not hold money.</div>
         </div>
 
@@ -35,7 +38,10 @@
                         <tr>
                             <th>User</th>
                             <th>Mobile</th>
-                            <th>Amount</th>
+                            <th>Gross</th>
+                            <th>Credit Applied</th>
+                            <th>Net Paid</th>
+                            <th>Verified At</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -43,7 +49,10 @@
                         <tr>
                             <td>{{ p.full_name or p.username }}</td>
                             <td>{{ p.mobile }}</td>
+                            <td>₹{{ p.gross }}</td>
+                            <td>-₹{{ p.credit_applied }}</td>
                             <td>₹{{ p.amount }}</td>
+                            <td>{{ p.verified_at or '' }}</td>
                         </tr>
                     {% endfor %}
                     </tbody>

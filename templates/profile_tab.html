@@ -41,6 +41,63 @@
       <div class="muted" style="font-size:0.95em; margin-top:6px;">{{ t('benefit_control_body') }}</div>
     </div>
 
+    <div class="card-pro" id="referral" style="margin-top:14px; padding:14px;">
+      <div class="sectionTitle" style="margin-top:0;">{{ t('referral_card_title') }}</div>
+      <div class="muted" style="margin-top:6px; line-height:1.45;">{{ t('referral_card_body') }}</div>
+      <div class="muted" style="margin-top:8px; line-height:1.45;">{{ t('referral_credit_disclaimer') }}</div>
+
+      <div class="notice" style="margin-top:12px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
+          <div>
+            <div class="muted" style="font-size:0.95em;">{{ t('referral_your_code') }}</div>
+            <div style="font-size:18px; font-weight:800; letter-spacing:0.5px;">{{ referral_code or '' }}</div>
+          </div>
+          <button type="button" class="btn btn-secondary" style="width:auto;" onclick="shareReferral()">{{ t('referral_share') }}</button>
+        </div>
+        <div class="muted" style="margin-top:10px; display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+          <div><strong>{{ t('referral_app_fee_credit_balance') }}</strong> ₹{{ app_fee_credit_balance or 0 }}</div>
+          <div><strong>{{ t('referral_total_rewards') }}</strong> ₹{{ total_rewards_earned or 0 }}</div>
+        </div>
+      </div>
+
+      <div class="sectionTitle" style="margin-top:14px;">{{ t('referral_list_title') }}</div>
+      {% if referrals and referrals|length > 0 %}
+        {% for r in referrals %}
+          <div class="card-pro" style="padding:12px; margin-top:10px;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
+              <div>
+                <div style="font-weight:800;">{{ r.new_full_name or r.new_username }}</div>
+                <div class="muted" style="margin-top:6px; font-size:0.95em;">
+                  {% if r.joined_group %}
+                    {{ t('referral_stage_joined_group') }}
+                  {% else %}
+                    {{ t('referral_stage_not_joined') }}
+                  {% endif %}
+                  •
+                  {% if r.app_fee_paid %}
+                    {{ t('referral_stage_fee_paid') }}
+                  {% else %}
+                    {{ t('referral_stage_fee_pending') }}
+                  {% endif %}
+                </div>
+              </div>
+              <div class="muted" style="font-size:0.95em; text-align:right;">
+                {% if r.status == 'CREDITED' %}
+                  <strong>{{ t('referral_status_credited') }}</strong>
+                {% elif r.status == 'ELIGIBLE' %}
+                  <strong>{{ t('referral_status_eligible') }}</strong>
+                {% else %}
+                  <strong>{{ t('referral_status_pending') }}</strong>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <div class="muted" style="margin-top:10px;">{{ t('referral_none_yet') }}</div>
+      {% endif %}
+    </div>
+
     <form method="POST" action="/profile" enctype="multipart/form-data" class="card-pro" style="margin-top:14px; padding:14px;">
       <label class="muted" style="display:block; font-size:0.95em;">{{ t('label_full_name') }}</label>
       <input name="full_name" type="text" value="{{ full_name }}" class="input" />
@@ -190,6 +247,32 @@
     <a href="/logout" class="btn" style="display:block; margin-top:14px;">{{ t('logout') }}</a>
     </div>
   </div>
+
+  <script>
+  function shareReferral() {
+    const code = "{{ referral_code or '' }}";
+    const text = "{{ t('referral_card_body') }}\n\n{{ t('referral_your_code') }} " + code;
+
+    if (navigator.share) {
+      navigator.share({
+        title: "D-CONT",
+        text,
+      }).catch(() => {});
+      return;
+    }
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(code).then(() => {
+        alert("Copied referral code: " + code);
+      }).catch(() => {
+        alert(code);
+      });
+      return;
+    }
+
+    alert(code);
+  }
+  </script>
 
 </body>
 </html>
