@@ -12,9 +12,9 @@
     {% include '_owner_nav.html' %}
 
     <div class="container container-wide" style="margin: 18px auto 48px auto;">
-      <div class="card" style="padding:24px; color:#222;">
+      <div class="card" style="padding:24px;">
         <div style="display:flex; justify-content: space-between; align-items:center; gap: 12px;">
-            <h2 style="margin:0; color:#2D9CDB;">Settings</h2>
+            <h2 class="pageTitle">Settings</h2>
             <a href="/logout" class="btn btn-sm" style="width:auto; padding:6px 16px; border-radius:6px;">Logout</a>
         </div>
 
@@ -29,26 +29,26 @@
         <form method="post" action="/owner/settings" class="section" style="margin-top:18px;">
             <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:10px;">
                 <div>
-                    <label style="display:block; color:#555; font-size:0.95em;">App fee amount (₹)</label>
-                    <input name="app_fee_amount" type="number" min="0" value="{{ settings.app_fee_amount }}" style="width:100%; padding:10px; border-radius:8px; border:1px solid #cfd8dc;" />
+                    <label class="muted small" style="display:block;">App fee amount (₹)</label>
+                    <input class="input" style="margin:6px 0 0;" name="app_fee_amount" type="number" min="0" value="{{ settings.app_fee_amount }}" />
                 </div>
                 <div>
-                    <label style="display:block; color:#555; font-size:0.95em;">Group size limits</label>
-                    <input name="group_size_limit" type="text" value="{{ settings.group_size_limit }}" placeholder="e.g., 10" style="width:100%; padding:10px; border-radius:8px; border:1px solid #cfd8dc;" />
+                    <label class="muted small" style="display:block;">Group size limits</label>
+                    <input class="input" style="margin:6px 0 0;" name="group_size_limit" type="text" value="{{ settings.group_size_limit }}" placeholder="e.g., 10" />
                 </div>
                 <div>
-                    <label style="display:block; color:#555; font-size:0.95em;">Max monthly contribution (₹)</label>
-                    <input name="max_monthly_contribution" type="number" min="0" value="{{ settings.max_monthly_contribution }}" style="width:100%; padding:10px; border-radius:8px; border:1px solid #cfd8dc;" />
+                    <label class="muted small" style="display:block;">Max monthly contribution (₹)</label>
+                    <input class="input" style="margin:6px 0 0;" name="max_monthly_contribution" type="number" min="0" value="{{ settings.max_monthly_contribution }}" />
                 </div>
                 <div>
-                    <label style="display:block; color:#555; font-size:0.95em;">Company UPI ID</label>
-                    <input name="company_upi_id" type="text" value="{{ settings.company_upi_id }}" placeholder="example@upi" style="width:100%; padding:10px; border-radius:8px; border:1px solid #cfd8dc;" />
+                    <label class="muted small" style="display:block;">Company UPI ID</label>
+                    <input class="input" style="margin:6px 0 0;" name="company_upi_id" type="text" value="{{ settings.company_upi_id }}" placeholder="example@upi" />
                 </div>
             </div>
 
             <div style="margin-top:12px;">
-                <label style="display:block; color:#555; font-size:0.95em;">Legal text (T&C / disclaimers)</label>
-                <textarea name="legal_text" rows="6" style="width:100%; padding:10px; border-radius:8px; border:1px solid #cfd8dc;">{{ settings.legal_text }}</textarea>
+                <label class="muted small" style="display:block;">Legal text (T&C / disclaimers)</label>
+                <textarea class="input" style="margin:6px 0 0;" name="legal_text" rows="6">{{ settings.legal_text }}</textarea>
             </div>
 
             <button type="submit" class="btn" style="margin-top:12px;">Save settings</button>

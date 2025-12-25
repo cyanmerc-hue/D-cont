@@ -12,9 +12,9 @@
     {% include '_owner_nav.html' %}
 
         <div class="container container-pro" style="margin: 18px auto 48px auto;">
-            <div class="card card-pro card-lg" style="color:#222;">
+                <div class="card card-pro card-lg">
                 <div class="row" style="justify-content: space-between; align-items:center;">
-                        <h2 style="margin:0; color:#2D9CDB;">Owner Dashboard</h2>
+                            <h2 class="pageTitle">Owner Dashboard</h2>
                         <a href="/logout" class="btn btn-sm" style="width:auto;">Logout</a>
                 </div>
 
@@ -65,12 +65,12 @@
                                     <div class="kpiLabel">App fee collected</div>
                                     <div class="kpiValue">₹{{ app_fee_collected }}</div>
                                 </div>
-                                <div class="small" style="margin-top:6px; color:#777;">{{ app_fee_paid_count }} paid × ₹{{ app_fee_amount }}</div>
+                                    <div class="small muted" style="margin-top:6px;">{{ app_fee_paid_count }} paid × ₹{{ app_fee_amount }}</div>
                             </div>
                         </div>
                 </div>
 
-        <div style="margin-top:16px; color:#777; font-size:0.95em;">Note: Payments/defaults tracking is record-only and will populate once contribution logs are enabled.</div>
+        <div class="muted" style="margin-top:16px; font-size:0.95em;">Note: Payments/defaults tracking is record-only and will populate once contribution logs are enabled.</div>
       </div>
     </div>
 </body>
