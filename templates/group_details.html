@@ -3,37 +3,42 @@
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Group - D-cont</title>
+  <meta name="theme-color" content="#05060A">
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css', v=asset_version) }}">
+  <link rel="manifest" href="{{ url_for('static', filename='manifest.json', v=asset_version) }}">
+  <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icons/icon-192.png', v=asset_version) }}">
+  <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='icons/icon-512.png', v=asset_version) }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png', v=asset_version) }}">
 </head>
 <body class="app-body hasTabs">
-  <div style="background: #fff; box-shadow: 0 2px 8px #e0e0e0; padding: 16px 0 8px 0; text-align: center;">
-    <img src="/static/logo.svg" onerror="this.onerror=null;this.src='/static/logo.png';" alt="D-cont Logo" style="height:60px;"/>
-  </div>
-
   {% include '_tab_nav.html' %}
 
-  <div style="max-width: 600px; margin: 22px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px #e0e0e0; padding: 22px;">
-    <a href="/groups" style="color:#2D9CDB; text-decoration:none;">← {{ t('back_to_groups') }}</a>
+  <div class="container">
+    <div class="card">
+      <a href="/groups" style="text-decoration:none;">← {{ t('back_to_groups') }}</a>
 
-    <h2 style="color:#2D9CDB; margin:10px 0 0 0;">{{ group.name }}</h2>
-    {% if group.description %}
-      <div style="color:#444; margin-top:6px;">{{ group.description }}</div>
-    {% endif %}
+      <div class="sectionTitle" style="margin-top:14px;">{{ group.name }}</div>
+      {% if group.description %}
+        <div class="muted" style="margin-top:6px; line-height:1.45;">{{ group.description }}</div>
+      {% endif %}
 
-    <div style="margin-top:14px; border:1px solid #e8eef0; border-radius:10px; padding:14px;">
-      <div style="color:#222;"><strong>₹{{ group.monthly_amount }}</strong> {{ t('label_per_month') }}</div>
-      <div style="color:#555; margin-top:6px;"><strong>{{ t('status') }}:</strong> {{ status }}</div>
-      <div style="color:#555; margin-top:6px;"><strong>{{ t('members') }}:</strong> {{ joined_members }}/{{ group.max_members }}</div>
-      <div style="color:#555; margin-top:6px;"><strong>{{ t('label_receiver_upi') }}</strong> {% if group.receiver_upi %}{{ group.receiver_upi }}{% else %}<span style="color:#999;">{{ t('not_set') }}</span>{% endif %}</div>
-    </div>
+      <div class="notice" style="margin-top:14px;">
+        <div style="display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+          <div><strong>₹{{ group.monthly_amount }}</strong> {{ t('label_per_month') }}</div>
+          <div><strong>{{ t('status') }}:</strong> {{ status }}</div>
+          <div><strong>{{ t('members') }}:</strong> {{ joined_members }}/{{ group.max_members }}</div>
+        </div>
+        <div class="muted" style="margin-top:10px;"><strong>{{ t('label_receiver_upi') }}</strong> {% if group.receiver_upi %}{{ group.receiver_upi }}{% else %}<span class="muted">{{ t('not_set') }}</span>{% endif %}</div>
+      </div>
 
-    <div style="margin-top:14px; border:1px solid #e8eef0; border-radius:10px; padding:14px;">
-      <div style="font-weight:800; color:#2D9CDB;">{{ t('benefit_simple_saving_title') }}</div>
-      <div style="color:#444; margin-top:6px; line-height:1.5;">{{ t('benefit_simple_saving_body') }}</div>
-      <div style="color:#444; margin-top:10px; line-height:1.5;"><strong>{{ t('benefit_transparent_title') }}:</strong> {{ t('benefit_transparent_body') }}</div>
-      <div style="color:#444; margin-top:10px; line-height:1.5;"><strong>{{ t('benefit_money_never_to_us_title') }}:</strong> {{ t('benefit_money_never_to_us_body') }}</div>
-      <div style="color:#666; margin-top:8px; line-height:1.5;">{{ t('benefit_one_liner') }}</div>
-      <div style="color:#666; margin-top:8px; line-height:1.5;">{{ t('info_payout_label') }}</div>
+      <div class="card-pro" style="margin-top:14px; padding:14px;">
+        <div style="font-weight:900;">{{ t('benefit_simple_saving_title') }}</div>
+        <div class="muted" style="margin-top:6px; line-height:1.5;">{{ t('benefit_simple_saving_body') }}</div>
+        <div class="muted" style="margin-top:10px; line-height:1.5;"><strong>{{ t('benefit_transparent_title') }}:</strong> {{ t('benefit_transparent_body') }}</div>
+        <div class="muted" style="margin-top:10px; line-height:1.5;"><strong>{{ t('benefit_money_never_to_us_title') }}:</strong> {{ t('benefit_money_never_to_us_body') }}</div>
+        <div class="muted" style="margin-top:10px; line-height:1.5;">{{ t('benefit_one_liner') }}</div>
+        <div class="muted" style="margin-top:8px; line-height:1.5;">{{ t('info_payout_label') }}</div>
+      </div>
     </div>
   </div>
 

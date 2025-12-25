@@ -51,6 +51,13 @@
         </div>
       </div>
 
+      {% if not has_groups %}
+        <div class="notice" style="margin-top:12px;">
+          <div style="font-weight:900;">Start your first group</div>
+          <div class="muted" style="margin-top:6px; line-height:1.45;">Join a group to begin saving monthly with your trusted circle.</div>
+        </div>
+      {% endif %}
+
       <div class="sectionTitle" style="margin-top:18px;">MONTHLY APP FEE</div>
       <div class="card-pro" style="padding:14px;">
         <div style="display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap;">
@@ -92,6 +99,10 @@
         <div class="btn-row">
           <a href="/chat" class="btn btn-secondary">{{ t('chat_with_bot') }}</a>
         </div>
+      </div>
+
+      <div class="muted small" style="margin-top:14px; line-height:1.4;">
+        Install tip: In your browser menu, tap “Add to Home screen” to use D-CONT like an app.
       </div>
     </div>
   </div>

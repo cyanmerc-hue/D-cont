@@ -49,7 +49,7 @@
       <ul style="list-style:none; padding:0; margin:0;">
         {% for item in pay_to %}
           <li class="card-pro" style="margin-bottom:12px; padding:14px;">
-            <div style="font-weight:bold; color:#2D9CDB;">{{ item.group.name }}</div>
+            <div style="font-weight:900;">{{ item.group.name }}</div>
             <div><strong>₹{{ item.amount }}</strong> {{ t('label_per_month') }}</div>
             {% if item.due_date %}
               <div class="notice" style="margin-top:10px;">
@@ -65,7 +65,7 @@
 
             {% if item.pay_url %}
               <div class="muted" style="margin-top:6px;">{{ t('payments_pay_directly') }}</div>
-              <a href="{{ item.pay_url }}" style="display:inline-block; margin-top:10px; background:#2D9CDB; color:#fff; padding:10px 14px; border-radius:8px; text-decoration:none;">{{ t('pay_via_upi') }}</a>
+              <a href="{{ item.pay_url }}" class="btn btn-sm" style="display:inline-block; margin-top:10px; width:auto;">{{ t('pay_via_upi') }}</a>
             {% else %}
               <div class="muted" style="margin-top:10px;">{{ t('payment_link_unavailable') }}</div>
             {% endif %}
@@ -73,7 +73,7 @@
         {% endfor %}
       </ul>
     {% else %}
-      <div class="muted">{{ t('payments_join_to_see') }}</div>
+      <div class="notice">{{ t('payments_join_to_see') }}</div>
       <a href="/groups" class="btn" style="display:inline-block; margin-top:10px; width:auto;">{{ t('go_to_groups') }}</a>
     {% endif %}
     </div>

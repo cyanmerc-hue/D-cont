@@ -2,17 +2,24 @@
 <html>
 <head>
     <title>Home - D-cont</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#05060A">
     <link rel="stylesheet" href="{{ url_for('static', filename='app.css', v=asset_version) }}">
+        <link rel="manifest" href="{{ url_for('static', filename='manifest.json', v=asset_version) }}">
+        <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icons/icon-192.png', v=asset_version) }}">
+        <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='icons/icon-512.png', v=asset_version) }}">
+        <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png', v=asset_version) }}">
 </head>
 <body class="app-body hasTabs">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
     {% include '_tab_nav.html' %}
 
-    <div style="max-width: 600px; margin: 28px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px #e0e0e0; padding: 28px;">
-        <h2 style="color:#2D9CDB; margin:0;">This page has moved</h2>
-        <p style="margin-top:10px; color:#444; line-height:1.5;">Please use the 4-tab app: Home, Groups, Payments, Profile.</p>
-        <a href="/home" style="display:inline-block; margin-top:10px; background:#2D9CDB; color:#fff; padding:10px 14px; border-radius:8px; text-decoration:none;">Go to Home</a>
-    </div>
+        <div class="container">
+            <div class="card">
+                <div class="sectionTitle" style="margin-top:0;">This page has moved</div>
+                <div class="muted" style="margin-top:6px; line-height:1.5;">Please use the bottom navigation: Home, Groups, PAY, Reward, Support.</div>
+                <a href="/home" class="btn" style="display:inline-block; margin-top:12px; width:auto;">Go to Home</a>
+            </div>
+        </div>
 
 </body>
 </html>

@@ -47,6 +47,9 @@
       <path d="M7 14h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
     <span class="tabLabel">PAY</span>
+    {% if nav_pay_badge %}
+      <span class="tabBadge" aria-label="Due amount">₹{{ nav_pay_badge }}</span>
+    {% endif %}
   </a>
 
   <a href="/rewards" class="tabItem {{ 'active' if tab=='rewards' else '' }}" aria-label="{{ t('nav_rewards') }}">

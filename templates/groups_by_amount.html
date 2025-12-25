@@ -2,36 +2,39 @@
 <html>
 <head>
     <title>Groups - ₹{{ amount }} - D-cont</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#05060A">
     <link rel="stylesheet" href="{{ url_for('static', filename='app.css', v=asset_version) }}">
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json', v=asset_version) }}">
+    <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icons/icon-192.png', v=asset_version) }}">
+    <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='icons/icon-512.png', v=asset_version) }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png', v=asset_version) }}">
 </head>
-<body class="app-body">
-    <div class="app-header">
-        <img src="/static/logo.svg" onerror="this.onerror=null;this.src='/static/logo.png';" alt="D-cont Logo" class="app-logo"/>
-    </div>
+<body class="app-body hasTabs">
+    {% include '_tab_nav.html' %}
 
-    <div style="max-width: 600px; margin: 28px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px #e0e0e0; padding: 28px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
-            <h2 style="color:#2D9CDB; margin:0;">₹{{ amount }} / month groups</h2>
-            <div style="display:flex; gap:10px; align-items:center;">
-                <a href="/groups" style="color:#2D9CDB; text-decoration:none;">Back</a>
-            </div>
+    <div class="container">
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
+          <div class="sectionTitle" style="margin-top:0;">₹{{ amount }} / month groups</div>
+          <a href="/groups" class="btn btn-secondary btn-sm" style="width:auto;">{{ t('back_to_groups') }}</a>
         </div>
 
         {% if groups and groups|length > 0 %}
-            <ul style="list-style:none; padding:0; margin-top:18px;">
+            <ul style="list-style:none; padding:0; margin-top:12px;">
             {% for g in groups %}
-                <li style="margin-bottom: 12px; background: #fff; border: 1px solid #e8eef0; border-radius: 10px; padding: 14px; box-shadow: 0 1px 4px #f0f0f0;">
+                <li class="card-pro" style="margin-bottom:12px; padding:14px;">
                     <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
                         <div>
-                            <div style="font-weight:bold; color:#2D9CDB;">{{ g.name }}</div>
-                            <div style="color:#444;">{{ g.description }}</div>
+                            <div style="font-weight:900;">{{ g.name }}</div>
+                            <div class="muted" style="margin-top:6px; line-height:1.45;">{{ g.description }}</div>
                         </div>
                         <div style="text-align:right; min-width:120px;">
                             {% if g.member_status %}
-                                <div style="font-weight:bold; color:#222;">{{ g.member_status|status_label }}</div>
-                                <a href="/groups" style="color:#2D9CDB; text-decoration:none;">Go to Groups</a>
+                                <div style="font-weight:900;">{{ g.member_status|status_label }}</div>
+                                <a href="/groups" class="btn btn-secondary btn-sm" style="margin-top:8px; width:auto;">{{ t('go_to_groups') }}</a>
                             {% else %}
-                                <a href="/groups" style="background:#2D9CDB; color:#fff; padding:8px 14px; border-radius:8px; text-decoration:none; display:inline-block;">Go to Groups</a>
+                                <a href="/groups" class="btn btn-sm" style="width:auto;">{{ t('go_to_groups') }}</a>
                             {% endif %}
                         </div>
                     </div>
@@ -39,9 +42,10 @@
             {% endfor %}
             </ul>
         {% else %}
-            <p style="color:#555; margin-top:18px;">No groups available for this amount right now.</p>
-            <a href="/groups" style="display:inline-block; margin-top:10px; background:#2D9CDB; color:#fff; padding:10px 14px; border-radius:8px; text-decoration:none;">Go to Groups tab</a>
+            <div class="notice" style="margin-top:12px;">No groups available for this amount right now.</div>
+            <a href="/groups" class="btn" style="display:inline-block; margin-top:10px; width:auto;">{{ t('go_to_groups') }}</a>
         {% endif %}
+      </div>
     </div>
 </body>
 </html>

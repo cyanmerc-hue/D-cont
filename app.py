@@ -462,6 +462,7 @@ TRANSLATIONS = {
         'login_fingerprint_btn': 'Login using fingerprint',
         'login_fingerprint_help': 'Uses your device passkey/biometric if enabled.',
         'login_enable_fingerprint_hint': 'First login with password and enable fingerprint in Profile.',
+        'login_rate_limited': 'Too many login attempts. Please try again after 15 minutes.',
         'login_language': 'Language',
         'login_admin_title': 'Admin Login',
         'login_admin_user': 'User ID',
@@ -496,10 +497,12 @@ TRANSLATIONS = {
         'profile_mpin_new': 'New MPIN (4 digits)',
         'profile_mpin_confirm': 'Confirm MPIN',
         'profile_mpin_save': 'Save MPIN',
+        'profile_mpin_disable': 'Disable MPIN',
         'profile_fingerprint_title': 'Fingerprint login (Passkey)',
         'profile_fingerprint_enable': 'Enable Fingerprint Login',
         'profile_fingerprint_enabled': 'Enabled on this account.',
         'profile_fingerprint_note': 'This uses your phone biometric via passkeys (WebAuthn).',
+        'profile_fingerprint_disable': 'Disable Fingerprint Login',
         'save': 'Save',
         'logout': 'Logout',
         'payments_title': 'Payments',
@@ -653,6 +656,7 @@ TRANSLATIONS = {
         'login_fingerprint_btn': 'फिंगरप्रिंट से लॉगिन',
         'login_fingerprint_help': 'यदि सक्षम है तो डिवाइस पासकी/बायोमेट्रिक उपयोग होगा।',
         'login_enable_fingerprint_hint': 'पहले पासवर्ड से लॉगिन करें, फिर प्रोफ़ाइल में फिंगरप्रिंट सक्षम करें।',
+        'login_rate_limited': 'बहुत ज्यादा लॉगिन प्रयास। कृपया 15 मिनट बाद फिर प्रयास करें।',
         'login_language': 'भाषा',
         'login_admin_title': 'एडमिन लॉगिन',
         'login_admin_user': 'यूज़र आईडी',
@@ -687,10 +691,12 @@ TRANSLATIONS = {
         'profile_mpin_new': 'नया MPIN (4 अंक)',
         'profile_mpin_confirm': 'MPIN पुष्टि',
         'profile_mpin_save': 'MPIN सेव करें',
+        'profile_mpin_disable': 'MPIN बंद करें',
         'profile_fingerprint_title': 'फिंगरप्रिंट लॉगिन (पासकी)',
         'profile_fingerprint_enable': 'फिंगरप्रिंट लॉगिन सक्षम करें',
         'profile_fingerprint_enabled': 'इस अकाउंट पर सक्षम है।',
         'profile_fingerprint_note': 'यह पासकी (WebAuthn) से फोन बायोमेट्रिक उपयोग करता है।',
+        'profile_fingerprint_disable': 'फिंगरप्रिंट लॉगिन बंद करें',
         'save': 'सेव करें',
         'logout': 'लॉगआउट',
         'payments_title': 'भुगतान',
@@ -1325,9 +1331,15 @@ def inject_support_links():
         else:
             nav_user_pill = f"{display_name} • {mobile}" if mobile else display_name
 
+    pay_badge = (session.get('nav_pay_badge') or '').strip()
+    # Keep it tiny; only show if it's a short number.
+    if len(pay_badge) > 4:
+        pay_badge = ''
+
     return {
         'support_whatsapp_url': build_whatsapp_link('Hi D-CONT Support, I need help with: '),
         'nav_user_pill': nav_user_pill,
+        'nav_pay_badge': pay_badge,
         'asset_version': ASSET_VERSION,
     }
 
@@ -1729,6 +1741,97 @@ def _password_matches(stored_pw: str, provided_pw: str) -> bool:
     return stored_pw == provided_pw
 
 
+AUTH_RATE_LIMIT_WINDOW_SECONDS = 15 * 60
+AUTH_RATE_LIMIT_MAX_PASSWORD = 10
+AUTH_RATE_LIMIT_MAX_MPIN = 8
+
+
+def _client_ip() -> str:
+    try:
+        xfwd = (request.headers.get('X-Forwarded-For') or '').strip()
+        if xfwd:
+            return xfwd.split(',')[0].strip()
+    except Exception:
+        pass
+    return (request.remote_addr or '').strip()
+
+
+def _auth_normalize_identifier(method: str, identifier: str) -> str:
+    identifier = (identifier or '').strip()
+    if not identifier:
+        return ''
+    if method == 'mpin':
+        return _normalize_mobile_digits(identifier)
+    digits = _normalize_mobile_digits(identifier)
+    if digits and len(digits) >= 10:
+        return digits
+    return identifier.lower()
+
+
+def _auth_is_rate_limited(method: str, identifier: str, ip: str) -> bool:
+    method = (method or '').strip()
+    ident = _auth_normalize_identifier(method, identifier)
+    ip = (ip or '').strip()
+    if not method or (not ident and not ip):
+        return False
+
+    cutoff = (datetime.now() - timedelta(seconds=AUTH_RATE_LIMIT_WINDOW_SECONDS)).isoformat(timespec='seconds')
+    max_attempts = AUTH_RATE_LIMIT_MAX_MPIN if method == 'mpin' else AUTH_RATE_LIMIT_MAX_PASSWORD
+
+    conn = get_db()
+    c = conn.cursor()
+    try:
+        ip_count = 0
+        ident_count = 0
+
+        if ip:
+            c.execute(
+                "SELECT COUNT(1) FROM auth_attempts WHERE method=? AND success=0 AND ip=? AND created_at>=?",
+                (method, ip, cutoff),
+            )
+            row = c.fetchone()
+            ip_count = int(row[0] or 0) if row else 0
+
+        if ident:
+            c.execute(
+                "SELECT COUNT(1) FROM auth_attempts WHERE method=? AND success=0 AND identifier=? AND created_at>=?",
+                (method, ident, cutoff),
+            )
+            row = c.fetchone()
+            ident_count = int(row[0] or 0) if row else 0
+
+        conn.close()
+        return max(ip_count, ident_count) >= max_attempts
+    except sqlite3.OperationalError:
+        conn.close()
+        return False
+
+
+def _auth_record_attempt(method: str, identifier: str, ip: str, success: bool) -> None:
+    method = (method or '').strip()
+    if not method:
+        return
+
+    ident = _auth_normalize_identifier(method, identifier)
+    ip = (ip or '').strip()
+    now = datetime.now().isoformat(timespec='seconds')
+
+    conn = get_db()
+    c = conn.cursor()
+    try:
+        c.execute(
+            "INSERT INTO auth_attempts (method, identifier, ip, success, created_at) VALUES (?,?,?,?,?)",
+            (method, ident, ip, 1 if success else 0, now),
+        )
+
+        cleanup_cutoff = (datetime.now() - timedelta(days=7)).isoformat(timespec='seconds')
+        c.execute("DELETE FROM auth_attempts WHERE created_at < ?", (cleanup_cutoff,))
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+    conn.close()
+
+
 def _repair_blank_username(conn, username: str, mobile: str) -> str:
     """Best-effort fix for legacy rows where username is blank.
 
@@ -1811,6 +1914,8 @@ def chat():
                 uname = (session.get('username') or '').strip()
                 prefill = f"Hi D-CONT Support, I need help. User: {uname}. Message: {message}"
                 whatsapp_url = build_whatsapp_link(prefill)
+                session['whatsapp_handoff_url'] = whatsapp_url
+                session['whatsapp_handoff_message'] = message
 
             if bot_text:
                 history.append({'from': 'bot', 'text': bot_text})
@@ -1828,6 +1933,41 @@ def chat():
         whatsapp_url=whatsapp_url,
         active_tab='support',
     )
+
+
+@app.route('/support/whatsapp', methods=['GET'])
+@require_customer
+def support_whatsapp_handoff():
+    url = (session.get('whatsapp_handoff_url') or '').strip()
+    message = (session.get('whatsapp_handoff_message') or '').strip()
+
+    if not url:
+        return redirect(url_for('chat'))
+
+    # Basic allowlist: only redirect to WhatsApp domains
+    if not (url.startswith('https://wa.me/') or url.startswith('https://api.whatsapp.com/') or url.startswith('https://web.whatsapp.com/')):
+        session.pop('whatsapp_handoff_url', None)
+        session.pop('whatsapp_handoff_message', None)
+        return redirect(url_for('chat'))
+
+    username = session.get('username')
+    ip = _client_ip()
+    now = datetime.now().isoformat(timespec='seconds')
+    conn = get_db()
+    c = conn.cursor()
+    try:
+        c.execute(
+            'INSERT INTO support_handoffs (username, channel, message, ip, created_at) VALUES (?,?,?,?,?)',
+            (username, 'whatsapp', message, ip, now),
+        )
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+    conn.close()
+
+    session.pop('whatsapp_handoff_url', None)
+    session.pop('whatsapp_handoff_message', None)
+    return redirect(url)
 
 
 @app.route('/rewards', methods=['GET'])
@@ -2342,6 +2482,78 @@ def profile_set_mpin():
     return redirect(url_for('profile'))
 
 
+@app.route('/profile/mpin/disable', methods=['POST'])
+@require_customer
+def profile_disable_mpin():
+    username = session['username']
+    current_password = request.form.get('current_password') or ''
+    if not current_password:
+        flash('Enter your password to disable MPIN.')
+        return redirect(url_for('profile'))
+
+    conn = get_db()
+    c = conn.cursor()
+    try:
+        c.execute('SELECT password FROM users WHERE username=?', (username,))
+        row = c.fetchone()
+    except sqlite3.OperationalError:
+        row = None
+    if not row or not _password_matches(row[0] or '', current_password):
+        conn.close()
+        flash('Invalid password.')
+        return redirect(url_for('profile'))
+
+    try:
+        c.execute('UPDATE users SET mpin_hash=?, mpin_set_at=NULL WHERE username=?', ('', username))
+        conn.commit()
+    except sqlite3.OperationalError:
+        conn.close()
+        flash('Unable to disable MPIN right now.')
+        return redirect(url_for('profile'))
+    conn.close()
+    flash('MPIN disabled.')
+    return redirect(url_for('profile'))
+
+
+@app.route('/profile/fingerprint/disable', methods=['POST'])
+@require_customer
+def profile_disable_fingerprint():
+    username = session['username']
+    current_password = request.form.get('current_password') or ''
+    if not current_password:
+        flash('Enter your password to disable fingerprint login.')
+        return redirect(url_for('profile'))
+
+    conn = get_db()
+    c = conn.cursor()
+    try:
+        c.execute('SELECT password FROM users WHERE username=?', (username,))
+        row = c.fetchone()
+    except sqlite3.OperationalError:
+        row = None
+    if not row or not _password_matches(row[0] or '', current_password):
+        conn.close()
+        flash('Invalid password.')
+        return redirect(url_for('profile'))
+
+    try:
+        c.execute(
+            'UPDATE users SET webauthn_credential_id=?, webauthn_public_key=?, webauthn_sign_count=?, webauthn_added_at=NULL WHERE username=?',
+            ('', '', 0, username),
+        )
+        conn.commit()
+    except sqlite3.OperationalError:
+        conn.close()
+        flash('Unable to disable fingerprint login right now.')
+        return redirect(url_for('profile'))
+    conn.close()
+    session.pop('webauthn_reg_challenge', None)
+    session.pop('webauthn_auth_challenge', None)
+    session.pop('webauthn_auth_username', None)
+    flash('Fingerprint login disabled.')
+    return redirect(url_for('profile'))
+
+
 @app.route('/auth/webauthn/register/options', methods=['GET'])
 @require_customer
 def webauthn_register_options():
@@ -2709,6 +2921,30 @@ def init_db():
             net_amount INTEGER,
             verified_at TEXT,
             UNIQUE(username, month)
+        )'''
+    )
+
+    # Login rate-limiting (failed attempt counters)
+    c.execute(
+        '''CREATE TABLE IF NOT EXISTS auth_attempts (
+            id INTEGER PRIMARY KEY,
+            method TEXT,
+            identifier TEXT,
+            ip TEXT,
+            success INTEGER,
+            created_at TEXT
+        )'''
+    )
+
+    # Support handoff logging
+    c.execute(
+        '''CREATE TABLE IF NOT EXISTS support_handoffs (
+            id INTEGER PRIMARY KEY,
+            username TEXT,
+            channel TEXT,
+            message TEXT,
+            ip TEXT,
+            created_at TEXT
         )'''
     )
 
@@ -4554,6 +4790,9 @@ def payments_tab():
     conn.commit()
     conn.close()
 
+    net_to_show = (net_amount_actual if app_fee_paid_this_month else max(0, int(app_fee_amount) - int(credit_preview)))
+    session['nav_pay_badge'] = str(int(net_to_show)) if (not app_fee_paid_this_month and int(net_to_show) > 0) else ''
+
     today_iso = _today_iso()
 
     pay_to = []
@@ -4705,6 +4944,11 @@ def login():
                 flash('Enter admin user id and password.')
                 return render_template('login.html')
 
+            client_ip = _client_ip()
+            if _auth_is_rate_limited('admin_pw', admin_username, client_ip):
+                flash(t('login_rate_limited'))
+                return render_template('login.html')
+
             conn = get_db()
             c = conn.cursor()
             try:
@@ -4733,7 +4977,10 @@ def login():
 
             if not password_ok:
                 flash('Invalid admin credentials.')
+                _auth_record_attempt('admin_pw', admin_username, client_ip, success=False)
                 return render_template('login.html')
+
+            _auth_record_attempt('admin_pw', admin_username, client_ip, success=True)
 
             session['username'] = row[0]
             session['role'] = 'admin'
@@ -4751,6 +4998,11 @@ def login():
                 return render_template('login.html')
             if not _is_valid_mpin(mpin):
                 flash('Enter your 4-digit MPIN.')
+                return render_template('login.html')
+
+            client_ip = _client_ip()
+            if _auth_is_rate_limited('mpin', mobile_identifier, client_ip):
+                flash(t('login_rate_limited'))
                 return render_template('login.html')
 
             conn = get_db()
@@ -4777,8 +5029,11 @@ def login():
             conn.close()
 
             if not matched:
+                _auth_record_attempt('mpin', mobile_identifier, client_ip, success=False)
                 flash('Invalid MPIN or mobile number.')
                 return render_template('login.html')
+
+            _auth_record_attempt('mpin', mobile_identifier, client_ip, success=True)
 
             session['username'] = matched[0]
             session['role'] = matched[1]
@@ -4796,6 +5051,11 @@ def login():
 
         if not identifier or not password:
             flash('Enter your username/mobile and password.')
+            return render_template('login.html')
+
+        client_ip = _client_ip()
+        if _auth_is_rate_limited('password', identifier, client_ip):
+            flash(t('login_rate_limited'))
             return render_template('login.html')
 
         conn = get_db()
@@ -4833,6 +5093,7 @@ def login():
 
         if not candidate_rows:
             conn.close()
+            _auth_record_attempt('password', identifier, client_ip, success=False)
             flash('Invalid credentials.')
             return render_template('login.html')
 
@@ -4871,8 +5132,11 @@ def login():
             if any_blocked:
                 flash('Your account is blocked. Please contact support.')
             else:
+                _auth_record_attempt('password', identifier, client_ip, success=False)
                 flash('Invalid credentials.')
             return render_template('login.html')
+
+        _auth_record_attempt('password', identifier, client_ip, success=True)
 
         session['username'] = matched[0]
         session['role'] = matched[1]

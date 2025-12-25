@@ -64,9 +64,23 @@
         <button type="submit" class="btn" style="margin-top:10px;">{{ t('profile_mpin_save') }}</button>
       </form>
 
+      {% if mpin_enabled %}
+        <form method="POST" action="/profile/mpin/disable" style="margin-top:10px;">
+          <label class="muted" style="display:block; font-size:0.95em;">{{ t('profile_mpin_current_password') }}</label>
+          <input name="current_password" type="password" class="input" autocomplete="current-password" />
+          <button type="submit" class="btn btn-secondary btn-sm" style="width:auto;">{{ t('profile_mpin_disable') }}</button>
+        </form>
+      {% endif %}
+
       <div class="sectionTitle" style="margin-top:14px;">{{ t('profile_fingerprint_title') }}</div>
       {% if fingerprint_enabled %}
         <div class="muted" style="margin-top:6px;">{{ t('profile_fingerprint_enabled') }}</div>
+
+        <form method="POST" action="/profile/fingerprint/disable" style="margin-top:10px;">
+          <label class="muted" style="display:block; font-size:0.95em;">{{ t('profile_mpin_current_password') }}</label>
+          <input name="current_password" type="password" class="input" autocomplete="current-password" />
+          <button type="submit" class="btn btn-secondary btn-sm" style="width:auto;">{{ t('profile_fingerprint_disable') }}</button>
+        </form>
       {% else %}
         <button type="button" class="btn btnGhost" id="enableFingerprintBtn" style="margin-top:10px;">{{ t('profile_fingerprint_enable') }}</button>
         <div class="muted small" id="fingerprintSetupStatus" style="margin-top:8px;"></div>
@@ -233,7 +247,7 @@
           <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
             <div style="font-weight:bold;">Aadhaar</div>
             {% if aadhaar_doc %}
-              <a href="/profile/doc/aadhaar" style="color:#2D9CDB; text-decoration:none;">{{ t('download') }}</a>
+              <a href="/profile/doc/aadhaar" class="btn btn-secondary btn-sm" style="width:auto;">{{ t('download') }}</a>
             {% else %}
               <span class="muted" style="font-size:0.9em;">{{ t('not_uploaded') }}</span>
             {% endif %}
@@ -245,7 +259,7 @@
           <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
             <div style="font-weight:bold;">PAN</div>
             {% if pan_doc %}
-              <a href="/profile/doc/pan" style="color:#2D9CDB; text-decoration:none;">{{ t('download') }}</a>
+              <a href="/profile/doc/pan" class="btn btn-secondary btn-sm" style="width:auto;">{{ t('download') }}</a>
             {% else %}
               <span class="muted" style="font-size:0.9em;">{{ t('not_uploaded') }}</span>
             {% endif %}
@@ -257,7 +271,7 @@
           <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
             <div style="font-weight:bold;">Passport</div>
             {% if passport_doc %}
-              <a href="/profile/doc/passport" style="color:#2D9CDB; text-decoration:none;">{{ t('download') }}</a>
+              <a href="/profile/doc/passport" class="btn btn-secondary btn-sm" style="width:auto;">{{ t('download') }}</a>
             {% else %}
               <span class="muted" style="font-size:0.9em;">{{ t('not_uploaded') }}</span>
             {% endif %}
@@ -266,7 +280,7 @@
         </div>
       </div>
 
-      <button type="submit" style="margin-top:12px; width:100%; background:#2D9CDB; color:#fff; border:none; padding:10px 14px; border-radius:8px; cursor:pointer;">{{ t('save') }}</button>
+      <button type="submit" class="btn" style="margin-top:12px;">{{ t('save') }}</button>
     </form>
 
     <div class="card-pro" id="early-payout" style="margin-top:14px; padding:14px;">

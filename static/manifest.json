@@ -1,11 +1,15 @@
 {
-  "name": "D-cont",
-  "short_name": "D-cont",
+  "name": "D-CONT",
+  "short_name": "D-CONT",
   "description": "D-CONT — non-custodial contribution tracking",
   "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait",
+  "lang": "en",
+  "categories": ["finance", "business"],
   "background_color": "#05060A",
   "theme_color": "#05060A",
   "icons": [

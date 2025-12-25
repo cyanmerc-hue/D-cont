@@ -37,12 +37,12 @@
       <ul style="list-style:none; padding:0; margin:0;">
         {% for g in my_groups %}
           <li class="card-pro" style="margin-bottom:12px; padding:14px;">
-            <div style="font-weight:bold; color:#2D9CDB;">{{ g.name }}</div>
+            <div style="font-weight:900;">{{ g.name }}</div>
             <div><strong>₹{{ g.monthly_amount }}</strong> {{ t('label_per_month') }}</div>
             <div class="muted" style="margin-top:6px; font-size:0.95em;"><strong>{{ t('status') }}:</strong> {{ g.status }} · <strong>{{ t('members') }}:</strong> {{ g.joined_members }}/{{ g.max_members }}</div>
 
             <details style="margin-top:10px;">
-              <summary style="cursor:pointer; color:#2D9CDB;">{{ t('view_details') }}</summary>
+              <summary style="cursor:pointer; color: var(--accent);">{{ t('view_details') }}</summary>
               {% if g.description %}<div class="muted" style="margin-top:8px;">{{ g.description }}</div>{% endif %}
               <div class="muted" style="margin-top:8px;"><strong>{{ t('label_receiver_name') }}</strong> {% if g.receiver_name %}{{ g.receiver_name }}{% else %}<span class="muted">{{ t('not_set') }}</span>{% endif %}</div>
               <div class="muted" style="margin-top:4px;"><strong>{{ t('label_receiver_upi') }}</strong> {% if g.receiver_upi %}{{ g.receiver_upi }}{% else %}<span class="muted">{{ t('not_set') }}</span>{% endif %}</div>
@@ -62,13 +62,13 @@
                 <div class="muted" style="margin-top:8px;">{{ t('members_list_unavailable') }}</div>
               {% endif %}
 
-              <a href="/payments" style="display:inline-block; margin-top:10px; background:#2D9CDB; color:#fff; padding:8px 12px; border-radius:8px; text-decoration:none;">{{ t('go_to_payments') }}</a>
+              <a href="/payments" class="btn btn-secondary btn-sm" style="display:inline-block; margin-top:10px; width:auto;">{{ t('go_to_payments') }}</a>
             </details>
           </li>
         {% endfor %}
       </ul>
     {% else %}
-      <div class="muted">{{ t('no_joined_groups_yet') }}</div>
+      <div class="notice" style="margin-top:10px;">{{ t('no_joined_groups_yet') }}</div>
     {% endif %}
 
     <h3 class="sectionTitle" style="margin-top:22px;">{{ t('join_a_group') }}</h3>
@@ -78,7 +78,7 @@
           <li class="card-pro" style="margin-bottom:12px; padding:14px;">
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
               <div>
-                <div style="font-weight:bold; color:#2D9CDB;">{{ g.name }}</div>
+                <div style="font-weight:900;">{{ g.name }}</div>
                 <div><strong>₹{{ g.monthly_amount }}</strong> {{ t('label_per_month') }}</div>
                 {% if g.description %}<div class="muted" style="margin-top:4px;">{{ g.description }}</div>{% endif %}
                 <div class="muted" style="margin-top:6px; font-size:0.95em;"><strong>{{ t('members') }}:</strong> {{ g.joined_members }}/{{ g.max_members }}</div>
@@ -86,7 +86,7 @@
               <div style="min-width:110px; text-align:right;">
                 <form method="POST" action="/groups/join" style="margin:0;">
                   <input type="hidden" name="group_id" value="{{ g.id }}" />
-                  <button type="submit" style="background:#2D9CDB; color:#fff; border:none; padding:8px 12px; border-radius:8px; cursor:pointer;">{{ t('btn_join') }}</button>
+                  <button type="submit" class="btn btn-sm" style="width:auto;">{{ t('btn_join') }}</button>
                 </form>
               </div>
             </div>
@@ -94,7 +94,7 @@
         {% endfor %}
       </ul>
     {% else %}
-      <div class="muted">{{ t('no_groups_available_to_join') }}</div>
+      <div class="notice" style="margin-top:10px;">{{ t('no_groups_available_to_join') }}</div>
     {% endif %}
     </div>
   </div>
