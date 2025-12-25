@@ -81,6 +81,20 @@ body.app-body a:not(.btn):not(.btnPrimary):not(.btnGhost):not(.nav-link):hover {
   font-size: 15px;
   font-weight: 800;
   letter-spacing: 0.22px;
+  position: relative;
+  padding-left: 12px;
+}
+
+.sectionTitle::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 2px;
+  bottom: 2px;
+  width: 3px;
+  border-radius: 999px;
+  background: rgba(var(--warning-rgb), 0.85);
+  box-shadow: 0 0 0 4px rgba(var(--warning-rgb), 0.10);
 }
 
 .table {
