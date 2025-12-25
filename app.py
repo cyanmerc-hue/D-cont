@@ -187,6 +187,28 @@ FAQ_INTENTS = [
         'answer': "This looks like something our team should handle. Tap below to chat on WhatsApp.",
         'handoff': True,
     },
+    {
+        'key': 'install_app',
+        'triggers': [
+            "download app",
+            "get app",
+            "android app",
+            "iphone app",
+            "ios app",
+            "app on phone",
+            "install app",
+            "add to home screen",
+            "home screen",
+            "how to install",
+            "how to get d-cont app",
+            "how to get d cont app",
+        ],
+        'answer': (
+            "You can use D-CONT like an app without Play Store: "
+            "Android (Chrome): open https://d-cont-web.onrender.com → tap ⋮ → Add to Home screen → Add (or tap ‘Install app’ if shown). "
+            "iPhone (Safari): open the link in Safari → Share → Add to Home Screen → Add."
+        ),
+    },
 ]
 
 
@@ -724,6 +746,66 @@ def _dedupe_user_rows(rows):
         seen.add(key)
         deduped.append(row)
     return deduped
+
+
+@app.route('/chat', methods=['GET', 'POST'])
+@require_customer
+def chat():
+    history = session.get('bot_history') or []
+    if not isinstance(history, list):
+        history = []
+
+    intent_link = None
+    intent_link_label = None
+    whatsapp_url = None
+
+    if request.method == 'POST':
+        message = (request.form.get('message') or '').strip()
+        if message:
+            history.append({'from': 'user', 'text': message})
+
+            intent = match_intent(message)
+            needs_handoff = message_needs_handoff(message)
+            bot_text = None
+
+            if intent:
+                bot_text = (intent.get('answer') or '').strip()
+                intent_link = intent.get('link')
+                if intent_link:
+                    if intent_link == '/home':
+                        intent_link_label = 'Open Home'
+                    elif intent_link == '/add-upi':
+                        intent_link_label = 'Open Add UPI'
+                    else:
+                        intent_link_label = 'Open'
+                if intent.get('handoff'):
+                    needs_handoff = True
+            else:
+                bot_text = (
+                    "I can help with groups, payments, safety tips, and support. "
+                    "Try: ‘How do I join a group?’ or ‘Safety tips / avoid scams’."
+                )
+
+            if needs_handoff:
+                uname = (session.get('username') or '').strip()
+                prefill = f"Hi D-CONT Support, I need help. User: {uname}. Message: {message}"
+                whatsapp_url = build_whatsapp_link(prefill)
+
+            if bot_text:
+                history.append({'from': 'bot', 'text': bot_text})
+
+            # Keep cookie-sized session data small
+            history = history[-30:]
+            session['bot_history'] = history
+
+    return render_template(
+        'chat.html',
+        history=history,
+        quick_replies=BOT_QUICK_REPLIES,
+        intent_link=intent_link,
+        intent_link_label=intent_link_label,
+        whatsapp_url=whatsapp_url,
+    )
 @app.route('/profile', methods=['GET', 'POST'])
 @require_customer
 def profile():
