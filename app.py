@@ -13,6 +13,34 @@ from email.message import EmailMessage
 import re
 import time
 
+from flask import jsonify
+
+try:
+    from webauthn import (
+        generate_registration_options,
+        verify_registration_response,
+        generate_authentication_options,
+        verify_authentication_response,
+        options_to_json,
+    )
+    from webauthn.helpers.structs import (
+        AuthenticatorSelectionCriteria,
+        PublicKeyCredentialDescriptor,
+        UserVerificationRequirement,
+    )
+    from webauthn.helpers import base64url_to_bytes, bytes_to_base64url
+except Exception:
+    generate_registration_options = None
+    verify_registration_response = None
+    generate_authentication_options = None
+    verify_authentication_response = None
+    options_to_json = None
+    AuthenticatorSelectionCriteria = None
+    PublicKeyCredentialDescriptor = None
+    UserVerificationRequirement = None
+    base64url_to_bytes = None
+    bytes_to_base64url = None
+
 app = Flask(__name__)
 # In production (Render/Heroku/etc.), set SECRET_KEY as an environment variable.
 app.secret_key = os.environ.get('SECRET_KEY', 'your_secret_key')
@@ -422,6 +450,16 @@ TRANSLATIONS = {
         'login_password_label': 'Password',
         'login_password_ph': 'Enter password',
         'login_btn': 'Login',
+        'login_mpin_title': 'Enter your MPIN',
+        'login_mpin_help': 'Use MPIN for faster login on this device.',
+        'login_mpin_btn': 'Login with MPIN',
+        'login_or': 'OR',
+        'login_mobile_title': 'Login with your mobile number',
+        'login_mobile_label': 'Mobile Number',
+        'login_mobile_ph': 'Enter mobile number',
+        'login_fingerprint_btn': 'Login using fingerprint',
+        'login_fingerprint_help': 'Uses your device passkey/biometric if enabled.',
+        'login_enable_fingerprint_hint': 'First login with password and enable fingerprint in Profile.',
         'login_language': 'Language',
         'login_admin_title': 'Admin Login',
         'login_admin_user': 'User ID',
@@ -450,6 +488,16 @@ TRANSLATIONS = {
         'status': 'Status',
         'not_set': 'Not set',
         'profile_title': 'Profile',
+        'profile_quick_login_title': 'Quick Login (MPIN / Fingerprint)',
+        'profile_mpin_title': 'Set or change MPIN',
+        'profile_mpin_current_password': 'Current Password',
+        'profile_mpin_new': 'New MPIN (4 digits)',
+        'profile_mpin_confirm': 'Confirm MPIN',
+        'profile_mpin_save': 'Save MPIN',
+        'profile_fingerprint_title': 'Fingerprint login (Passkey)',
+        'profile_fingerprint_enable': 'Enable Fingerprint Login',
+        'profile_fingerprint_enabled': 'Enabled on this account.',
+        'profile_fingerprint_note': 'This uses your phone biometric via passkeys (WebAuthn).',
         'save': 'Save',
         'logout': 'Logout',
         'payments_title': 'Payments',
@@ -591,6 +639,16 @@ TRANSLATIONS = {
         'login_password_label': 'पासवर्ड',
         'login_password_ph': 'पासवर्ड दर्ज करें',
         'login_btn': 'लॉगिन करें',
+        'login_mpin_title': 'अपना MPIN डालें',
+        'login_mpin_help': 'इस डिवाइस पर तेज़ लॉगिन के लिए MPIN उपयोग करें।',
+        'login_mpin_btn': 'MPIN से लॉगिन',
+        'login_or': 'या',
+        'login_mobile_title': 'मोबाइल नंबर से लॉगिन',
+        'login_mobile_label': 'मोबाइल नंबर',
+        'login_mobile_ph': 'मोबाइल नंबर दर्ज करें',
+        'login_fingerprint_btn': 'फिंगरप्रिंट से लॉगिन',
+        'login_fingerprint_help': 'यदि सक्षम है तो डिवाइस पासकी/बायोमेट्रिक उपयोग होगा।',
+        'login_enable_fingerprint_hint': 'पहले पासवर्ड से लॉगिन करें, फिर प्रोफ़ाइल में फिंगरप्रिंट सक्षम करें।',
         'login_language': 'भाषा',
         'login_admin_title': 'एडमिन लॉगिन',
         'login_admin_user': 'यूज़र आईडी',
@@ -619,6 +677,16 @@ TRANSLATIONS = {
         'status': 'स्थिति',
         'not_set': 'सेट नहीं है',
         'profile_title': 'प्रोफ़ाइल',
+        'profile_quick_login_title': 'क्विक लॉगिन (MPIN / फिंगरप्रिंट)',
+        'profile_mpin_title': 'MPIN सेट/बदलें',
+        'profile_mpin_current_password': 'वर्तमान पासवर्ड',
+        'profile_mpin_new': 'नया MPIN (4 अंक)',
+        'profile_mpin_confirm': 'MPIN पुष्टि',
+        'profile_mpin_save': 'MPIN सेव करें',
+        'profile_fingerprint_title': 'फिंगरप्रिंट लॉगिन (पासकी)',
+        'profile_fingerprint_enable': 'फिंगरप्रिंट लॉगिन सक्षम करें',
+        'profile_fingerprint_enabled': 'इस अकाउंट पर सक्षम है।',
+        'profile_fingerprint_note': 'यह पासकी (WebAuthn) से फोन बायोमेट्रिक उपयोग करता है।',
         'save': 'सेव करें',
         'logout': 'लॉगआउट',
         'payments_title': 'भुगतान',
@@ -1303,7 +1371,71 @@ USER_COLUMNS = {
     "referred_by": "TEXT",
     # Legacy field (deprecated). Referral rewards are not cash.
     "wallet_credit": "INTEGER",
+
+    # Customer quick login
+    "mpin_hash": "TEXT",
+    "mpin_set_at": "TEXT",
+    "webauthn_credential_id": "TEXT",
+    "webauthn_public_key": "TEXT",
+    "webauthn_sign_count": "INTEGER",
+    "webauthn_added_at": "TEXT",
 }
+
+
+def _is_valid_mpin(raw: str) -> bool:
+    pin = (raw or '').strip()
+    return bool(re.fullmatch(r"\d{4}", pin))
+
+
+def _webauthn_rp_id() -> str:
+    # RP ID must be the effective domain without port.
+    host = (request.host or '').strip()
+    if not host:
+        return ''
+    return host.split(':', 1)[0]
+
+
+def _webauthn_origin() -> str:
+    # e.g., https://example.com
+    return (request.host_url or '').rstrip('/')
+
+
+def _lookup_customer_candidates_by_mobile(conn: sqlite3.Connection, mobile_identifier: str):
+    identifier = (mobile_identifier or '').strip()
+    if not identifier:
+        return []
+    c = conn.cursor()
+    candidate_rows = []
+    try:
+        for mobile_value in _mobile_candidates(identifier):
+            c.execute(
+                'SELECT username, role, is_active, mobile, mpin_hash, COALESCE(webauthn_credential_id,\'\'), COALESCE(webauthn_public_key,\'\'), COALESCE(webauthn_sign_count,0) FROM users WHERE mobile=?',
+                (mobile_value,),
+            )
+            candidate_rows.extend(c.fetchall() or [])
+
+        identifier_digits = _normalize_mobile_digits(identifier)
+        if identifier_digits:
+            c.execute(
+                'SELECT username, role, is_active, mobile, mpin_hash, COALESCE(webauthn_credential_id,\'\'), COALESCE(webauthn_public_key,\'\'), COALESCE(webauthn_sign_count,0) FROM users'
+            )
+            for cand in c.fetchall() or []:
+                cand_mobile = cand[3] if len(cand) > 3 else ''
+                if _normalize_mobile_digits(cand_mobile) == identifier_digits:
+                    candidate_rows.append(cand)
+    except sqlite3.OperationalError:
+        candidate_rows = []
+
+    # Dedupe by username
+    seen = set()
+    deduped = []
+    for row in candidate_rows:
+        uname = (row[0] or '').strip()
+        if not uname or uname in seen:
+            continue
+        seen.add(uname)
+        deduped.append(row)
+    return deduped
 
 
 def is_user_active(username: str) -> bool:
@@ -1863,7 +1995,7 @@ def profile():
     conn.commit()
 
     c.execute(
-        'SELECT full_name, mobile, upi_id, app_fee_paid, COALESCE(app_fee_paid_month,\'\'), aadhaar_doc, pan_doc, passport_doc, COALESCE(trust_score,50), COALESCE(referral_code,\'\') FROM users WHERE username=?',
+        'SELECT full_name, mobile, upi_id, app_fee_paid, COALESCE(app_fee_paid_month,\'\'), aadhaar_doc, pan_doc, passport_doc, COALESCE(trust_score,50), COALESCE(referral_code,\'\'), COALESCE(mpin_hash,\'\'), COALESCE(webauthn_credential_id,\'\') FROM users WHERE username=?',
         (username,),
     )
     row = c.fetchone()
@@ -1873,8 +2005,23 @@ def profile():
     app_fee_paid_month = ''
     trust_score = 50
     referral_code = ''
+    mpin_hash = ''
+    webauthn_credential_id = ''
     if row:
-        full_name, mobile, upi_id, app_fee_paid, app_fee_paid_month, aadhaar_doc, pan_doc, passport_doc, trust_score, referral_code = row
+        (
+            full_name,
+            mobile,
+            upi_id,
+            app_fee_paid,
+            app_fee_paid_month,
+            aadhaar_doc,
+            pan_doc,
+            passport_doc,
+            trust_score,
+            referral_code,
+            mpin_hash,
+            webauthn_credential_id,
+        ) = row
     if request.method == 'POST':
         full_name = (request.form.get('full_name') or '').strip()
         upi_id = (request.form.get('upi_id') or '').strip()
@@ -2021,8 +2168,290 @@ def profile():
         referrals=referrals,
         referral_reward_amount=int(REFERRAL_REWARD_AMOUNT),
         total_rewards_earned=int(total_rewards_earned or 0),
+        mpin_enabled=bool((mpin_hash or '').strip()),
+        fingerprint_enabled=bool((webauthn_credential_id or '').strip()),
         active_tab='profile',
     )
+
+
+@app.route('/profile/mpin', methods=['POST'])
+@require_customer
+def profile_set_mpin():
+    username = session['username']
+    current_password = request.form.get('current_password') or ''
+    new_mpin = (request.form.get('new_mpin') or '').strip()
+    confirm_mpin = (request.form.get('confirm_mpin') or '').strip()
+
+    if not current_password:
+        flash('Enter your password to set MPIN.')
+        return redirect(url_for('profile'))
+    if not _is_valid_mpin(new_mpin):
+        flash('MPIN must be exactly 4 digits.')
+        return redirect(url_for('profile'))
+    if new_mpin != confirm_mpin:
+        flash('MPIN confirmation does not match.')
+        return redirect(url_for('profile'))
+
+    conn = get_db()
+    c = conn.cursor()
+    try:
+        c.execute('SELECT password FROM users WHERE username=?', (username,))
+        row = c.fetchone()
+    except sqlite3.OperationalError:
+        row = None
+    if not row or not _password_matches(row[0] or '', current_password):
+        conn.close()
+        flash('Invalid password.')
+        return redirect(url_for('profile'))
+
+    now = datetime.now().isoformat(timespec='seconds')
+    try:
+        c.execute(
+            'UPDATE users SET mpin_hash=?, mpin_set_at=? WHERE username=?',
+            (generate_password_hash(new_mpin), now, username),
+        )
+        conn.commit()
+    except sqlite3.OperationalError:
+        conn.close()
+        flash('Unable to set MPIN right now.')
+        return redirect(url_for('profile'))
+    conn.close()
+    flash('MPIN updated successfully.')
+    return redirect(url_for('profile'))
+
+
+@app.route('/auth/webauthn/register/options', methods=['GET'])
+@require_customer
+def webauthn_register_options():
+    if generate_registration_options is None:
+        return jsonify({'error': 'Fingerprint login is not available on this server.'}), 501
+
+    username = session['username']
+    rp_id = _webauthn_rp_id()
+    origin = _webauthn_origin()
+    if not rp_id or not origin:
+        return jsonify({'error': 'Unable to determine RP settings.'}), 400
+
+    # Use a stable user_id
+    user_id = f"dcont:{username}".encode('utf-8')
+    challenge = os.urandom(32)
+    session['webauthn_reg_challenge'] = bytes_to_base64url(challenge) if bytes_to_base64url else ''
+
+    # Exclude existing credential if present
+    conn = get_db()
+    c = conn.cursor()
+    try:
+        c.execute('SELECT COALESCE(webauthn_credential_id,\'\') FROM users WHERE username=?', (username,))
+        row = c.fetchone()
+    except sqlite3.OperationalError:
+        row = None
+    conn.close()
+    exclude = []
+    if row and (row[0] or '').strip() and PublicKeyCredentialDescriptor is not None and base64url_to_bytes is not None:
+        try:
+            exclude = [PublicKeyCredentialDescriptor(id=base64url_to_bytes(row[0]))]
+        except Exception:
+            exclude = []
+
+    authenticator_selection = None
+    if AuthenticatorSelectionCriteria is not None:
+        try:
+            authenticator_selection = AuthenticatorSelectionCriteria(
+                resident_key='preferred',
+                user_verification='preferred',
+            )
+        except Exception:
+            authenticator_selection = None
+
+    options = generate_registration_options(
+        rp_id=rp_id,
+        rp_name='D-CONT',
+        user_name=username,
+        user_id=user_id,
+        user_display_name=username,
+        challenge=challenge,
+        timeout=60000,
+        authenticator_selection=authenticator_selection,
+        exclude_credentials=exclude or None,
+    )
+    return app.response_class(options_to_json(options), mimetype='application/json')
+
+
+@app.route('/auth/webauthn/register/verify', methods=['POST'])
+@require_customer
+def webauthn_register_verify():
+    if verify_registration_response is None:
+        return jsonify({'error': 'Fingerprint login is not available on this server.'}), 501
+
+    username = session['username']
+    rp_id = _webauthn_rp_id()
+    origin = _webauthn_origin()
+    challenge_b64 = (session.get('webauthn_reg_challenge') or '').strip()
+    if not challenge_b64 or base64url_to_bytes is None:
+        return jsonify({'error': 'Registration challenge expired. Please try again.'}), 400
+    expected_challenge = base64url_to_bytes(challenge_b64)
+
+    credential = request.get_json(silent=True) or {}
+    try:
+        verified = verify_registration_response(
+            credential=credential,
+            expected_challenge=expected_challenge,
+            expected_rp_id=rp_id,
+            expected_origin=origin,
+            require_user_verification=False,
+        )
+    except Exception:
+        return jsonify({'error': 'Unable to verify fingerprint setup.'}), 400
+
+    # Persist credential
+    cred_id = bytes_to_base64url(verified.credential_id) if bytes_to_base64url else ''
+    public_key = bytes_to_base64url(verified.credential_public_key) if bytes_to_base64url else ''
+    sign_count = int(getattr(verified, 'sign_count', 0) or 0)
+    now = datetime.now().isoformat(timespec='seconds')
+
+    conn = get_db()
+    c = conn.cursor()
+    try:
+        c.execute(
+            'UPDATE users SET webauthn_credential_id=?, webauthn_public_key=?, webauthn_sign_count=?, webauthn_added_at=? WHERE username=?',
+            (cred_id, public_key, sign_count, now, username),
+        )
+        conn.commit()
+    except sqlite3.OperationalError:
+        conn.close()
+        return jsonify({'error': 'Unable to save fingerprint setup.'}), 500
+    conn.close()
+    session.pop('webauthn_reg_challenge', None)
+    return jsonify({'ok': True})
+
+
+@app.route('/auth/webauthn/authenticate/options', methods=['GET'])
+def webauthn_auth_options():
+    if generate_authentication_options is None:
+        return jsonify({'error': 'Fingerprint login is not available on this server.'}), 501
+
+    mobile_identifier = (request.args.get('mobile') or '').strip()
+    if not mobile_identifier:
+        return jsonify({'error': 'Mobile number is required.'}), 400
+
+    rp_id = _webauthn_rp_id()
+    origin = _webauthn_origin()
+    if not rp_id or not origin:
+        return jsonify({'error': 'Unable to determine RP settings.'}), 400
+
+    conn = get_db()
+    candidates = _lookup_customer_candidates_by_mobile(conn, mobile_identifier)
+    selected = None
+    for row in candidates:
+        uname, role_raw, is_active_raw, db_mobile, _mpin_hash, cred_id, pub_key, sign_count = row
+        role = (role_raw or 'customer').strip().lower()
+        if role == 'admin':
+            continue
+        if int(is_active_raw if is_active_raw is not None else 1) != 1:
+            continue
+        if (cred_id or '').strip() and (pub_key or '').strip():
+            selected = (uname, cred_id, pub_key, int(sign_count or 0))
+            break
+    conn.close()
+
+    if not selected:
+        return jsonify({'error': 'Fingerprint not enabled for this mobile number.'}), 404
+
+    uname, cred_id, _pub_key, _sign_count = selected
+    if PublicKeyCredentialDescriptor is None or base64url_to_bytes is None:
+        return jsonify({'error': 'Fingerprint login not available.'}), 501
+    try:
+        allow = [PublicKeyCredentialDescriptor(id=base64url_to_bytes(cred_id))]
+    except Exception:
+        return jsonify({'error': 'Fingerprint login not available.'}), 501
+
+    challenge = os.urandom(32)
+    session['webauthn_auth_challenge'] = bytes_to_base64url(challenge) if bytes_to_base64url else ''
+    session['webauthn_auth_username'] = uname
+
+    options = generate_authentication_options(
+        rp_id=rp_id,
+        challenge=challenge,
+        timeout=60000,
+        allow_credentials=allow,
+        user_verification=UserVerificationRequirement.PREFERRED if UserVerificationRequirement else 'preferred',
+    )
+    return app.response_class(options_to_json(options), mimetype='application/json')
+
+
+@app.route('/auth/webauthn/authenticate/verify', methods=['POST'])
+def webauthn_auth_verify():
+    if verify_authentication_response is None:
+        return jsonify({'error': 'Fingerprint login is not available on this server.'}), 501
+
+    rp_id = _webauthn_rp_id()
+    origin = _webauthn_origin()
+    uname = (session.get('webauthn_auth_username') or '').strip()
+    challenge_b64 = (session.get('webauthn_auth_challenge') or '').strip()
+    if not uname or not challenge_b64 or base64url_to_bytes is None:
+        return jsonify({'error': 'Fingerprint challenge expired. Please try again.'}), 400
+    expected_challenge = base64url_to_bytes(challenge_b64)
+
+    conn = get_db()
+    c = conn.cursor()
+    try:
+        c.execute(
+            'SELECT username, role, is_active, COALESCE(webauthn_public_key,\'\'), COALESCE(webauthn_sign_count,0) FROM users WHERE username=?',
+            (uname,),
+        )
+        row = c.fetchone()
+    except sqlite3.OperationalError:
+        row = None
+    if not row:
+        conn.close()
+        return jsonify({'error': 'User not found.'}), 404
+    role = (row[1] or 'customer').strip().lower()
+    if role == 'admin':
+        conn.close()
+        return jsonify({'error': 'Invalid account.'}), 400
+    if int(row[2] if row[2] is not None else 1) != 1:
+        conn.close()
+        return jsonify({'error': 'Your account is blocked. Please contact support.'}), 403
+
+    pub_key_b64 = (row[3] or '').strip()
+    try:
+        sign_count = int(row[4] or 0)
+    except Exception:
+        sign_count = 0
+    if not pub_key_b64:
+        conn.close()
+        return jsonify({'error': 'Fingerprint not enabled.'}), 404
+
+    credential = request.get_json(silent=True) or {}
+    try:
+        verified = verify_authentication_response(
+            credential=credential,
+            expected_challenge=expected_challenge,
+            expected_rp_id=rp_id,
+            expected_origin=origin,
+            credential_public_key=base64url_to_bytes(pub_key_b64),
+            credential_current_sign_count=sign_count,
+            require_user_verification=False,
+        )
+    except Exception:
+        conn.close()
+        return jsonify({'error': 'Fingerprint verification failed.'}), 400
+
+    new_sign_count = int(getattr(verified, 'new_sign_count', sign_count) or sign_count)
+    try:
+        c.execute('UPDATE users SET webauthn_sign_count=? WHERE username=?', (new_sign_count, uname))
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+    conn.close()
+
+    session.pop('webauthn_auth_challenge', None)
+    session.pop('webauthn_auth_username', None)
+
+    session['username'] = uname
+    session['role'] = 'customer'
+    session['lang'] = _get_user_language(uname)
+    return jsonify({'ok': True})
 
 
 def _fetch_group_members_with_trust(group_id: int):
@@ -4167,6 +4596,54 @@ def login():
             session['role'] = 'admin'
             session['lang'] = 'en'
             return redirect(url_for('dashboard'))
+
+        mode = (request.form.get('mode') or '').strip().lower()
+
+        # Customer MPIN login
+        if mode == 'mpin':
+            mobile_identifier = (request.form.get('mobile') or '').strip()
+            mpin = (request.form.get('mpin') or '').strip()
+            if not mobile_identifier:
+                flash('Enter your mobile number.')
+                return render_template('login.html')
+            if not _is_valid_mpin(mpin):
+                flash('Enter your 4-digit MPIN.')
+                return render_template('login.html')
+
+            conn = get_db()
+            candidates = _lookup_customer_candidates_by_mobile(conn, mobile_identifier)
+            matched = None
+            for row in candidates:
+                db_username, role_raw, is_active_raw, db_mobile, mpin_hash, _cred_id, _pub_key, _sign_count = row
+                db_username = _repair_blank_username(conn, db_username, db_mobile)
+                if not (db_username or '').strip():
+                    continue
+                role = (role_raw or 'customer').strip().lower()
+                if role == 'admin':
+                    continue
+                if int(is_active_raw if is_active_raw is not None else 1) != 1:
+                    continue
+                if not (mpin_hash or '').strip():
+                    continue
+                try:
+                    if check_password_hash(mpin_hash, mpin):
+                        matched = (db_username, role)
+                        break
+                except (ValueError, TypeError):
+                    continue
+            conn.close()
+
+            if not matched:
+                flash('Invalid MPIN or mobile number.')
+                return render_template('login.html')
+
+            session['username'] = matched[0]
+            session['role'] = matched[1]
+            if requested_lang in SUPPORTED_LANGS:
+                session['lang'] = requested_lang
+            else:
+                session['lang'] = _get_user_language(matched[0])
+            return redirect(url_for('home'))
 
         # Customer login (username OR mobile + password)
         if login_type == 'admin':

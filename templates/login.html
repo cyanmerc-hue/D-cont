@@ -42,22 +42,69 @@
           {% endif %}
         {% endwith %}
 
-        <form method="post" style="margin-top:12px;">
-            <input type="hidden" name="login_type" value="customer" />
-            <label class="label">{{ t('login_language') }}</label>
-            <select name="lang" class="input" style="margin-bottom:10px;" onchange="window.location='{{ url_for('login') }}?lang=' + this.value;">
-                <option value="en" {% if current_lang=='en' %}selected{% endif %}>English (EN)</option>
-                <option value="hi" {% if current_lang=='hi' %}selected{% endif %}>हिंदी</option>
-            </select>
+                <div style="margin-top:12px;">
+                    <label class="label">{{ t('login_language') }}</label>
+                    <select name="lang" class="input" style="margin-bottom:10px;" onchange="window.location='{{ url_for('login') }}?lang=' + this.value;">
+                            <option value="en" {% if current_lang=='en' %}selected{% endif %}>English (EN)</option>
+                            <option value="hi" {% if current_lang=='hi' %}selected{% endif %}>हिंदी</option>
+                    </select>
 
-            <label class="label">{{ t('login_identifier_label') }}</label>
-            <input type="text" name="username" placeholder="{{ t('login_identifier_ph') }}" required class="input">
+                    <div class="loginHero">
+                        <div class="loginHeroLogo">
+                            <img src="/static/logo.png" onerror="this.onerror=null;this.src='/static/logo.svg';" alt="D-CONT" />
+                        </div>
+                        <div class="loginHeroTitle">{{ t('login_mpin_title') }}</div>
+                        <div class="muted" style="font-size:0.95em; margin-top:6px;">{{ t('login_mpin_help') }}</div>
+                    </div>
 
-            <label class="label">{{ t('login_password_label') }}</label>
-            <input type="password" name="password" placeholder="{{ t('login_password_ph') }}" required class="input" style="margin-bottom:18px;">
+                    <form method="post" id="mpinForm" style="margin-top:14px;">
+                        <input type="hidden" name="login_type" value="customer" />
+                        <input type="hidden" name="mode" value="mpin" />
+                        <input type="hidden" name="lang" value="{{ current_lang }}" />
+                        <input type="hidden" name="mobile" id="mpinMobile" value="" />
+                        <input type="hidden" name="mpin" id="mpinValue" value="" />
 
-            <button type="submit" class="btn">{{ t('login_btn') }}</button>
-        </form>
+                        <div class="mpinMobileRow" id="mpinMobileRow" style="display:none;">
+                            <label class="label">{{ t('login_mobile_label') }}</label>
+                            <input type="tel" inputmode="numeric" name="mpin_mobile" id="mpinMobileInput" placeholder="{{ t('login_mobile_ph') }}" class="input" autocomplete="tel" />
+                            <div class="muted small" style="margin-top:-10px; margin-bottom:10px;">{{ t('login_enable_fingerprint_hint') }}</div>
+                        </div>
+
+                        <div class="mpinRow" aria-label="MPIN">
+                            <input class="mpinDigit" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="one-time-code" />
+                            <input class="mpinDigit" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="one-time-code" />
+                            <input class="mpinDigit" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="one-time-code" />
+                            <input class="mpinDigit" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="one-time-code" />
+                        </div>
+
+                        <button type="submit" class="btn" style="margin-top:14px;">{{ t('login_mpin_btn') }}</button>
+                    </form>
+
+                    <div class="orDivider">
+                        <span>{{ t('login_or') }}</span>
+                    </div>
+
+                    <div class="sectionTitle" style="margin-top:10px;">{{ t('login_mobile_title') }}</div>
+                    <form method="post" id="mobileForm" style="margin-top:8px;">
+                            <input type="hidden" name="login_type" value="customer" />
+                            <input type="hidden" name="mode" value="mobile" />
+                            <input type="hidden" name="lang" value="{{ current_lang }}" />
+
+                            <label class="label">{{ t('login_mobile_label') }}</label>
+                            <input type="tel" inputmode="numeric" name="username" id="mobileLoginInput" placeholder="{{ t('login_mobile_ph') }}" required class="input" autocomplete="tel">
+
+                            <label class="label">{{ t('login_password_label') }}</label>
+                            <input type="password" name="password" placeholder="{{ t('login_password_ph') }}" required class="input" style="margin-bottom:12px;" autocomplete="current-password">
+
+                            <button type="submit" class="btn">{{ t('login_btn') }}</button>
+                    </form>
+
+                    <button type="button" class="btn btnGhost" id="fingerprintBtn" style="margin-top:12px;">
+                        {{ t('login_fingerprint_btn') }}
+                    </button>
+                    <div class="muted small" style="margin-top:8px; line-height:1.4;">{{ t('login_fingerprint_help') }}</div>
+                    <div class="muted small" id="fingerprintStatus" style="margin-top:6px;"></div>
+                </div>
 
         <div class="divider">
             <h3 style="margin:0 0 10px 0; color:#2D9CDB; font-size: 1.05em;">{{ t('login_admin_title') }}</h3>
@@ -83,5 +130,154 @@
         
             </div>
         </div>
+
+<script>
+    (function() {
+        function normalizeDigits(raw) {
+            return String(raw || '').replace(/\D/g, '').slice(-10);
+        }
+
+        function base64urlToBuffer(base64url) {
+            const base64 = (base64url || '').replace(/-/g, '+').replace(/_/g, '/');
+            const pad = '='.repeat((4 - (base64.length % 4)) % 4);
+            const binary = atob(base64 + pad);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+            return bytes.buffer;
+        }
+
+        function bufferToBase64url(buffer) {
+            const bytes = new Uint8Array(buffer);
+            let binary = '';
+            for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+            const base64 = btoa(binary);
+            return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+        }
+
+        function fillMpinHiddenFields() {
+            const digits = Array.from(document.querySelectorAll('.mpinDigit')).map(i => (i.value || '').replace(/\D/g, '')).join('');
+            document.getElementById('mpinValue').value = digits;
+
+            const stored = normalizeDigits(localStorage.getItem('dcont_last_mobile'));
+            const manual = normalizeDigits(document.getElementById('mpinMobileInput')?.value);
+            document.getElementById('mpinMobile').value = stored || manual;
+        }
+
+        // MPIN boxes behavior
+        const mpinInputs = Array.from(document.querySelectorAll('.mpinDigit'));
+        mpinInputs.forEach((input, idx) => {
+            input.addEventListener('input', (e) => {
+                input.value = (input.value || '').replace(/\D/g, '').slice(0, 1);
+                if (input.value && idx < mpinInputs.length - 1) mpinInputs[idx + 1].focus();
+                fillMpinHiddenFields();
+            });
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Backspace' && !input.value && idx > 0) {
+                    mpinInputs[idx - 1].focus();
+                }
+            });
+            input.addEventListener('paste', (e) => {
+                const text = (e.clipboardData || window.clipboardData).getData('text') || '';
+                const digits = text.replace(/\D/g, '').slice(0, 4);
+                if (!digits) return;
+                e.preventDefault();
+                for (let i = 0; i < 4; i++) {
+                    mpinInputs[i].value = digits[i] || '';
+                }
+                mpinInputs[Math.min(digits.length, 4) - 1].focus();
+                fillMpinHiddenFields();
+            });
+        });
+
+        const mpinMobileRow = document.getElementById('mpinMobileRow');
+        const storedMobile = normalizeDigits(localStorage.getItem('dcont_last_mobile'));
+        if (!storedMobile) {
+            mpinMobileRow.style.display = 'block';
+        }
+
+        const mpinForm = document.getElementById('mpinForm');
+        mpinForm.addEventListener('submit', () => {
+            fillMpinHiddenFields();
+            const m = normalizeDigits(document.getElementById('mpinMobile').value);
+            if (m) localStorage.setItem('dcont_last_mobile', m);
+        });
+
+        // Store last mobile on password login
+        const mobileForm = document.getElementById('mobileForm');
+        mobileForm.addEventListener('submit', () => {
+            const mobile = normalizeDigits(document.getElementById('mobileLoginInput').value);
+            if (mobile) localStorage.setItem('dcont_last_mobile', mobile);
+        });
+
+        // Fingerprint (WebAuthn/passkey)
+        const statusEl = document.getElementById('fingerprintStatus');
+        const btn = document.getElementById('fingerprintBtn');
+
+        async function fingerprintLogin() {
+            statusEl.textContent = '';
+            const mobile = normalizeDigits(localStorage.getItem('dcont_last_mobile')) || normalizeDigits(document.getElementById('mobileLoginInput').value);
+            if (!mobile) {
+                statusEl.textContent = {{ t('login_mobile_ph')|tojson }};
+                return;
+            }
+            if (!window.PublicKeyCredential || !navigator.credentials) {
+                statusEl.textContent = 'Fingerprint login is not supported on this browser.';
+                return;
+            }
+
+            try {
+                statusEl.textContent = 'Opening fingerprint...';
+                const resp = await fetch('/auth/webauthn/authenticate/options?mobile=' + encodeURIComponent(mobile), { credentials: 'same-origin' });
+                const optionsJson = await resp.json();
+                if (!resp.ok) {
+                    statusEl.textContent = optionsJson.error || 'Unable to start fingerprint login.';
+                    return;
+                }
+
+                // Convert JSON -> WebAuthn request options
+                optionsJson.challenge = base64urlToBuffer(optionsJson.challenge);
+                if (Array.isArray(optionsJson.allowCredentials)) {
+                    optionsJson.allowCredentials = optionsJson.allowCredentials.map((c) => ({
+                        ...c,
+                        id: base64urlToBuffer(c.id),
+                    }));
+                }
+
+                const assertion = await navigator.credentials.get({ publicKey: optionsJson });
+                const credential = {
+                    id: assertion.id,
+                    rawId: bufferToBase64url(assertion.rawId),
+                    type: assertion.type,
+                    response: {
+                        authenticatorData: bufferToBase64url(assertion.response.authenticatorData),
+                        clientDataJSON: bufferToBase64url(assertion.response.clientDataJSON),
+                        signature: bufferToBase64url(assertion.response.signature),
+                        userHandle: assertion.response.userHandle ? bufferToBase64url(assertion.response.userHandle) : null,
+                    },
+                };
+
+                const verifyResp = await fetch('/auth/webauthn/authenticate/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify(credential),
+                });
+                const verifyJson = await verifyResp.json();
+                if (!verifyResp.ok || !verifyJson.ok) {
+                    statusEl.textContent = verifyJson.error || 'Fingerprint login failed.';
+                    return;
+                }
+
+                localStorage.setItem('dcont_last_mobile', mobile);
+                window.location.href = '/home';
+            } catch (e) {
+                statusEl.textContent = 'Fingerprint login cancelled or failed.';
+            }
+        }
+
+        btn.addEventListener('click', fingerprintLogin);
+    })();
+</script>
+
 </body>
 </html>

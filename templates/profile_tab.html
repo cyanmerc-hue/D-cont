@@ -42,6 +42,37 @@
       <div class="muted" style="font-size:0.95em; margin-top:6px;">{{ t('benefit_control_body') }}</div>
     </div>
 
+    <div class="card-pro" style="margin-top:12px; padding:14px;">
+      <div class="sectionTitle" style="margin-top:0;">{{ t('profile_quick_login_title') }}</div>
+      <div class="muted" style="margin-top:6px; line-height:1.45;">{{ t('profile_fingerprint_note') }}</div>
+
+      <div class="sectionTitle" style="margin-top:14px;">{{ t('profile_mpin_title') }}</div>
+      <form method="POST" action="/profile/mpin" style="margin-top:8px;">
+        <label class="muted" style="display:block; font-size:0.95em;">{{ t('profile_mpin_current_password') }}</label>
+        <input name="current_password" type="password" class="input" autocomplete="current-password" />
+
+        <div class="row" style="margin-top:6px;">
+          <div class="col" style="min-width:220px;">
+            <label class="muted" style="display:block; font-size:0.95em;">{{ t('profile_mpin_new') }}</label>
+            <input name="new_mpin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" class="input" autocomplete="off" />
+          </div>
+          <div class="col" style="min-width:220px;">
+            <label class="muted" style="display:block; font-size:0.95em;">{{ t('profile_mpin_confirm') }}</label>
+            <input name="confirm_mpin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" class="input" autocomplete="off" />
+          </div>
+        </div>
+        <button type="submit" class="btn" style="margin-top:10px;">{{ t('profile_mpin_save') }}</button>
+      </form>
+
+      <div class="sectionTitle" style="margin-top:14px;">{{ t('profile_fingerprint_title') }}</div>
+      {% if fingerprint_enabled %}
+        <div class="muted" style="margin-top:6px;">{{ t('profile_fingerprint_enabled') }}</div>
+      {% else %}
+        <button type="button" class="btn btnGhost" id="enableFingerprintBtn" style="margin-top:10px;">{{ t('profile_fingerprint_enable') }}</button>
+        <div class="muted small" id="fingerprintSetupStatus" style="margin-top:8px;"></div>
+      {% endif %}
+    </div>
+
     <div class="card-pro" id="referral" style="margin-top:14px; padding:14px;">
       <div class="sectionTitle" style="margin-top:0;">{{ t('referral_card_title') }}</div>
       <div class="muted" style="margin-top:6px; line-height:1.45;">{{ t('referral_card_body') }}</div>
@@ -50,6 +81,87 @@
       <div class="notice" style="margin-top:12px;">
         <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
           <div>
+
+          <script>
+            (function() {
+              const btn = document.getElementById('enableFingerprintBtn');
+              const statusEl = document.getElementById('fingerprintSetupStatus');
+              if (!btn) return;
+
+              function base64urlToBuffer(base64url) {
+                const base64 = (base64url || '').replace(/-/g, '+').replace(/_/g, '/');
+                const pad = '='.repeat((4 - (base64.length % 4)) % 4);
+                const binary = atob(base64 + pad);
+                const bytes = new Uint8Array(binary.length);
+                for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+                return bytes.buffer;
+              }
+
+              function bufferToBase64url(buffer) {
+                const bytes = new Uint8Array(buffer);
+                let binary = '';
+                for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+                const base64 = btoa(binary);
+                return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+              }
+
+              async function enableFingerprint() {
+                statusEl.textContent = '';
+                if (!window.PublicKeyCredential || !navigator.credentials) {
+                  statusEl.textContent = 'Fingerprint login is not supported on this browser.';
+                  return;
+                }
+                try {
+                  statusEl.textContent = 'Opening fingerprint setup...';
+                  const resp = await fetch('/auth/webauthn/register/options', { credentials: 'same-origin' });
+                  const options = await resp.json();
+                  if (!resp.ok) {
+                    statusEl.textContent = options.error || 'Unable to start fingerprint setup.';
+                    return;
+                  }
+
+                  options.challenge = base64urlToBuffer(options.challenge);
+                  options.user.id = base64urlToBuffer(options.user.id);
+                  if (Array.isArray(options.excludeCredentials)) {
+                    options.excludeCredentials = options.excludeCredentials.map((c) => ({
+                      ...c,
+                      id: base64urlToBuffer(c.id),
+                    }));
+                  }
+
+                  const attestation = await navigator.credentials.create({ publicKey: options });
+                  const credential = {
+                    id: attestation.id,
+                    rawId: bufferToBase64url(attestation.rawId),
+                    type: attestation.type,
+                    response: {
+                      clientDataJSON: bufferToBase64url(attestation.response.clientDataJSON),
+                      attestationObject: bufferToBase64url(attestation.response.attestationObject),
+                    },
+                  };
+
+                  const verifyResp = await fetch('/auth/webauthn/register/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify(credential),
+                  });
+                  const verifyJson = await verifyResp.json();
+                  if (!verifyResp.ok || !verifyJson.ok) {
+                    statusEl.textContent = verifyJson.error || 'Fingerprint setup failed.';
+                    return;
+                  }
+
+                  statusEl.textContent = 'Fingerprint login enabled.';
+                  window.location.reload();
+                } catch (e) {
+                  statusEl.textContent = 'Fingerprint setup cancelled or failed.';
+                }
+              }
+
+              btn.addEventListener('click', enableFingerprint);
+            })();
+          </script>
             <div class="muted" style="font-size:0.95em;">{{ t('referral_your_code') }}</div>
             <div style="font-size:18px; font-weight:800; letter-spacing:0.5px;">{{ referral_code or '' }}</div>
           </div>

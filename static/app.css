@@ -357,6 +357,84 @@ h3 {
   flex-wrap: wrap;
 }
 
+/* --- Login (MPIN / Fingerprint / Mobile) --- */
+.loginHero {
+  text-align: center;
+  margin-top: 6px;
+}
+
+.loginHeroLogo {
+  display: flex;
+  justify-content: center;
+}
+
+.loginHeroLogo img {
+  height: 84px;
+  width: auto;
+}
+
+.loginHeroTitle {
+  margin-top: 12px;
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: 0.2px;
+}
+
+.mpinRow {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.mpinDigit {
+  width: 58px;
+  height: 58px;
+  border-radius: var(--r16);
+  border: 1px solid var(--border);
+  background: rgba(5, 6, 10, 0.35);
+  color: var(--text);
+  text-align: center;
+  font-size: 22px;
+  font-weight: 900;
+  outline: none;
+}
+
+.mpinDigit:focus {
+  border-color: rgba(124, 92, 255, 0.7);
+  box-shadow: 0 0 0 4px rgba(124, 92, 255, 0.18);
+}
+
+@media (max-width: 360px) {
+  .mpinDigit {
+    width: 50px;
+    height: 54px;
+  }
+}
+
+.orDivider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+  color: var(--muted);
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.orDivider::before,
+.orDivider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.orDivider span {
+  padding: 0 4px;
+}
+
 /* Make existing nav pills work inside the new topbar layout */
 .topbarInner .nav-inner {
   max-width: none;
