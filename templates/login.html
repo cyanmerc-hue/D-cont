@@ -3,6 +3,10 @@
 <head>
     <title>Login - D-cont</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='app.css', v=asset_version) }}">
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json', v=asset_version) }}">
+    <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icons/icon-192.png', v=asset_version) }}">
+    <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='icons/icon-512.png', v=asset_version) }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png', v=asset_version) }}">
 </head>
 <body class="app-body">
     <div class="app-header">
@@ -20,7 +24,7 @@
 
         {% with messages = get_flashed_messages() %}
           {% if messages %}
-            <ul style="margin-top:12px; color:#222;">
+                        <ul style="margin-top:12px; color: var(--text);">
             {% for message in messages %}
               <li>{{ message }}</li>
             {% endfor %}
@@ -29,6 +33,7 @@
         {% endwith %}
 
         <form method="post" style="margin-top:12px;">
+            <input type="hidden" name="login_type" value="customer" />
             <label class="label">Username / Mobile</label>
             <input type="text" name="username" placeholder="Enter username or mobile" required class="input">
 
@@ -41,6 +46,7 @@
         <div class="divider">
             <h3 style="margin:0 0 10px 0; color:#2D9CDB; font-size: 1.05em;">Admin Login</h3>
             <form method="post" style="margin:0;">
+                <input type="hidden" name="login_type" value="admin" />
                 <label class="label">User ID</label>
                 <input type="text" name="admin_username" placeholder="Enter admin user id" class="input">
 

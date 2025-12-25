@@ -3,6 +3,10 @@
 <head>
   <title>Payments - D-cont</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css', v=asset_version) }}">
+  <link rel="manifest" href="{{ url_for('static', filename='manifest.json', v=asset_version) }}">
+  <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icons/icon-192.png', v=asset_version) }}">
+  <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='icons/icon-512.png', v=asset_version) }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png', v=asset_version) }}">
 </head>
 <body class="app-body">
   <div class="app-header">
@@ -16,32 +20,32 @@
     <h2 style="margin:0;">Payments</h2>
 
     <div class="notice" style="margin-top:14px;">
-      <div style="color:#222;"><strong>Your UPI:</strong> {% if upi_id %}{{ upi_id }}{% else %}<span style="color:#555;">Not set</span>{% endif %}</div>
+      <div><strong>Your UPI:</strong> {% if upi_id %}{{ upi_id }}{% else %}<span class="muted">Not set</span>{% endif %}</div>
       {% if not upi_id %}
         <a href="/profile" class="btn" style="display:inline-block; margin-top:10px; width:auto;">Add UPI in Profile</a>
       {% endif %}
     </div>
 
-    <h3 style="margin-top:18px; color:#222;">Who to Pay</h3>
+    <h3 class="sectionTitle" style="margin-top:18px;">Who to Pay</h3>
     {% if pay_to and pay_to|length > 0 %}
       <ul style="list-style:none; padding:0; margin:0;">
         {% for item in pay_to %}
-          <li style="margin-bottom: 12px; background: #fff; border-radius: 10px; padding: 14px; border:1px solid #e8eef0;">
+          <li class="card-pro" style="margin-bottom:12px; padding:14px;">
             <div style="font-weight:bold; color:#2D9CDB;">{{ item.group.name }}</div>
-            <div style="color:#222;"><strong>₹{{ item.amount }}</strong> / month</div>
-            <div style="color:#555; margin-top:6px;"><strong>Receiver:</strong> {{ item.receiver_name }}</div>
-            <div style="color:#555; margin-top:4px;"><strong>UPI:</strong> {% if item.receiver_upi %}{{ item.receiver_upi }}{% else %}<span style="color:#999;">Not set</span>{% endif %}</div>
+            <div><strong>₹{{ item.amount }}</strong> / month</div>
+            <div class="muted" style="margin-top:6px;"><strong>Receiver:</strong> {{ item.receiver_name }}</div>
+            <div class="muted" style="margin-top:4px;"><strong>UPI:</strong> {% if item.receiver_upi %}{{ item.receiver_upi }}{% else %}<span class="muted">Not set</span>{% endif %}</div>
 
             {% if item.pay_url %}
               <a href="{{ item.pay_url }}" style="display:inline-block; margin-top:10px; background:#2D9CDB; color:#fff; padding:10px 14px; border-radius:8px; text-decoration:none;">Pay via UPI</a>
             {% else %}
-              <div style="margin-top:10px; color:#999;">Payment link unavailable (receiver UPI not set).</div>
+              <div class="muted" style="margin-top:10px;">Payment link unavailable (receiver UPI not set).</div>
             {% endif %}
           </li>
         {% endfor %}
       </ul>
     {% else %}
-      <div style="color:#555;">Join a group to see payment instructions.</div>
+      <div class="muted">Join a group to see payment instructions.</div>
       <a href="/groups" class="btn" style="display:inline-block; margin-top:10px; width:auto;">Go to Groups</a>
     {% endif %}
     </div>

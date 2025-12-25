@@ -3,6 +3,10 @@
 <head>
   <title>Groups - D-cont</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css', v=asset_version) }}">
+  <link rel="manifest" href="{{ url_for('static', filename='manifest.json', v=asset_version) }}">
+  <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icons/icon-192.png', v=asset_version) }}">
+  <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='icons/icon-512.png', v=asset_version) }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png', v=asset_version) }}">
 </head>
 <body class="app-body">
   <div class="app-header">
@@ -23,33 +27,33 @@
 
     <h2 style="margin:0;">Groups</h2>
 
-    <h3 style="margin-top:18px; color:#222;">My Groups</h3>
+    <h3 class="sectionTitle" style="margin-top:18px;">My Groups</h3>
     {% if my_groups and my_groups|length > 0 %}
       <ul style="list-style:none; padding:0; margin:0;">
         {% for g in my_groups %}
-          <li style="margin-bottom: 12px; background: #eaf6fb; border-radius: 10px; padding: 14px; box-shadow: 0 1px 4px #e0e0e0;">
+          <li class="card-pro" style="margin-bottom:12px; padding:14px;">
             <div style="font-weight:bold; color:#2D9CDB;">{{ g.name }}</div>
-            <div style="color:#222;"><strong>₹{{ g.monthly_amount }}</strong> / month</div>
-            <div style="color:#555; margin-top:6px; font-size:0.95em;"><strong>Status:</strong> {{ g.status }} · <strong>Members:</strong> {{ g.joined_members }}/{{ g.max_members }}</div>
+            <div><strong>₹{{ g.monthly_amount }}</strong> / month</div>
+            <div class="muted" style="margin-top:6px; font-size:0.95em;"><strong>Status:</strong> {{ g.status }} · <strong>Members:</strong> {{ g.joined_members }}/{{ g.max_members }}</div>
 
             <details style="margin-top:10px;">
               <summary style="cursor:pointer; color:#2D9CDB;">View details</summary>
-              {% if g.description %}<div style="color:#444; margin-top:8px;">{{ g.description }}</div>{% endif %}
-              <div style="color:#555; margin-top:8px;"><strong>Receiver name:</strong> {% if g.receiver_name %}{{ g.receiver_name }}{% else %}<span style="color:#999;">Not set</span>{% endif %}</div>
-              <div style="color:#555; margin-top:4px;"><strong>Receiver UPI:</strong> {% if g.receiver_upi %}{{ g.receiver_upi }}{% else %}<span style="color:#999;">Not set</span>{% endif %}</div>
+              {% if g.description %}<div class="muted" style="margin-top:8px;">{{ g.description }}</div>{% endif %}
+              <div class="muted" style="margin-top:8px;"><strong>Receiver name:</strong> {% if g.receiver_name %}{{ g.receiver_name }}{% else %}<span class="muted">Not set</span>{% endif %}</div>
+              <div class="muted" style="margin-top:4px;"><strong>Receiver UPI:</strong> {% if g.receiver_upi %}{{ g.receiver_upi }}{% else %}<span class="muted">Not set</span>{% endif %}</div>
 
-              <div style="margin-top:12px; color:#222; font-weight:bold;">Members</div>
+              <div style="margin-top:12px; font-weight:bold;">Members</div>
               {% if g.members and g.members|length > 0 %}
                 <div style="margin-top:8px; display:flex; flex-direction:column; gap:8px;">
                   {% for m in g.members %}
-                    <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; border:1px solid #e8eef0; border-radius:10px; padding:10px; background:#fff;">
-                      <div style="color:#222;">{{ m.full_name or m.username }}</div>
+                    <div class="card-pro" style="display:flex; justify-content:space-between; align-items:center; gap:10px; border-radius:10px; padding:10px;">
+                      <div>{{ m.full_name or m.username }}</div>
                       <span class="{{ m.trust_score|trust_badge_class }}">{{ m.trust_score|trust_band }}</span>
                     </div>
                   {% endfor %}
                 </div>
               {% else %}
-                <div style="margin-top:8px; color:#777;">Members list unavailable.</div>
+                <div class="muted" style="margin-top:8px;">Members list unavailable.</div>
               {% endif %}
 
               <a href="/payments" style="display:inline-block; margin-top:10px; background:#2D9CDB; color:#fff; padding:8px 12px; border-radius:8px; text-decoration:none;">Go to Payments</a>
@@ -58,20 +62,20 @@
         {% endfor %}
       </ul>
     {% else %}
-      <div style="color:#555;">You haven’t joined any group yet.</div>
+      <div class="muted">You haven’t joined any group yet.</div>
     {% endif %}
 
-    <h3 style="margin-top:22px; color:#222;">Join a Group</h3>
+    <h3 class="sectionTitle" style="margin-top:22px;">Join a Group</h3>
     {% if available_groups and available_groups|length > 0 %}
       <ul style="list-style:none; padding:0; margin:0;">
         {% for g in available_groups %}
-          <li style="margin-bottom: 12px; background: #fff; border-radius: 10px; padding: 14px; border:1px solid #e8eef0;">
+          <li class="card-pro" style="margin-bottom:12px; padding:14px;">
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
               <div>
                 <div style="font-weight:bold; color:#2D9CDB;">{{ g.name }}</div>
-                <div style="color:#222;"><strong>₹{{ g.monthly_amount }}</strong> / month</div>
-                {% if g.description %}<div style="color:#444; margin-top:4px;">{{ g.description }}</div>{% endif %}
-                <div style="color:#555; margin-top:6px; font-size:0.95em;"><strong>Members:</strong> {{ g.joined_members }}/{{ g.max_members }}</div>
+                <div><strong>₹{{ g.monthly_amount }}</strong> / month</div>
+                {% if g.description %}<div class="muted" style="margin-top:4px;">{{ g.description }}</div>{% endif %}
+                <div class="muted" style="margin-top:6px; font-size:0.95em;"><strong>Members:</strong> {{ g.joined_members }}/{{ g.max_members }}</div>
               </div>
               <div style="min-width:110px; text-align:right;">
                 <form method="POST" action="/groups/join" style="margin:0;">
@@ -84,7 +88,7 @@
         {% endfor %}
       </ul>
     {% else %}
-      <div style="color:#555;">No groups available to join right now.</div>
+      <div class="muted">No groups available to join right now.</div>
     {% endif %}
     </div>
   </div>

@@ -461,6 +461,78 @@ def recalculate_and_store_trust(username: str) -> dict:
     return result
 
 
+def _early_payout_deposit_amount(monthly_amount: int, trust_score: int) -> int:
+    try:
+        amt = int(monthly_amount or 0)
+    except (TypeError, ValueError):
+        amt = 0
+    amt = max(0, amt)
+    ts = int(trust_score if trust_score is not None else 50)
+    # Higher-trust users can have a lower deposit.
+    if ts >= 85:
+        return max(0, (amt + 1) // 2)
+    return amt
+
+
+def _user_has_any_kyc(aadhaar_doc: str, pan_doc: str, passport_doc: str) -> bool:
+    return bool((aadhaar_doc or '').strip() or (pan_doc or '').strip() or (passport_doc or '').strip())
+
+
+def _early_payout_eligibility(
+    username: str,
+    trust_score: int,
+    upi_id: str,
+    aadhaar_doc: str,
+    pan_doc: str,
+    passport_doc: str,
+) -> tuple[bool, list[str]]:
+    reasons: list[str] = []
+
+    if int(trust_score if trust_score is not None else 50) < 75:
+        reasons.append('Trust Score must be 75+ for early payout.')
+
+    if not (upi_id or '').strip():
+        reasons.append('Set your UPI ID in Profile.')
+
+    if not _user_has_any_kyc(aadhaar_doc, pan_doc, passport_doc):
+        reasons.append('Upload at least one KYC document (Aadhaar/PAN/Passport).')
+
+    # Behavior gate: at least 2 verified contributions, and no missed/default events.
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        c.execute(
+            """
+            SELECT event_type
+            FROM trust_events
+            WHERE username=?
+            ORDER BY id DESC
+            LIMIT 100
+            """,
+            (username,),
+        )
+        rows = c.fetchall()
+        conn.close()
+    except sqlite3.OperationalError:
+        rows = []
+
+    verified_count = 0
+    bad_count = 0
+    for r in rows:
+        et = (r[0] or '').strip().lower()
+        if et == 'contribution_verified':
+            verified_count += 1
+        if et in ('payment_missed', 'default_after_payout'):
+            bad_count += 1
+
+    if verified_count < 2:
+        reasons.append('Complete at least 2 verified contributions before requesting early payout.')
+    if bad_count > 0:
+        reasons.append('Early payout is not available if you have missed payments or past defaults.')
+
+    return (len(reasons) == 0), reasons
+
+
 @app.template_filter('status_label')
 def jinja_status_label_filter(value):
     return status_label(value)
@@ -781,9 +853,11 @@ def chat():
                 if intent.get('handoff'):
                     needs_handoff = True
             else:
+                # If we can't confidently answer, direct the customer to WhatsApp support.
+                needs_handoff = True
                 bot_text = (
-                    "I can help with groups, payments, safety tips, and support. "
-                    "Try: ‘How do I join a group?’ or ‘Safety tips / avoid scams’."
+                    "I may not have the right answer for this. "
+                    "Tap below to chat with our support team on WhatsApp."
                 )
 
             if needs_handoff:
@@ -806,6 +880,174 @@ def chat():
         intent_link_label=intent_link_label,
         whatsapp_url=whatsapp_url,
     )
+
+
+def _fetch_user_early_payout_requests(username: str):
+    username = (username or '').strip()
+    if not username:
+        return []
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        c.execute(
+            """
+            SELECT r.id, r.group_id, COALESCE(g.name,''), COALESCE(r.monthly_amount,0),
+                   COALESCE(r.deposit_amount,0), COALESCE(r.status,''), COALESCE(r.deposit_status,''),
+                   COALESCE(r.utr,''), COALESCE(r.reason,''), COALESCE(r.created_at,'')
+            FROM early_payout_requests r
+            LEFT JOIN groups g ON g.id = r.group_id
+            WHERE r.username=?
+            ORDER BY r.id DESC
+            LIMIT 10
+            """,
+            (username,),
+        )
+        rows = c.fetchall()
+        conn.close()
+    except sqlite3.OperationalError:
+        rows = []
+
+    out = []
+    for r in rows:
+        out.append(
+            {
+                'id': int(r[0]),
+                'group_id': int(r[1] or 0),
+                'group_name': r[2] or '',
+                'monthly_amount': int(r[3] or 0),
+                'deposit_amount': int(r[4] or 0),
+                'status': (r[5] or ''),
+                'deposit_status': (r[6] or ''),
+                'utr': (r[7] or ''),
+                'reason': (r[8] or ''),
+                'created_at': (r[9] or ''),
+            }
+        )
+    return out
+
+
+@app.route('/early-payout/request', methods=['POST'])
+@require_customer
+def early_payout_request():
+    username = session['username']
+    try:
+        group_id = int(request.form.get('group_id') or 0)
+    except ValueError:
+        group_id = 0
+    reason = (request.form.get('reason') or '').strip()
+
+    if group_id <= 0:
+        flash('Select a group for early payout.')
+        return redirect(url_for('profile'))
+
+    conn = get_db()
+    c = conn.cursor()
+
+    try:
+        c.execute(
+            'SELECT COALESCE(aadhaar_doc,\'\'), COALESCE(pan_doc,\'\'), COALESCE(passport_doc,\'\'), COALESCE(trust_score,50), COALESCE(upi_id,\'\') FROM users WHERE username=?',
+            (username,),
+        )
+        u = c.fetchone()
+    except sqlite3.OperationalError:
+        u = None
+    if not u:
+        conn.close()
+        flash('User not found.')
+        return redirect(url_for('profile'))
+    aadhaar_doc, pan_doc, passport_doc, trust_score, upi_id = u
+    trust_score = int(trust_score if trust_score is not None else 50)
+    upi_id = (upi_id or '').strip()
+
+    # Validate membership + get monthly amount
+    try:
+        c.execute('SELECT COALESCE(monthly_amount,0) FROM groups WHERE id=?', (group_id,))
+        g = c.fetchone()
+    except sqlite3.OperationalError:
+        g = None
+    monthly_amount = int(g[0] if g and g[0] is not None else 0)
+
+    try:
+        c.execute(
+            """
+            SELECT 1
+            FROM group_members
+            WHERE group_id=? AND username=? AND COALESCE(NULLIF(status,''),'joined')='joined'
+            """,
+            (group_id, username),
+        )
+        is_member = c.fetchone() is not None
+    except sqlite3.OperationalError:
+        is_member = False
+
+    if not is_member:
+        conn.close()
+        flash('You must be a joined member of the group to request early payout.')
+        return redirect(url_for('profile'))
+
+    eligible, reasons = _early_payout_eligibility(username, trust_score, upi_id, aadhaar_doc, pan_doc, passport_doc)
+    if not eligible:
+        conn.close()
+        flash('Not eligible for early payout: ' + ' '.join(reasons))
+        return redirect(url_for('profile'))
+
+    deposit_amount = _early_payout_deposit_amount(monthly_amount, trust_score)
+    now = datetime.now().isoformat(timespec='seconds')
+    try:
+        c.execute(
+            'INSERT INTO early_payout_requests (username, group_id, monthly_amount, trust_score, deposit_amount, status, deposit_status, utr, reason, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+            (username, group_id, monthly_amount, trust_score, deposit_amount, 'pending_deposit', 'not_paid', '', reason, now, now),
+        )
+        conn.commit()
+    except sqlite3.OperationalError:
+        conn.close()
+        flash('Unable to create early payout request right now.')
+        return redirect(url_for('profile'))
+
+    conn.close()
+    flash('Early payout request created. Pay the security deposit and submit the UTR/reference.')
+    return redirect(url_for('profile'))
+
+
+@app.route('/early-payout/deposit', methods=['POST'])
+@require_customer
+def early_payout_submit_deposit():
+    username = session['username']
+    try:
+        request_id = int(request.form.get('request_id') or 0)
+    except ValueError:
+        request_id = 0
+    utr = (request.form.get('utr') or '').strip()
+    if request_id <= 0 or not utr:
+        flash('Enter the UTR/reference number.')
+        return redirect(url_for('profile'))
+
+    now = datetime.now().isoformat(timespec='seconds')
+    conn = get_db()
+    c = conn.cursor()
+    try:
+        c.execute('SELECT id FROM early_payout_requests WHERE id=? AND username=?', (request_id, username))
+        row = c.fetchone()
+    except sqlite3.OperationalError:
+        row = None
+    if not row:
+        conn.close()
+        flash('Request not found.')
+        return redirect(url_for('profile'))
+
+    try:
+        c.execute(
+            'UPDATE early_payout_requests SET utr=?, deposit_status=?, updated_at=? WHERE id=? AND username=?',
+            (utr, 'submitted', now, request_id, username),
+        )
+        conn.commit()
+    except sqlite3.OperationalError:
+        conn.close()
+        flash('Unable to submit deposit right now.')
+        return redirect(url_for('profile'))
+    conn.close()
+    flash('Deposit submitted. Support will verify and update your request.')
+    return redirect(url_for('profile'))
 @app.route('/profile', methods=['GET', 'POST'])
 @require_customer
 def profile():
@@ -856,6 +1098,38 @@ def profile():
         conn.commit()
         flash('Profile updated!')
     conn.close()
+
+    my_groups = _fetch_my_groups(username)
+    company_upi_id = (get_setting('company_upi_id', '') or '').strip()
+
+    early_payout_groups = []
+    for g in my_groups or []:
+        try:
+            gid = int(g.get('id') or 0)
+        except (TypeError, ValueError):
+            gid = 0
+        monthly_amount = int(g.get('monthly_amount') or 0)
+        deposit_amount = _early_payout_deposit_amount(monthly_amount, int(trust_score if trust_score is not None else 50))
+        eligible, reasons = _early_payout_eligibility(
+            username=username,
+            trust_score=int(trust_score if trust_score is not None else 50),
+            upi_id=(upi_id or ''),
+            aadhaar_doc=(aadhaar_doc or ''),
+            pan_doc=(pan_doc or ''),
+            passport_doc=(passport_doc or ''),
+        )
+        early_payout_groups.append(
+            {
+                'id': gid,
+                'name': g.get('name') or '',
+                'monthly_amount': monthly_amount,
+                'deposit_amount': deposit_amount,
+                'eligible': bool(eligible),
+                'reasons': reasons,
+            }
+        )
+
+    early_payout_requests = _fetch_user_early_payout_requests(username)
     return render_template(
         'profile_tab.html',
         full_name=full_name or '',
@@ -866,6 +1140,9 @@ def profile():
         pan_doc=pan_doc or '',
         passport_doc=passport_doc or '',
         trust_score=int(trust_score if trust_score is not None else 50),
+        early_payout_groups=early_payout_groups,
+        early_payout_requests=early_payout_requests,
+        company_upi_id=company_upi_id,
         active_tab='profile',
     )
 
@@ -958,6 +1235,24 @@ def init_db():
             verified_at TEXT,
             created_at TEXT,
             note TEXT
+        )'''
+    )
+
+    # Early payout requests (schedule/priority request + security deposit tracking)
+    c.execute(
+        '''CREATE TABLE IF NOT EXISTS early_payout_requests (
+            id INTEGER PRIMARY KEY,
+            username TEXT,
+            group_id INTEGER,
+            monthly_amount INTEGER,
+            trust_score INTEGER,
+            deposit_amount INTEGER,
+            status TEXT,
+            deposit_status TEXT,
+            utr TEXT,
+            reason TEXT,
+            created_at TEXT,
+            updated_at TEXT
         )'''
     )
 
@@ -1701,7 +1996,178 @@ def owner_risk():
         if int(trust_score if trust_score is not None else 50) < 40:
             low_trust.append(item)
 
-    return render_template('owner_risk.html', active_owner_tab='risk', blocked=blocked, frozen=frozen, low_trust=low_trust)
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        c.execute(
+            """
+            SELECT r.id, r.username, COALESCE(u.full_name,''), COALESCE(u.mobile,''),
+                   r.group_id, COALESCE(g.name,''), COALESCE(r.monthly_amount,0), COALESCE(r.deposit_amount,0),
+                   COALESCE(r.status,''), COALESCE(r.deposit_status,''), COALESCE(r.utr,''), COALESCE(r.created_at,'')
+            FROM early_payout_requests r
+            LEFT JOIN users u ON u.username = r.username
+            LEFT JOIN groups g ON g.id = r.group_id
+            ORDER BY r.id DESC
+            LIMIT 50
+            """
+        )
+        req_rows = c.fetchall()
+        conn.close()
+    except sqlite3.OperationalError:
+        req_rows = []
+
+    early_payout_requests = []
+    for r in req_rows:
+        early_payout_requests.append(
+            {
+                'id': int(r[0]),
+                'username': r[1] or '',
+                'full_name': r[2] or '',
+                'mobile': r[3] or '',
+                'group_id': int(r[4] or 0),
+                'group_name': r[5] or '',
+                'monthly_amount': int(r[6] or 0),
+                'deposit_amount': int(r[7] or 0),
+                'status': r[8] or '',
+                'deposit_status': r[9] or '',
+                'utr': r[10] or '',
+                'created_at': r[11] or '',
+            }
+        )
+
+    return render_template(
+        'owner_risk.html',
+        active_owner_tab='risk',
+        blocked=blocked,
+        frozen=frozen,
+        low_trust=low_trust,
+        early_payout_requests=early_payout_requests,
+    )
+
+
+@app.route('/owner/early-payout/<int:request_id>/verify-deposit', methods=['POST'])
+@admin_required
+def owner_verify_early_payout_deposit(request_id: int):
+    utr = (request.form.get('utr') or '').strip()
+    if request_id <= 0:
+        flash('Invalid request.')
+        return redirect(url_for('owner_risk'))
+
+    conn = get_db()
+    c = conn.cursor()
+    try:
+        c.execute(
+            'SELECT id, username, COALESCE(group_id,0), COALESCE(status,\'\'), COALESCE(deposit_status,\'\'), COALESCE(utr,\'\') FROM early_payout_requests WHERE id=?',
+            (request_id,),
+        )
+        row = c.fetchone()
+    except sqlite3.OperationalError:
+        row = None
+
+    if not row:
+        conn.close()
+        flash('Request not found.')
+        return redirect(url_for('owner_risk'))
+
+    req_username = (row[1] or '').strip()
+    group_id = int(row[2] or 0)
+    status = (row[3] or '').strip()
+    deposit_status = (row[4] or '').strip()
+    existing_utr = (row[5] or '').strip()
+
+    if deposit_status == 'verified':
+        conn.close()
+        flash('Deposit already verified.')
+        return redirect(url_for('owner_risk'))
+
+    if not utr:
+        utr = existing_utr
+    if not utr:
+        conn.close()
+        flash('UTR/reference is required to verify deposit.')
+        return redirect(url_for('owner_risk'))
+
+    now = datetime.now().isoformat(timespec='seconds')
+    try:
+        c.execute(
+            'UPDATE early_payout_requests SET utr=?, deposit_status=?, status=?, updated_at=? WHERE id=?',
+            (utr, 'verified', 'under_review', now, request_id),
+        )
+        c.execute(
+            'INSERT INTO trust_events (username, event_type, group_id, due_date, verified_at, created_at, note) VALUES (?,?,?,?,?,?,?)',
+            (req_username, 'deposit_verified', group_id or None, '', _today_iso(), _today_iso(), 'Early payout security deposit verified'),
+        )
+        conn.commit()
+    except sqlite3.OperationalError:
+        conn.close()
+        flash('Unable to verify deposit right now.')
+        return redirect(url_for('owner_risk'))
+    conn.close()
+
+    recalculate_and_store_trust(req_username)
+    flash('Deposit verified. Request moved to review.')
+    return redirect(url_for('owner_risk'))
+
+
+@app.route('/owner/early-payout/<int:request_id>/decision', methods=['POST'])
+@admin_required
+def owner_decide_early_payout(request_id: int):
+    action = (request.form.get('action') or '').strip().lower()
+    reason = (request.form.get('reason') or '').strip()
+    if request_id <= 0:
+        flash('Invalid request.')
+        return redirect(url_for('owner_risk'))
+    if action not in {'approve', 'reject'}:
+        flash('Invalid action.')
+        return redirect(url_for('owner_risk'))
+
+    conn = get_db()
+    c = conn.cursor()
+    try:
+        c.execute(
+            'SELECT id, COALESCE(status,\'\'), COALESCE(deposit_status,\'\') FROM early_payout_requests WHERE id=?',
+            (request_id,),
+        )
+        row = c.fetchone()
+    except sqlite3.OperationalError:
+        row = None
+
+    if not row:
+        conn.close()
+        flash('Request not found.')
+        return redirect(url_for('owner_risk'))
+
+    status = (row[1] or '').strip()
+    deposit_status = (row[2] or '').strip()
+    if status in {'approved', 'rejected'}:
+        conn.close()
+        flash('This request is already decided.')
+        return redirect(url_for('owner_risk'))
+
+    if action == 'approve' and deposit_status != 'verified':
+        conn.close()
+        flash('Verify the security deposit before approving.')
+        return redirect(url_for('owner_risk'))
+
+    now = datetime.now().isoformat(timespec='seconds')
+    new_status = 'approved' if action == 'approve' else 'rejected'
+    if action == 'reject' and not reason:
+        reason = 'Rejected by admin.'
+
+    try:
+        c.execute(
+            'UPDATE early_payout_requests SET status=?, reason=?, updated_at=? WHERE id=?',
+            (new_status, reason, now, request_id),
+        )
+        conn.commit()
+    except sqlite3.OperationalError:
+        conn.close()
+        flash('Unable to update request right now.')
+        return redirect(url_for('owner_risk'))
+    conn.close()
+
+    flash(f'Request {new_status}.')
+    return redirect(url_for('owner_risk'))
 
 
 @app.route('/owner/settings', methods=['GET', 'POST'])
@@ -2015,10 +2481,23 @@ def join_group():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        # Admin login (username/password)
+        login_type = (request.form.get('login_type') or '').strip().lower()
+
+        # Read both forms' fields up-front (browser autofill can populate hidden/unused fields)
+        identifier = (request.form.get('username') or '').strip()
+        password = request.form.get('password') or ''
         admin_username = (request.form.get('admin_username') or '').strip()
         admin_password = request.form.get('admin_password') or ''
-        if admin_username or admin_password:
+
+        # Admin login (username/password)
+        is_admin_attempt = login_type == 'admin'
+        if not is_admin_attempt:
+            # Back-compat: treat as admin attempt only if admin creds are fully provided
+            # and customer creds are empty (avoids autofill breaking customer logins).
+            if admin_username and admin_password and (not identifier) and (not password):
+                is_admin_attempt = True
+
+        if is_admin_attempt:
             if not admin_username or not admin_password:
                 flash('Enter admin user id and password.')
                 return render_template('login.html')
@@ -2058,8 +2537,10 @@ def login():
             return redirect(url_for('dashboard'))
 
         # Customer login (username OR mobile + password)
-        identifier = (request.form.get('username') or '').strip()
-        password = request.form.get('password') or ''
+        if login_type == 'admin':
+            # Explicit admin submission already handled above.
+            flash('Invalid admin credentials.')
+            return render_template('login.html')
 
         if not identifier or not password:
             flash('Enter your username/mobile and password.')

@@ -11,6 +11,9 @@ ENV/
 users.db
 static/uploads/
 
+# Asset backups (local only)
+static/logo.original.png
+
 # OS
 .DS_Store
 Thumbs.db
