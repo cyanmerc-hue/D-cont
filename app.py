@@ -1586,6 +1586,63 @@ def require_customer(fn):
     return wrapper
 
 
+def _json_error_response(message: str, status_code: int):
+    try:
+        return jsonify({'error': message}), status_code
+    except Exception:
+        return (('{"error":"%s"}' % (message.replace('"', '\\"'))), status_code, {'Content-Type': 'application/json'})
+
+
+def _request_wants_json() -> bool:
+    try:
+        p = (request.path or '').lower()
+        if p.startswith('/auth/webauthn/'):
+            return True
+        accept = (request.headers.get('Accept') or '').lower()
+        if 'application/json' in accept:
+            return True
+        if request.is_json:
+            return True
+    except Exception:
+        return False
+    return False
+
+
+@app.errorhandler(400)
+def _handle_400(err):
+    if _request_wants_json():
+        return _json_error_response('Bad request.', 400)
+    return err
+
+
+@app.errorhandler(401)
+def _handle_401(err):
+    if _request_wants_json():
+        return _json_error_response('Login required.', 401)
+    return err
+
+
+@app.errorhandler(403)
+def _handle_403(err):
+    if _request_wants_json():
+        return _json_error_response('Not allowed.', 403)
+    return err
+
+
+@app.errorhandler(404)
+def _handle_404(err):
+    if _request_wants_json():
+        return _json_error_response('Not found.', 404)
+    return err
+
+
+@app.errorhandler(500)
+def _handle_500(err):
+    if _request_wants_json():
+        return _json_error_response('Server error. Please try again.', 500)
+    return err
+
+
 def join_group_with_status(group_id, username, status="joined"):
     conn = get_db()
     c = conn.cursor()
@@ -2578,106 +2635,112 @@ def profile_disable_fingerprint():
 @app.route('/auth/webauthn/register/options', methods=['GET'])
 @require_customer
 def webauthn_register_options():
-    if generate_registration_options is None:
-        return jsonify({'error': 'Fingerprint login is not available on this server.'}), 501
-
-    username = session['username']
-    rp_id = _webauthn_rp_id()
-    origin = _webauthn_origin()
-    if not rp_id or not origin:
-        return jsonify({'error': 'Unable to determine RP settings.'}), 400
-
-    # Use a stable user_id
-    user_id = f"dcont:{username}".encode('utf-8')
-    challenge = os.urandom(32)
-    session['webauthn_reg_challenge'] = bytes_to_base64url(challenge) if bytes_to_base64url else ''
-
-    # Exclude existing credential if present
-    conn = get_db()
-    c = conn.cursor()
     try:
-        c.execute('SELECT COALESCE(webauthn_credential_id,\'\') FROM users WHERE username=?', (username,))
-        row = c.fetchone()
-    except sqlite3.OperationalError:
-        row = None
-    conn.close()
-    exclude = []
-    if row and (row[0] or '').strip() and PublicKeyCredentialDescriptor is not None and base64url_to_bytes is not None:
-        try:
-            exclude = [PublicKeyCredentialDescriptor(id=base64url_to_bytes(row[0]))]
-        except Exception:
-            exclude = []
+        if generate_registration_options is None:
+            return jsonify({'error': 'Fingerprint login is not available on this server.'}), 501
 
-    authenticator_selection = None
-    if AuthenticatorSelectionCriteria is not None:
-        try:
-            authenticator_selection = AuthenticatorSelectionCriteria(
-                resident_key='preferred',
-                user_verification='preferred',
-            )
-        except Exception:
-            authenticator_selection = None
+        username = session['username']
+        rp_id = _webauthn_rp_id()
+        origin = _webauthn_origin()
+        if not rp_id or not origin:
+            return jsonify({'error': 'Unable to determine RP settings.'}), 400
 
-    options = generate_registration_options(
-        rp_id=rp_id,
-        rp_name='D-CONT',
-        user_name=username,
-        user_id=user_id,
-        user_display_name=username,
-        challenge=challenge,
-        timeout=60000,
-        authenticator_selection=authenticator_selection,
-        exclude_credentials=exclude or None,
-    )
-    return app.response_class(options_to_json(options), mimetype='application/json')
+        # Use a stable user_id
+        user_id = f"dcont:{username}".encode('utf-8')
+        challenge = os.urandom(32)
+        session['webauthn_reg_challenge'] = bytes_to_base64url(challenge) if bytes_to_base64url else ''
+
+        # Exclude existing credential if present
+        conn = get_db()
+        c = conn.cursor()
+        try:
+            c.execute('SELECT COALESCE(webauthn_credential_id,\'\') FROM users WHERE username=?', (username,))
+            row = c.fetchone()
+        except sqlite3.OperationalError:
+            row = None
+        conn.close()
+        exclude = []
+        if row and (row[0] or '').strip() and PublicKeyCredentialDescriptor is not None and base64url_to_bytes is not None:
+            try:
+                exclude = [PublicKeyCredentialDescriptor(id=base64url_to_bytes(row[0]))]
+            except Exception:
+                exclude = []
+
+        authenticator_selection = None
+        if AuthenticatorSelectionCriteria is not None:
+            try:
+                authenticator_selection = AuthenticatorSelectionCriteria(
+                    resident_key='preferred',
+                    user_verification='preferred',
+                )
+            except Exception:
+                authenticator_selection = None
+
+        options = generate_registration_options(
+            rp_id=rp_id,
+            rp_name='D-CONT',
+            user_name=username,
+            user_id=user_id,
+            user_display_name=username,
+            challenge=challenge,
+            timeout=60000,
+            authenticator_selection=authenticator_selection,
+            exclude_credentials=exclude or None,
+        )
+        return app.response_class(options_to_json(options), mimetype='application/json')
+    except Exception:
+        return jsonify({'error': 'Unable to start fingerprint setup. Please try again.'}), 500
 
 
 @app.route('/auth/webauthn/register/verify', methods=['POST'])
 @require_customer
 def webauthn_register_verify():
-    if verify_registration_response is None:
-        return jsonify({'error': 'Fingerprint login is not available on this server.'}), 501
-
-    username = session['username']
-    rp_id = _webauthn_rp_id()
-    origin = _webauthn_origin()
-    challenge_b64 = (session.get('webauthn_reg_challenge') or '').strip()
-    if not challenge_b64 or base64url_to_bytes is None:
-        return jsonify({'error': 'Registration challenge expired. Please try again.'}), 400
-    expected_challenge = base64url_to_bytes(challenge_b64)
-
-    credential = request.get_json(silent=True) or {}
     try:
-        verified = verify_registration_response(
-            credential=credential,
-            expected_challenge=expected_challenge,
-            expected_rp_id=rp_id,
-            expected_origin=origin,
-            require_user_verification=False,
-        )
-    except Exception:
-        return jsonify({'error': 'Unable to verify fingerprint setup.'}), 400
+        if verify_registration_response is None:
+            return jsonify({'error': 'Fingerprint login is not available on this server.'}), 501
 
-    # Persist credential
-    cred_id = bytes_to_base64url(verified.credential_id) if bytes_to_base64url else ''
-    public_key = bytes_to_base64url(verified.credential_public_key) if bytes_to_base64url else ''
-    sign_count = int(getattr(verified, 'sign_count', 0) or 0)
-    now = datetime.now().isoformat(timespec='seconds')
+        username = session['username']
+        rp_id = _webauthn_rp_id()
+        origin = _webauthn_origin()
+        challenge_b64 = (session.get('webauthn_reg_challenge') or '').strip()
+        if not challenge_b64 or base64url_to_bytes is None:
+            return jsonify({'error': 'Registration challenge expired. Please try again.'}), 400
+        expected_challenge = base64url_to_bytes(challenge_b64)
 
-    conn = get_db()
-    c = conn.cursor()
-    try:
-        c.execute(
-            'UPDATE users SET webauthn_credential_id=?, webauthn_public_key=?, webauthn_sign_count=?, webauthn_added_at=? WHERE username=?',
-            (cred_id, public_key, sign_count, now, username),
-        )
-        conn.commit()
-    except sqlite3.OperationalError:
+        credential = request.get_json(silent=True) or {}
+        try:
+            verified = verify_registration_response(
+                credential=credential,
+                expected_challenge=expected_challenge,
+                expected_rp_id=rp_id,
+                expected_origin=origin,
+                require_user_verification=False,
+            )
+        except Exception:
+            return jsonify({'error': 'Unable to verify fingerprint setup.'}), 400
+
+        # Persist credential
+        cred_id = bytes_to_base64url(verified.credential_id) if bytes_to_base64url else ''
+        public_key = bytes_to_base64url(verified.credential_public_key) if bytes_to_base64url else ''
+        sign_count = int(getattr(verified, 'sign_count', 0) or 0)
+        now = datetime.now().isoformat(timespec='seconds')
+
+        conn = get_db()
+        c = conn.cursor()
+        try:
+            c.execute(
+                'UPDATE users SET webauthn_credential_id=?, webauthn_public_key=?, webauthn_sign_count=?, webauthn_added_at=? WHERE username=?',
+                (cred_id, public_key, sign_count, now, username),
+            )
+            conn.commit()
+        except sqlite3.OperationalError:
+            conn.close()
+            return jsonify({'error': 'Unable to save fingerprint setup.'}), 500
         conn.close()
-        return jsonify({'error': 'Unable to save fingerprint setup.'}), 500
-    conn.close()
-    session.pop('webauthn_reg_challenge', None)
-    return jsonify({'ok': True})
+        session.pop('webauthn_reg_challenge', None)
+        return jsonify({'ok': True})
+    except Exception:
+        return jsonify({'error': 'Fingerprint setup failed. Please try again.'}), 500
 
 
 @app.route('/auth/webauthn/authenticate/options', methods=['GET'])

@@ -125,6 +125,10 @@
                   statusEl.textContent = 'Fingerprint login is not supported on this browser.';
                   return;
                 }
+                if (!window.isSecureContext) {
+                  statusEl.textContent = 'Fingerprint login requires HTTPS. Please open the site in a secure (https) connection.';
+                  return;
+                }
                 try {
                   statusEl.textContent = 'Opening fingerprint setup...';
                   const resp = await fetch('/auth/webauthn/register/options', {
@@ -132,18 +136,26 @@
                     headers: { 'Accept': 'application/json' },
                   });
 
+                  if (resp.redirected || (resp.url && resp.url.includes('/login'))) {
+                    statusEl.textContent = 'Session expired. Please login again.';
+                    window.location.href = '/login';
+                    return;
+                  }
+
                   const ct = (resp.headers.get('content-type') || '').toLowerCase();
                   let options = null;
                   if (ct.includes('application/json')) {
                     options = await resp.json();
                   } else {
                     const text = await resp.text();
-                    if (resp.status === 401) {
+                    if (resp.status === 401 || (text || '').toLowerCase().includes('<!doctype') || (text || '').toLowerCase().includes('<html')) {
                       statusEl.textContent = 'Session expired. Please login again.';
                       window.location.href = '/login';
                       return;
                     }
-                    statusEl.textContent = 'Unable to start fingerprint setup. Please try again.';
+                    statusEl.textContent = resp.status >= 500
+                      ? `Unable to start fingerprint setup (server error ${resp.status}). Please try again.`
+                      : `Unable to start fingerprint setup (HTTP ${resp.status}). Please try again.`;
                     return;
                   }
                   if (!resp.ok) {
@@ -173,22 +185,30 @@
 
                   const verifyResp = await fetch('/auth/webauthn/register/verify', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
                     credentials: 'same-origin',
                     body: JSON.stringify(credential),
                   });
+
+                  if (verifyResp.redirected || (verifyResp.url && verifyResp.url.includes('/login'))) {
+                    statusEl.textContent = 'Session expired. Please login again.';
+                    window.location.href = '/login';
+                    return;
+                  }
                   const verifyCt = (verifyResp.headers.get('content-type') || '').toLowerCase();
                   let verifyJson = null;
                   if (verifyCt.includes('application/json')) {
                     verifyJson = await verifyResp.json();
                   } else {
                     const text = await verifyResp.text();
-                    if (verifyResp.status === 401) {
+                    if (verifyResp.status === 401 || (text || '').toLowerCase().includes('<!doctype') || (text || '').toLowerCase().includes('<html')) {
                       statusEl.textContent = 'Session expired. Please login again.';
                       window.location.href = '/login';
                       return;
                     }
-                    statusEl.textContent = 'Fingerprint setup failed. Please try again.';
+                    statusEl.textContent = verifyResp.status >= 500
+                      ? `Fingerprint setup failed (server error ${verifyResp.status}). Please try again.`
+                      : `Fingerprint setup failed (HTTP ${verifyResp.status}). Please try again.`;
                     return;
                   }
                   if (!verifyResp.ok || !verifyJson.ok) {
@@ -201,6 +221,18 @@
                 } catch (e) {
                   const name = (e && (e.name || e.constructor && e.constructor.name)) ? (e.name || e.constructor.name) : 'Error';
                   const msg = (e && e.message) ? e.message : '';
+                  if (name === 'NotAllowedError') {
+                    statusEl.textContent = 'Fingerprint setup was cancelled or not allowed. Please try again and confirm the system prompt.';
+                    return;
+                  }
+                  if (name === 'NotSupportedError') {
+                    statusEl.textContent = 'Fingerprint setup is not supported on this device/browser.';
+                    return;
+                  }
+                  if (name === 'SecurityError') {
+                    statusEl.textContent = 'Fingerprint setup blocked for security reasons (usually HTTPS/origin mismatch). Please re-open the site and try again.';
+                    return;
+                  }
                   statusEl.textContent = msg ? `Fingerprint setup failed (${name}): ${msg}` : `Fingerprint setup failed (${name}).`;
                 }
               }
