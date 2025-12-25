@@ -37,7 +37,8 @@
         </div>
         <span class="{{ trust_score|trust_badge_class }}">{{ trust_score|trust_band }}</span>
       </div>
-      <div class="muted" style="font-size:0.95em; margin-top:6px;">Tip: pay on time to increase your score.</div>
+      <div class="muted" style="font-size:0.95em; margin-top:6px;">{{ t('benefit_trust_grows_body') }}</div>
+      <div class="muted" style="font-size:0.95em; margin-top:6px;">{{ t('benefit_control_body') }}</div>
     </div>
 
     <form method="POST" action="/profile" enctype="multipart/form-data" class="card-pro" style="margin-top:14px; padding:14px;">
@@ -101,6 +102,13 @@
       <div class="muted" style="margin-top:6px; line-height:1.45;">
         Early payout is a <strong>schedule/priority request</strong> (not a loan). If eligible, you can request to receive earlier than your current turn.
         A <strong>security deposit</strong> may be required and is verified by the owner.
+      </div>
+
+      <div class="notice" style="margin-top:12px;">
+        <div style="font-weight:800;">{{ t('benefit_deposit_title') }}</div>
+        <div class="muted" style="margin-top:6px; line-height:1.45;">{{ t('benefit_deposit_body') }}</div>
+        <div class="muted" style="margin-top:6px; line-height:1.45;">{{ t('benefit_deposit_return_body') }}</div>
+        <div class="muted" style="margin-top:6px; line-height:1.45;">{{ t('info_deposit_label') }}</div>
       </div>
 
       {% if early_payout_groups and early_payout_groups|length > 0 %}

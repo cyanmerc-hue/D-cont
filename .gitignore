@@ -9,6 +9,7 @@ ENV/
 
 # Local database and uploads (do not commit)
 users.db
+_smoke_test.db
 static/uploads/
 
 # Asset backups (local only)

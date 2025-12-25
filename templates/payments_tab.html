@@ -38,7 +38,12 @@
             <div class="muted" style="margin-top:6px;"><strong>{{ 'रिसीवर:' if current_lang=='hi' else 'Receiver:' }}</strong> {{ item.receiver_name }}</div>
             <div class="muted" style="margin-top:4px;"><strong>UPI:</strong> {% if item.receiver_upi %}{{ item.receiver_upi }}{% else %}<span class="muted">{{ t('not_set') }}</span>{% endif %}</div>
 
+            <div class="muted" style="margin-top:10px; line-height:1.45;">
+              {{ t('benefit_one_liner') }}
+            </div>
+
             {% if item.pay_url %}
+              <div class="muted" style="margin-top:6px;">{{ 'Pay directly to the receiver shown above.' if current_lang!='hi' else 'ऊपर दिखाए गए रिसीवर को सीधे भुगतान करें।' }}</div>
               <a href="{{ item.pay_url }}" style="display:inline-block; margin-top:10px; background:#2D9CDB; color:#fff; padding:10px 14px; border-radius:8px; text-decoration:none;">{{ t('pay_via_upi') }}</a>
             {% else %}
               <div class="muted" style="margin-top:10px;">{{ t('payment_link_unavailable') }}</div>

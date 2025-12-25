@@ -25,6 +25,15 @@
       <div style="color:#555; margin-top:6px;"><strong>Members:</strong> {{ joined_members }}/{{ group.max_members }}</div>
       <div style="color:#555; margin-top:6px;"><strong>Receiver UPI:</strong> {% if group.receiver_upi %}{{ group.receiver_upi }}{% else %}<span style="color:#999;">Not set</span>{% endif %}</div>
     </div>
+
+    <div style="margin-top:14px; border:1px solid #e8eef0; border-radius:10px; padding:14px;">
+      <div style="font-weight:800; color:#2D9CDB;">{{ t('benefit_simple_saving_title') }}</div>
+      <div style="color:#444; margin-top:6px; line-height:1.5;">{{ t('benefit_simple_saving_body') }}</div>
+      <div style="color:#444; margin-top:10px; line-height:1.5;"><strong>{{ t('benefit_transparent_title') }}:</strong> {{ t('benefit_transparent_body') }}</div>
+      <div style="color:#444; margin-top:10px; line-height:1.5;"><strong>{{ t('benefit_money_never_to_us_title') }}:</strong> {{ t('benefit_money_never_to_us_body') }}</div>
+      <div style="color:#666; margin-top:8px; line-height:1.5;">{{ t('benefit_one_liner') }}</div>
+      <div style="color:#666; margin-top:8px; line-height:1.5;">{{ t('info_payout_label') }}</div>
+    </div>
   </div>
 
 </body>

@@ -16,14 +16,35 @@
     <div class="card card-pro card-lg">
       <h2 style="margin:0;">{{ t('home_greeting', name=full_name) }}</h2>
 
-    <div class="notice" style="margin-top:14px;">
-      <p style="margin:0; line-height:1.5;"><strong>{{ t('non_custodial') }}</strong> {{ t('non_custodial_line') }}</p>
-    </div>
+      <div class="muted" style="margin-top:8px; line-height:1.45;">
+        <strong>{{ t('benefit_no_interest_title') }}:</strong> {{ t('benefit_no_interest_body') }}
+      </div>
+
+      <div class="notice" style="margin-top:14px;">
+        <p style="margin:0; line-height:1.5;"><strong>{{ t('benefit_money_never_to_us_title') }}:</strong> {{ t('benefit_money_never_to_us_body') }}</p>
+        <p class="muted" style="margin:8px 0 0; line-height:1.45;">{{ t('benefit_one_liner') }}</p>
+      </div>
+
+      <div class="muted" style="margin-top:10px; line-height:1.45;">
+        <strong>{{ t('benefit_restrictions_title') }}:</strong> {{ t('benefit_restrictions_body') }}
+      </div>
 
     {% if not has_groups %}
       <div class="section">
         <div class="sectionTitle" style="margin-top:0;">{{ 'अभी क्या करें?' if current_lang=='hi' else 'What should I do right now?' }}</div>
         <div class="muted" style="margin-top:6px;">{{ 'मालिक द्वारा बनाए गए समूह को जॉइन करें।' if current_lang=='hi' else 'Join an existing group created by the owner.' }}</div>
+
+        <div class="card-pro" style="margin-top:12px; padding:12px;">
+          <div style="font-weight:800;">{{ t('benefit_simple_saving_title') }}</div>
+          <div class="muted" style="margin-top:6px; line-height:1.45;">{{ t('benefit_simple_saving_body') }}</div>
+          <div class="muted" style="margin-top:8px; line-height:1.45;">
+            <strong>{{ t('benefit_small_amounts_title') }}:</strong> {{ t('benefit_small_amounts_body') }}
+          </div>
+          <div class="muted" style="margin-top:6px; line-height:1.45;">
+            <strong>{{ t('benefit_upi_only_title') }}:</strong> {{ t('benefit_upi_only_body') }}
+          </div>
+        </div>
+
         <div class="btn-row">
           <a href="/groups" class="btn">{{ t('join_group') }}</a>
         </div>

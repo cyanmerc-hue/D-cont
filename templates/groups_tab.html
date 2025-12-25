@@ -24,6 +24,13 @@
 
     <h2 style="margin:0;">{{ t('groups_title') }}</h2>
 
+    <div class="notice" style="margin-top:12px;">
+      <div style="font-weight:800;">{{ t('benefit_simple_saving_title') }}</div>
+      <div class="muted" style="margin-top:6px; line-height:1.45;">{{ t('benefit_simple_saving_body') }}</div>
+      <div class="muted" style="margin-top:8px; line-height:1.45;"><strong>{{ t('benefit_transparent_title') }}:</strong> {{ t('benefit_transparent_body') }}</div>
+      <div class="muted" style="margin-top:6px; line-height:1.45;">{{ t('benefit_one_liner') }}</div>
+    </div>
+
     <h3 class="sectionTitle" style="margin-top:18px;">{{ t('my_groups') }}</h3>
     {% if my_groups and my_groups|length > 0 %}
       <ul style="list-style:none; padding:0; margin:0;">
@@ -38,6 +45,7 @@
               {% if g.description %}<div class="muted" style="margin-top:8px;">{{ g.description }}</div>{% endif %}
               <div class="muted" style="margin-top:8px;"><strong>{{ 'रिसीवर नाम' if current_lang=='hi' else 'Receiver name' }}:</strong> {% if g.receiver_name %}{{ g.receiver_name }}{% else %}<span class="muted">{{ t('not_set') }}</span>{% endif %}</div>
               <div class="muted" style="margin-top:4px;"><strong>{{ 'रिसीवर UPI' if current_lang=='hi' else 'Receiver UPI' }}:</strong> {% if g.receiver_upi %}{{ g.receiver_upi }}{% else %}<span class="muted">{{ t('not_set') }}</span>{% endif %}</div>
+              <div class="muted" style="margin-top:8px; line-height:1.45;">{{ t('info_payout_label') }}</div>
 
               <div style="margin-top:12px; font-weight:bold;">{{ t('members') }}</div>
               {% if g.members and g.members|length > 0 %}
