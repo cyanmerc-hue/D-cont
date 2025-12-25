@@ -392,19 +392,25 @@ h3 {
   height: 40px;
   width: 40px;
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.16);
   backdrop-filter: blur(8px);
 }
 
 .brandWrap:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.16);
 }
 
 .brandWrap img {
   height: 26px;
   width: auto;
   display: block;
+  filter: brightness(1.18) contrast(1.12) saturate(1.06);
+}
+
+/* Legacy logo placements on dark theme */
+.app-logo {
+  filter: brightness(1.18) contrast(1.12) saturate(1.06);
 }
 
 .brandText {
