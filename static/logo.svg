@@ -1,6 +1,30 @@
-<svg width="340" height="80" viewBox="0 0 340 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <circle cx="40" cy="40" r="32" stroke="#2D9CDB" stroke-width="4" fill="#EAF6FB"/>
-  <text x="40" y="52" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="36" fill="#2D9CDB" font-weight="bold">D</text>
-  <text x="120" y="50" font-family="Arial, Helvetica, sans-serif" font-size="36" fill="#222" font-weight="bold">-cont</text>
-  <text x="220" y="68" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="18" fill="#2D9CDB">Your circle. Your savings.</text>
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="D-CONT">
+  <defs>
+    <linearGradient id="ring" x1="12" y1="10" x2="56" y2="54" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2EE59D"/>
+      <stop offset="1" stop-color="#2DD4FF"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Circle savings / community ring -->
+  <circle cx="32" cy="32" r="24" stroke="url(#ring)" stroke-width="6" stroke-linecap="round"/>
+
+  <!-- Accent dot (represents a member / payout point) -->
+  <circle cx="49" cy="18" r="3" fill="#F7B84B"/>
+
+  <!-- D mark (kept readable on both dark + light) -->
+  <path
+    d="M24 18V46H34C42.5 46 49 39.7 49 32C49 24.3 42.5 18 34 18H24Z"
+    fill="none"
+    stroke="#F5F7FF"
+    stroke-width="5"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M24 18V46H34C42.5 46 49 39.7 49 32C49 24.3 42.5 18 34 18H24Z"
+    fill="none"
+    stroke="rgba(5, 6, 10, 0.35)"
+    stroke-width="1.5"
+    stroke-linejoin="round"
+  />
 </svg>
