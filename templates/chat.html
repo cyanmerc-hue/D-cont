@@ -10,18 +10,9 @@
     <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='icons/icon-512.png', v=asset_version) }}">
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png', v=asset_version) }}">
 </head>
-<body class="app-body">
-    <div class="topbar">
-        <div class="topbarInner">
-            <div class="brand">
-                <div class="brandWrap">
-                    <img src="/static/logo.png" onerror="this.onerror=null;this.src='/static/logo.svg';" alt="D-CONT" />
-                </div>
-                <span class="brandText">D-CONT</span>
-            </div>
-            <div class="pill">Bot</div>
-        </div>
-    </div>
+<body class="app-body hasTabs">
+    {% set nav_user_pill = 'Bot' %}
+    {% include '_tab_nav.html' %}
 
     <div class="container" style="max-width: 760px;">
         <div class="card card-pro card-lg" style="padding: 18px;">

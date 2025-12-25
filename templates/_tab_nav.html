@@ -10,8 +10,9 @@
     <div class="nav-inner">
       <a href="/home" class="nav-link {{ 'active' if tab=='home' else '' }}">{{ t('nav_home') }}</a>
       <a href="/groups" class="nav-link {{ 'active' if tab=='groups' else '' }}">{{ t('nav_groups') }}</a>
-      <a href="/payments" class="nav-link {{ 'active' if tab=='payments' else '' }}">{{ t('nav_payments') }}</a>
-      <a href="/profile" class="nav-link {{ 'active' if tab=='profile' else '' }}">{{ t('nav_profile') }}</a>
+      <a href="/payments" class="nav-link {{ 'active' if tab=='payments' else '' }}">PAY</a>
+      <a href="/rewards" class="nav-link {{ 'active' if tab=='rewards' else '' }}">{{ t('nav_rewards') }}</a>
+      <a href="/chat" class="nav-link {{ 'active' if tab=='support' else '' }}">{{ t('nav_support') }}</a>
     </div>
     {% if nav_user_pill %}
       <div class="pill">{{ nav_user_pill }}</div>
@@ -39,20 +40,26 @@
     <span class="tabLabel">{{ t('nav_groups') }}</span>
   </a>
 
-  <a href="/payments" class="tabItem {{ 'active' if tab=='payments' else '' }}" aria-label="{{ t('nav_payments') }}">
+  <a href="/payments" class="tabItem pay {{ 'active' if tab=='payments' else '' }}" aria-label="{{ t('nav_payments') }}">
     <svg class="tabIcon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M3 7h18v10H3V7Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       <path d="M3 10h18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       <path d="M7 14h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
-    <span class="tabLabel">{{ t('nav_payments') }}</span>
+    <span class="tabLabel">PAY</span>
   </a>
 
-  <a href="/profile" class="tabItem {{ 'active' if tab=='profile' else '' }}" aria-label="{{ t('nav_profile') }}">
+  <a href="/rewards" class="tabItem {{ 'active' if tab=='rewards' else '' }}" aria-label="{{ t('nav_rewards') }}">
     <svg class="tabIcon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M12 17.5l-5.5 3 1.05-6.25L3 9.75l6.3-.9L12 3l2.7 5.85 6.3.9-4.55 4.5L17.5 20.5 12 17.5Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
     </svg>
-    <span class="tabLabel">{{ t('nav_profile') }}</span>
+    <span class="tabLabel">{{ t('nav_rewards') }}</span>
+  </a>
+
+  <a href="/chat" class="tabItem {{ 'active' if tab=='support' else '' }}" aria-label="{{ t('nav_support') }}">
+    <svg class="tabIcon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <span class="tabLabel">{{ t('nav_support') }}</span>
   </a>
 </nav>

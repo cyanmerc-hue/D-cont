@@ -444,6 +444,8 @@ TRANSLATIONS = {
         'nav_groups': 'Groups',
         'nav_payments': 'Payments',
         'nav_profile': 'Profile',
+        'nav_rewards': 'Reward',
+        'nav_support': 'Support',
         'login_title': 'Login',
         'login_identifier_label': 'Username / Mobile',
         'login_identifier_ph': 'Enter username or mobile',
@@ -633,6 +635,8 @@ TRANSLATIONS = {
         'nav_groups': 'समूह',
         'nav_payments': 'भुगतान',
         'nav_profile': 'प्रोफ़ाइल',
+        'nav_rewards': 'रिवॉर्ड',
+        'nav_support': 'सपोर्ट',
         'login_title': 'लॉगिन',
         'login_identifier_label': 'यूज़रनेम / मोबाइल',
         'login_identifier_ph': 'यूज़रनेम या मोबाइल दर्ज करें',
@@ -1813,6 +1817,115 @@ def chat():
         intent_link=intent_link,
         intent_link_label=intent_link_label,
         whatsapp_url=whatsapp_url,
+        active_tab='support',
+    )
+
+
+@app.route('/rewards', methods=['GET'])
+@require_customer
+def rewards():
+    username = session['username']
+    conn = get_db()
+    c = conn.cursor()
+
+    # Keep monthly app-fee flag aligned with current month.
+    _ensure_app_fee_current_month(conn, username)
+    conn.commit()
+
+    c.execute(
+        'SELECT COALESCE(referral_code,\'\') FROM users WHERE username=?',
+        (username,),
+    )
+    row = c.fetchone()
+    referral_code = (row[0] if row else '') or ''
+
+    referrals = []
+    total_rewards_earned = 0
+    app_fee_credit_balance = 0
+    try:
+        app_fee_credit_balance = _available_app_fee_credit(conn, username)
+        c.execute(
+            """
+            SELECT r.id,
+                   r.new_username,
+                   COALESCE(u.full_name,''),
+                   COALESCE(u.app_fee_paid,0) as app_fee_paid,
+                   EXISTS(
+                     SELECT 1 FROM group_members gm
+                     WHERE gm.username = r.new_username AND gm.status='joined'
+                   ) as joined_group,
+                   COALESCE(r.status,''),
+                   COALESCE(r.created_at,''),
+                   COALESCE(r.eligible_at,''),
+                   COALESCE(r.paid_at,''),
+                   COALESCE(r.credited_at,''),
+                   COALESCE(r.credit_expires_at,''),
+                   COALESCE(r.credit_amount,0),
+                   COALESCE(r.credit_used,0),
+                   COALESCE(r.credit_used_month,'')
+            FROM referrals r
+            LEFT JOIN users u ON u.username = r.new_username
+            WHERE r.referrer_username=?
+            ORDER BY r.id DESC
+            LIMIT 200
+            """,
+            (username,),
+        )
+        for (
+            rid,
+            new_username,
+            new_full_name,
+            fee_paid,
+            joined_group,
+            status,
+            created_at,
+            eligible_at,
+            paid_at,
+            credited_at,
+            credit_expires_at,
+            credit_amount,
+            credit_used,
+            credit_used_month,
+        ) in c.fetchall() or []:
+            normalized_status = (status or '').strip().upper() or 'PENDING'
+            if normalized_status == 'CREDITED':
+                try:
+                    total_rewards_earned += int(credit_amount or REFERRAL_REWARD_AMOUNT)
+                except (TypeError, ValueError):
+                    total_rewards_earned += int(REFERRAL_REWARD_AMOUNT)
+            referrals.append(
+                {
+                    'id': int(rid or 0),
+                    'new_username': (new_username or '').strip(),
+                    'new_full_name': (new_full_name or '').strip(),
+                    'app_fee_paid': int(fee_paid or 0),
+                    'joined_group': bool(joined_group),
+                    'status': normalized_status,
+                    'created_at': created_at or '',
+                    'eligible_at': eligible_at or '',
+                    'paid_at': paid_at or '',
+                    'credited_at': credited_at or '',
+                    'credit_expires_at': credit_expires_at or '',
+                    'credit_amount': int(credit_amount or 0),
+                    'credit_used': int(credit_used or 0),
+                    'credit_used_month': (credit_used_month or '').strip(),
+                }
+            )
+    except sqlite3.OperationalError:
+        referrals = []
+        total_rewards_earned = 0
+        app_fee_credit_balance = 0
+
+    conn.close()
+
+    return render_template(
+        'rewards_tab.html',
+        referral_code=_normalize_referral_code(referral_code or ''),
+        app_fee_credit_balance=int(app_fee_credit_balance or 0),
+        referrals=referrals,
+        referral_reward_amount=int(REFERRAL_REWARD_AMOUNT),
+        total_rewards_earned=int(total_rewards_earned or 0),
+        active_tab='rewards',
     )
 
 
