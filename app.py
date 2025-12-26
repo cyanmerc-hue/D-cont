@@ -299,6 +299,81 @@ def _verify_app_fee_payment(conn: sqlite3.Connection, username: str) -> tuple[in
     return (int(gross), int(credit_applied), int(net), month_key)
 
 
+def _unverify_app_fee_payment(conn: sqlite3.Connection, username: str, month_key: str | None = None) -> bool:
+    """Undo an app-fee verification for a given user+month.
+
+    Best-effort behavior:
+    - Deletes the app_fee_payments ledger row for (username, month)
+    - Clears users.app_fee_paid for that month
+    - Restores any referral credits that were consumed for that month (credit_used_month)
+    - Recomputes users.first_app_fee_verified based on remaining ledger entries
+
+    Returns True if something was changed.
+    """
+    uname = (username or '').strip()
+    mkey = (month_key or _current_month_key()).strip()
+    if not uname or not mkey:
+        return False
+
+    c = conn.cursor()
+    changed = False
+
+    # Remove ledger row (if table exists)
+    try:
+        c.execute("DELETE FROM app_fee_payments WHERE username=? AND month=?", (uname, mkey))
+        if c.rowcount and int(c.rowcount) > 0:
+            changed = True
+    except sqlite3.OperationalError:
+        pass
+
+    # Restore any consumed credits for that month (if schema supports it)
+    try:
+        c.execute(
+            """
+            UPDATE referrals
+            SET credit_used=0, credit_used_at=NULL, credit_used_month=''
+            WHERE referrer_username=?
+              AND COALESCE(credit_used,0)=1
+              AND COALESCE(credit_used_month,'')=?
+            """,
+            (uname, mkey),
+        )
+        if c.rowcount and int(c.rowcount) > 0:
+            changed = True
+    except sqlite3.OperationalError:
+        pass
+
+    # Clear user paid flag (best-effort)
+    try:
+        c.execute(
+            """
+            UPDATE users
+            SET app_fee_paid=0,
+                app_fee_paid_month=CASE WHEN COALESCE(app_fee_paid_month,'')=? THEN '' ELSE COALESCE(app_fee_paid_month,'') END
+            WHERE username=?
+            """,
+            (mkey, uname),
+        )
+        if c.rowcount and int(c.rowcount) > 0:
+            changed = True
+    except sqlite3.OperationalError:
+        pass
+
+    # Recompute first_app_fee_verified based on whether any ledger exists
+    has_any = False
+    try:
+        c.execute("SELECT 1 FROM app_fee_payments WHERE username=? LIMIT 1", (uname,))
+        has_any = c.fetchone() is not None
+    except sqlite3.OperationalError:
+        has_any = False
+    try:
+        c.execute("UPDATE users SET first_app_fee_verified=? WHERE username=?", (1 if has_any else 0, uname))
+    except sqlite3.OperationalError:
+        pass
+
+    return bool(changed)
+
+
 def _normalize_referral_code(raw: str) -> str:
     code = (raw or '').strip().upper()
     return re.sub(r'[^A-Z0-9]', '', code)
@@ -4317,7 +4392,9 @@ def owner_payments():
 
     conn = get_db()
     c = conn.cursor()
-    month_key = _current_month_key()
+    month_key = (request.args.get('month') or '').strip()
+    if not re.fullmatch(r"\d{4}-\d{2}", month_key or ""):
+        month_key = _current_month_key()
     app_fee_payments = []
     try:
         c.execute(
@@ -4383,6 +4460,93 @@ def owner_payments():
         app_fee_payments=app_fee_payments,
         app_fee_month=month_key,
     )
+
+
+@app.route('/owner/payments/unverify_app_fee', methods=['POST'])
+@admin_required
+def owner_payments_unverify_app_fee():
+    username = (request.form.get('username') or '').strip()
+    month_key = (request.form.get('month') or '').strip() or _current_month_key()
+    if not username:
+        flash('Missing user.')
+        return redirect(url_for('owner_payments', month=month_key))
+    if not re.fullmatch(r"\d{4}-\d{2}", month_key or ""):
+        month_key = _current_month_key()
+
+    conn = get_db()
+    c = conn.cursor()
+    try:
+        c.execute("SELECT COALESCE(NULLIF(role,''),'customer') FROM users WHERE username=?", (username,))
+        row = c.fetchone()
+    except sqlite3.OperationalError:
+        row = None
+    if not row:
+        conn.close()
+        flash('User not found.')
+        return redirect(url_for('owner_payments', month=month_key))
+    if (row[0] or '').strip().lower() == 'admin':
+        conn.close()
+        flash('Invalid user.')
+        return redirect(url_for('owner_payments', month=month_key))
+
+    try:
+        changed = _unverify_app_fee_payment(conn, username, month_key)
+        conn.commit()
+    except sqlite3.OperationalError:
+        conn.close()
+        flash('Unable to undo app fee right now.')
+        return redirect(url_for('owner_payments', month=month_key))
+    conn.close()
+
+    if changed:
+        flash(f"App fee verification removed for {username} ({month_key}).")
+    else:
+        flash('Nothing to undo for that user/month.')
+    return redirect(url_for('owner_payments', month=month_key))
+
+
+@app.route('/owner/users/unverify_app_fee', methods=['POST'])
+@admin_required
+def owner_users_unverify_app_fee():
+    target_username = (request.form.get('username') or '').strip()
+    if not target_username:
+        flash('Missing username.')
+        return redirect(url_for('owner_users'))
+
+    month_key = (request.form.get('month') or '').strip() or _current_month_key()
+    if not re.fullmatch(r"\d{4}-\d{2}", month_key or ""):
+        month_key = _current_month_key()
+
+    conn = get_db()
+    c = conn.cursor()
+    try:
+        c.execute("SELECT COALESCE(NULLIF(role,''),'customer') FROM users WHERE username=?", (target_username,))
+        row = c.fetchone()
+    except sqlite3.OperationalError:
+        row = None
+    if not row:
+        conn.close()
+        flash('User not found.')
+        return redirect(url_for('owner_users'))
+    if (row[0] or '').strip().lower() == 'admin':
+        conn.close()
+        flash('Admin users cannot be modified here.')
+        return redirect(url_for('owner_users'))
+
+    try:
+        changed = _unverify_app_fee_payment(conn, target_username, month_key)
+        conn.commit()
+    except sqlite3.OperationalError:
+        conn.close()
+        flash('Unable to undo app fee right now.')
+        return redirect(url_for('owner_user_profile', username=target_username))
+    conn.close()
+
+    if changed:
+        flash(f"App fee verification removed for {month_key}.")
+    else:
+        flash('Nothing to undo for this month.')
+    return redirect(url_for('owner_user_profile', username=target_username))
 
 
 @app.route('/owner/referrals')

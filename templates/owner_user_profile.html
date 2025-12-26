@@ -90,6 +90,11 @@
                 <button type="submit" style="background:#16a34a; color:#fff; border:none; padding:8px 12px; border-radius:8px; cursor:pointer;">Verify App Fee (This Month)</button>
             </form>
 
+            <form method="post" action="/owner/users/unverify_app_fee" style="margin:0;">
+                <input type="hidden" name="username" value="{{ user.username }}">
+                <button type="submit" style="background:#fff; color:#b42318; border:1px solid #b42318; padding:8px 12px; border-radius:8px; cursor:pointer;" onclick="return confirm('Undo app fee verification for this user (this month)?');">Undo App Fee (This Month)</button>
+            </form>
+
             <form method="post" action="/admin/toggle_user_active" style="margin:0;">
                 <input type="hidden" name="username" value="{{ user.username }}">
                 <input type="hidden" name="action" value="{{ 'block' if user.is_active else 'unblock' }}">

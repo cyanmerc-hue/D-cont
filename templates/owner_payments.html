@@ -43,6 +43,7 @@
                             <th>Credit Applied</th>
                             <th>Net Paid</th>
                             <th>Verified At</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -54,6 +55,18 @@
                             <td>-₹{{ p.credit_applied }}</td>
                             <td>₹{{ p.amount }}</td>
                             <td>{{ p.verified_at or '' }}</td>
+                            <td>
+                                <form method="post" action="/owner/payments/unverify_app_fee" style="margin:0;">
+                                    <input type="hidden" name="username" value="{{ p.username }}">
+                                    <input type="hidden" name="month" value="{{ app_fee_month }}">
+                                    <button
+                                        type="submit"
+                                        class="btn btn-sm btn-secondary"
+                                        style="width:auto; padding:6px 10px;"
+                                        onclick="return confirm('Undo app fee verification for {{ p.username }} ({{ app_fee_month }})?');"
+                                    >Undo</button>
+                                </form>
+                            </td>
                         </tr>
                     {% endfor %}
                     </tbody>
