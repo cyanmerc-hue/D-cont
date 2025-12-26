@@ -635,7 +635,7 @@ TRANSLATIONS = {
         'nav_groups': 'Groups',
         'nav_payments': 'Payments',
         'nav_profile': 'Profile',
-        'nav_rewards': 'Reward',
+        'nav_rewards': 'Benefits',
         'nav_support': 'Support',
         'login_title': 'Login',
         'login_identifier_label': 'Username / Mobile',
@@ -829,7 +829,7 @@ TRANSLATIONS = {
         'nav_groups': 'समूह',
         'nav_payments': 'भुगतान',
         'nav_profile': 'प्रोफ़ाइल',
-        'nav_rewards': 'रिवॉर्ड',
+        'nav_rewards': 'लाभ',
         'nav_support': 'सपोर्ट',
         'login_title': 'लॉगिन',
         'login_identifier_label': 'यूज़रनेम / मोबाइल',
@@ -2477,6 +2477,12 @@ def rewards():
         total_rewards_earned=int(total_rewards_earned or 0),
         active_tab='rewards',
     )
+
+
+@app.route('/benefits', methods=['GET'])
+@require_customer
+def benefits():
+    return redirect(url_for('rewards'))
 
 
 def _fetch_user_early_payout_requests(username: str):
