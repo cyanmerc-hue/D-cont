@@ -158,6 +158,47 @@ body.app-body {
   .topbar .nav-inner {
     display: none;
   }
+
+  /* Owner mobile menu (so PWA/shortcut can navigate) */
+  .ownerMenuMobile {
+    display: block;
+    flex: 1 1 100%;
+    margin-top: 8px;
+  }
+
+  .ownerMenuSummary {
+    cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    padding: 10px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: rgba(16, 20, 37, 0.55);
+    color: var(--text);
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-size: 12px;
+  }
+
+  .ownerMenuMobile[open] .ownerMenuSummary {
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .ownerMenuPanel {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .ownerMenuMobile summary::-webkit-details-marker {
+    display: none;
+  }
+}
+
+.ownerMenuMobile {
+  display: none;
 }
 
 /* Yellow accent links (avoid buttons/nav pills) */
