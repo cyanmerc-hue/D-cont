@@ -300,6 +300,27 @@
       <input name="upi_id" type="text" value="{{ upi_id }}" placeholder="example@upi" class="input" />
 
       <div style="margin-top:14px; padding-top:14px; border-top:1px solid #eef3f5;">
+        <div class="sectionTitle" style="margin-top:0;">Optional details</div>
+
+        <div class="row" style="margin-top:8px;">
+          <div class="col" style="min-width:220px;">
+            <label class="muted" style="display:block; font-size:0.95em;">Gender (optional)</label>
+            <select name="gender" class="input">
+              <option value="" {% if not gender %}selected{% endif %}>Prefer not to say</option>
+              <option value="Male" {% if gender == 'Male' %}selected{% endif %}>Male</option>
+              <option value="Female" {% if gender == 'Female' %}selected{% endif %}>Female</option>
+              <option value="Other" {% if gender == 'Other' %}selected{% endif %}>Other</option>
+              <option value="Prefer not to say" {% if gender == 'Prefer not to say' %}selected{% endif %}>Prefer not to say</option>
+            </select>
+          </div>
+          <div class="col" style="min-width:220px;">
+            <label class="muted" style="display:block; font-size:0.95em;">Occupation (optional)</label>
+            <input name="occupation" type="text" value="{{ occupation or '' }}" maxlength="80" class="input" placeholder="e.g., Student, Business, Salaried" />
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:14px; padding-top:14px; border-top:1px solid #eef3f5;">
         <div class="sectionTitle" style="margin-top:0;">{{ t('documents_title') }}</div>
         <div class="muted" style="font-size:0.95em; margin-top:6px; line-height:1.4;">
           {{ t('documents_help') }}

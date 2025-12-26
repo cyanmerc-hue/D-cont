@@ -33,6 +33,14 @@
                 <div style="font-weight:700;">{{ user.mobile }}</div>
             </div>
             <div style="border:1px solid #e8eef0; border-radius:10px; padding:14px;">
+                <div style="color:#555;">Gender</div>
+                <div style="font-weight:700;">{{ user.gender or '—' }}</div>
+            </div>
+            <div style="border:1px solid #e8eef0; border-radius:10px; padding:14px;">
+                <div style="color:#555;">Occupation</div>
+                <div style="font-weight:700;">{{ user.occupation or '—' }}</div>
+            </div>
+            <div style="border:1px solid #e8eef0; border-radius:10px; padding:14px;">
                 <div style="color:#555;">Trust score</div>
                 <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
                     <div style="font-weight:700;">{{ user.trust_score }} • {{ user.trust_score|trust_band }}</div>

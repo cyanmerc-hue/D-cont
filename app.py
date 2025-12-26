@@ -1464,6 +1464,9 @@ USER_COLUMNS = {
     "email": "TEXT",
     "role": "TEXT",
     "upi_id": "TEXT",
+    # Optional customer details (filled later)
+    "gender": "TEXT",
+    "occupation": "TEXT",
     "onboarding_completed": "INTEGER",
     "app_fee_paid": "INTEGER",
     "app_fee_paid_month": "TEXT",
@@ -2543,11 +2546,13 @@ def profile():
     conn.commit()
 
     c.execute(
-        'SELECT full_name, mobile, upi_id, app_fee_paid, COALESCE(app_fee_paid_month,\'\'), aadhaar_doc, pan_doc, passport_doc, COALESCE(trust_score,50), COALESCE(referral_code,\'\'), COALESCE(mpin_hash,\'\'), COALESCE(webauthn_credential_id,\'\') FROM users WHERE username=?',
+        'SELECT full_name, mobile, upi_id, COALESCE(gender,\'\'), COALESCE(occupation,\'\'), app_fee_paid, COALESCE(app_fee_paid_month,\'\'), aadhaar_doc, pan_doc, passport_doc, COALESCE(trust_score,50), COALESCE(referral_code,\'\'), COALESCE(mpin_hash,\'\'), COALESCE(webauthn_credential_id,\'\') FROM users WHERE username=?',
         (username,),
     )
     row = c.fetchone()
     full_name = mobile = upi_id = None
+    gender = ''
+    occupation = ''
     aadhaar_doc = pan_doc = passport_doc = None
     app_fee_paid = 0
     app_fee_paid_month = ''
@@ -2560,6 +2565,8 @@ def profile():
             full_name,
             mobile,
             upi_id,
+            gender,
+            occupation,
             app_fee_paid,
             app_fee_paid_month,
             aadhaar_doc,
@@ -2573,8 +2580,22 @@ def profile():
     if request.method == 'POST':
         full_name = (request.form.get('full_name') or '').strip()
         upi_id = (request.form.get('upi_id') or '').strip()
+        gender_in = (request.form.get('gender') or '').strip()
+        occupation_in = (request.form.get('occupation') or '').strip()
+
+        allowed_genders = {'', 'Male', 'Female', 'Other', 'Prefer not to say'}
+        if gender_in not in allowed_genders:
+            gender_in = ''
+        if len(occupation_in) > 80:
+            occupation_in = occupation_in[:80]
+
         # Update profile fields
-        c.execute('UPDATE users SET full_name=?, upi_id=? WHERE username=?', (full_name, upi_id, username))
+        c.execute(
+            'UPDATE users SET full_name=?, upi_id=?, gender=?, occupation=? WHERE username=?',
+            (full_name, upi_id, gender_in, occupation_in, username),
+        )
+        gender = gender_in
+        occupation = occupation_in
 
         # Optional: handle document uploads
         doc_fields = [
@@ -2702,6 +2723,8 @@ def profile():
         full_name=full_name or '',
         mobile=mobile or '',
         upi_id=upi_id or '',
+        gender=(gender or '').strip(),
+        occupation=(occupation or '').strip(),
         app_fee_paid=int(app_fee_paid or 0),
         app_fee_paid_month=(app_fee_paid_month or '').strip(),
         aadhaar_doc=aadhaar_doc or '',
@@ -3831,7 +3854,9 @@ def owner_user_profile(username):
                COALESCE(join_blocked,0) as join_blocked,
                COALESCE(trust_score,50) as trust_score,
                COALESCE(app_fee_paid,0) as app_fee_paid,
-               COALESCE(upi_id,'') as upi_id
+               COALESCE(upi_id,'') as upi_id,
+               COALESCE(gender,'') as gender,
+               COALESCE(occupation,'') as occupation
         FROM users WHERE username=?
         """,
         (username,),
@@ -3876,6 +3901,8 @@ def owner_user_profile(username):
         'trust_score': int(trust_details.get('score', row[7] if row[7] is not None else 50)),
         'app_fee_paid': int(row[8] or 0),
         'upi_id': row[9] or '',
+        'gender': (row[10] or '').strip(),
+        'occupation': (row[11] or '').strip(),
     }
     return render_template(
         'owner_user_profile.html',
