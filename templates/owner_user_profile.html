@@ -200,6 +200,44 @@
         {% else %}
             <div style="color:#777;">No joined groups.</div>
         {% endif %}
+
+                <h3 style="margin-top:22px;">Transactions</h3>
+                {% if transactions and transactions|length > 0 %}
+                    <div style="overflow-x:auto;">
+                        <table style="width:100%; border-collapse: collapse; min-width: 900px;">
+                            <thead>
+                                <tr>
+                                    <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Date</th>
+                                    <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Group</th>
+                                    <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Amount</th>
+                                    <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">UTR</th>
+                                    <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Status</th>
+                                    <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Proof</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for tx in transactions %}
+                                    <tr>
+                                        <td style="padding:8px; border-bottom:1px solid #f2f2f2;">{{ tx.paid_at }}</td>
+                                        <td style="padding:8px; border-bottom:1px solid #f2f2f2;">{{ tx.group_name or '—' }}</td>
+                                        <td style="padding:8px; border-bottom:1px solid #f2f2f2;">₹{{ tx.amount }}</td>
+                                        <td style="padding:8px; border-bottom:1px solid #f2f2f2; font-weight:700;">{{ tx.utr }}</td>
+                                        <td style="padding:8px; border-bottom:1px solid #f2f2f2;">{{ (tx.status or 'pending')|capitalize }}</td>
+                                        <td style="padding:8px; border-bottom:1px solid #f2f2f2;">
+                                            {% if tx.proof_file %}
+                                                <a href="/transactions/proof/{{ tx.id }}" style="color:#2D9CDB; text-decoration:none;">View</a>
+                                            {% else %}
+                                                <span style="color:#777;">—</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div style="color:#777;">No transaction records yet.</div>
+                {% endif %}
       </div>
     </div>
 </body>

@@ -13,6 +13,7 @@ from email.message import EmailMessage
 import re
 import time
 import calendar
+import mimetypes
 
 from flask import jsonify
 
@@ -1585,6 +1586,86 @@ def get_user_row(username):
     }
 
 
+def _allowed_proof_filename(filename: str) -> bool:
+    name = (filename or '').strip().lower()
+    if not name or '.' not in name:
+        return False
+    ext = name.rsplit('.', 1)[-1]
+    return ext in {'png', 'jpg', 'jpeg', 'webp', 'pdf'}
+
+
+def _save_proof_upload(file_storage, username: str) -> str:
+    if not file_storage:
+        return ''
+    original = (getattr(file_storage, 'filename', '') or '').strip()
+    if not original:
+        return ''
+    if not _allowed_proof_filename(original):
+        return ''
+
+    safe = secure_filename(original)
+    ext = safe.rsplit('.', 1)[-1].lower() if '.' in safe else ''
+    out_name = f"trx_{(username or 'user').strip()}_{uuid.uuid4().hex}.{ext}" if ext else f"trx_{(username or 'user').strip()}_{uuid.uuid4().hex}"
+    out_path = os.path.join(app.config['UPLOAD_FOLDER'], out_name)
+    file_storage.save(out_path)
+    return out_name
+
+
+def _fetch_user_transactions(conn: sqlite3.Connection, username: str, limit: int = 200):
+    uname = (username or '').strip()
+    if not uname:
+        return []
+    try:
+        lim = int(limit or 200)
+    except Exception:
+        lim = 200
+    lim = max(1, min(500, lim))
+
+    c = conn.cursor()
+    try:
+        c.execute(
+            """
+            SELECT t.id,
+                   COALESCE(t.group_id,0),
+                   COALESCE(g.name,''),
+                   COALESCE(t.amount,0),
+                   COALESCE(t.paid_at,''),
+                   COALESCE(t.utr,''),
+                   COALESCE(t.note,''),
+                   COALESCE(t.proof_file,''),
+                   COALESCE(t.status,'pending'),
+                   COALESCE(t.created_at,'')
+            FROM transactions t
+            LEFT JOIN groups g ON g.id = t.group_id
+            WHERE t.username=?
+            ORDER BY COALESCE(t.paid_at,'' ) DESC, t.id DESC
+            LIMIT ?
+            """,
+            (uname, lim),
+        )
+        rows = c.fetchall() or []
+    except sqlite3.OperationalError:
+        return []
+
+    out = []
+    for r in rows:
+        out.append(
+            {
+                'id': int(r[0] or 0),
+                'group_id': int(r[1] or 0),
+                'group_name': (r[2] or '').strip(),
+                'amount': int(r[3] or 0),
+                'paid_at': (r[4] or '').strip(),
+                'utr': (r[5] or '').strip(),
+                'note': (r[6] or '').strip(),
+                'proof_file': (r[7] or '').strip(),
+                'status': (r[8] or 'pending').strip().lower(),
+                'created_at': (r[9] or '').strip(),
+            }
+        )
+    return out
+
+
 def require_customer(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
@@ -3095,6 +3176,28 @@ def init_db():
         )'''
     )
 
+    # Customer transaction records (UTR + optional proof upload)
+    c.execute(
+        '''CREATE TABLE IF NOT EXISTS transactions (
+            id INTEGER PRIMARY KEY,
+            username TEXT,
+            group_id INTEGER,
+            amount INTEGER,
+            paid_at TEXT,
+            utr TEXT,
+            note TEXT,
+            proof_file TEXT,
+            status TEXT,
+            created_at TEXT,
+            verified_at TEXT,
+            verified_by TEXT
+        )'''
+    )
+    try:
+        c.execute('CREATE INDEX IF NOT EXISTS idx_transactions_user_created ON transactions(username, created_at)')
+    except sqlite3.OperationalError:
+        pass
+
     # Ensure referrals table has credit columns (auto-migration)
     c.execute("PRAGMA table_info(referrals)")
     existing_referral_cols = {row[1] for row in c.fetchall()}
@@ -3666,6 +3769,8 @@ def owner_user_profile(username):
         }
         for r in c.fetchall()
     ]
+
+    transactions = _fetch_user_transactions(conn, username, limit=200)
     conn.close()
 
     user = {
@@ -3685,6 +3790,7 @@ def owner_user_profile(username):
         active_owner_tab='users',
         user=user,
         groups=groups,
+        transactions=transactions,
         trust_breakdown=trust_details.get('breakdown', {}),
         trust_events=(trust_details.get('events', [])[:25]),
     )
@@ -5190,6 +5296,141 @@ def payments_tab():
         app_fee_net_amount_actual=int(net_amount_actual or 0),
         active_tab='payments',
     )
+
+
+@app.route('/transactions')
+@require_customer
+def transactions_tab():
+    username = session['username']
+    my_groups = _fetch_my_groups(username)
+    conn = get_db()
+    transactions = _fetch_user_transactions(conn, username, limit=200)
+    conn.close()
+    return render_template(
+        'transactions.html',
+        my_groups=my_groups,
+        transactions=transactions,
+        today_iso=_today_iso(),
+        active_tab='payments',
+    )
+
+
+@app.route('/transactions/add', methods=['POST'])
+@require_customer
+def transactions_add():
+    username = session['username']
+    group_id_raw = (request.form.get('group_id') or '').strip()
+    amount_raw = (request.form.get('amount') or '').strip()
+    paid_at = (request.form.get('paid_at') or '').strip()
+    utr = (request.form.get('utr') or '').strip()
+    note = (request.form.get('note') or '').strip()
+    proof = request.files.get('proof')
+
+    try:
+        amount = int(amount_raw)
+    except Exception:
+        amount = 0
+    if amount <= 0:
+        flash('Amount must be greater than 0.')
+        return redirect(url_for('transactions_tab'))
+
+    if not paid_at or not _parse_iso_date(paid_at):
+        flash('Please provide a valid paid date.')
+        return redirect(url_for('transactions_tab'))
+
+    if not utr or len(utr) < 6:
+        flash('Please enter a valid UTR / transaction ID.')
+        return redirect(url_for('transactions_tab'))
+
+    group_id = 0
+    if group_id_raw:
+        try:
+            group_id = int(group_id_raw)
+        except Exception:
+            group_id = 0
+
+    conn = get_db()
+    c = conn.cursor()
+
+    # If group_id provided, ensure the customer is a joined member.
+    if group_id > 0:
+        try:
+            c.execute(
+                "SELECT 1 FROM group_members WHERE group_id=? AND username=? AND status='joined' LIMIT 1",
+                (group_id, username),
+            )
+            ok_member = c.fetchone()
+        except sqlite3.OperationalError:
+            ok_member = None
+        if not ok_member:
+            conn.close()
+            flash('Invalid group selection.')
+            return redirect(url_for('transactions_tab'))
+
+    proof_name = ''
+    if proof and getattr(proof, 'filename', ''):
+        proof_name = _save_proof_upload(proof, username)
+        if not proof_name:
+            conn.close()
+            flash('Invalid proof file. Please upload PNG/JPG/WEBP or PDF.')
+            return redirect(url_for('transactions_tab'))
+
+    now = datetime.now().isoformat(timespec='seconds')
+    try:
+        c.execute(
+            "INSERT INTO transactions (username, group_id, amount, paid_at, utr, note, proof_file, status, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
+            (
+                username,
+                int(group_id or 0),
+                int(amount),
+                paid_at,
+                utr,
+                note,
+                proof_name,
+                'pending',
+                now,
+            ),
+        )
+        conn.commit()
+    except sqlite3.OperationalError:
+        conn.close()
+        flash('Unable to save transaction right now. Please try again.')
+        return redirect(url_for('transactions_tab'))
+    conn.close()
+    flash('Transaction record submitted.')
+    return redirect(url_for('transactions_tab'))
+
+
+@app.route('/transactions/proof/<int:tx_id>')
+def transactions_proof(tx_id: int):
+    # Customer can view own proof; admin can view any.
+    if 'username' not in session:
+        return redirect(url_for('login'))
+    role = (session.get('role') or 'customer').strip().lower()
+    username = (session.get('username') or '').strip()
+
+    conn = get_db()
+    c = conn.cursor()
+    try:
+        c.execute(
+            "SELECT username, COALESCE(proof_file,'') FROM transactions WHERE id=?",
+            (int(tx_id or 0),),
+        )
+        row = c.fetchone()
+    except sqlite3.OperationalError:
+        row = None
+    conn.close()
+    if not row:
+        abort(404)
+    owner_username = (row[0] or '').strip()
+    filename = (row[1] or '').strip()
+    if not filename:
+        abort(404)
+    if role != 'admin' and owner_username != username:
+        abort(403)
+    # Serve from private uploads folder
+    guessed = mimetypes.guess_type(filename)[0] or 'application/octet-stream'
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename, as_attachment=False, mimetype=guessed)
 
 
 @app.route('/groups/<int:amount>')

@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Transactions - D-cont</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#05060A">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css', v=asset_version) }}">
+  <link rel="manifest" href="{{ url_for('static', filename='manifest.json', v=asset_version) }}">
+  <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icons/icon-192.png', v=asset_version) }}">
+  <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='icons/icon-512.png', v=asset_version) }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png', v=asset_version) }}">
+</head>
+<body class="app-body hasTabs">
+  {% include '_tab_nav.html' %}
+
+  <div class="container">
+    <div class="card">
+      <h2 style="margin:0;">Transaction History</h2>
+
+      {% with messages = get_flashed_messages() %}
+        {% if messages %}
+          <div class="notice" style="margin-top:12px; padding:10px 12px;">{{ messages[0] }}</div>
+        {% endif %}
+      {% endwith %}
+
+      <div class="card-pro" style="margin-top:14px; padding:14px;">
+        <div class="sectionTitle" style="margin-top:0;">Upload Payment Proof</div>
+        <div class="muted" style="margin-top:6px; line-height:1.45;">Add UTR/transaction ID and optional screenshot/PDF proof.</div>
+
+        <form method="post" action="/transactions/add" enctype="multipart/form-data" style="margin-top:12px; display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:10px; align-items:end;">
+          <div>
+            <label class="muted small" style="display:block;">Group</label>
+            <select class="input" name="group_id" style="margin:6px 0 0;">
+              <option value="">Select (optional)</option>
+              {% for g in (my_groups or []) %}
+                <option value="{{ g.id }}">{{ g.name }} (₹{{ g.monthly_amount }})</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div>
+            <label class="muted small" style="display:block;">Amount (₹)</label>
+            <input class="input" name="amount" type="number" min="1" inputmode="numeric" style="margin:6px 0 0;" placeholder="500" required>
+          </div>
+
+          <div>
+            <label class="muted small" style="display:block;">Paid Date</label>
+            <input class="input" name="paid_at" type="date" style="margin:6px 0 0;" value="{{ today_iso }}" required>
+          </div>
+
+          <div>
+            <label class="muted small" style="display:block;">UTR / Transaction ID</label>
+            <input class="input" name="utr" type="text" style="margin:6px 0 0;" placeholder="UTR123..." required>
+          </div>
+
+          <div style="grid-column: 1 / -1;">
+            <label class="muted small" style="display:block;">Note (optional)</label>
+            <input class="input" name="note" type="text" style="margin:6px 0 0;" placeholder="e.g., paid to receiver via UPI">
+          </div>
+
+          <div style="grid-column: 1 / -1;">
+            <label class="muted small" style="display:block;">Proof file (optional)</label>
+            <input class="input" name="proof" type="file" style="margin:6px 0 0; padding:10px;" accept="image/*,application/pdf">
+            <div class="muted small" style="margin-top:6px;">Accepted: image or PDF.</div>
+          </div>
+
+          <button type="submit" class="btn" style="grid-column: 1 / -1;">Submit Record</button>
+        </form>
+      </div>
+
+      <div class="sectionTitle" style="margin-top:18px;">Your Records</div>
+      {% if transactions and transactions|length > 0 %}
+        <div style="overflow-x:auto;">
+          <table class="table" style="min-width: 860px;">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Group</th>
+                <th>Amount</th>
+                <th>UTR</th>
+                <th>Status</th>
+                <th>Proof</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for tx in transactions %}
+                <tr>
+                  <td>{{ tx.paid_at }}</td>
+                  <td>{{ tx.group_name or '—' }}</td>
+                  <td>₹{{ tx.amount }}</td>
+                  <td style="font-weight:800;">{{ tx.utr }}</td>
+                  <td>{{ (tx.status or 'pending')|capitalize }}</td>
+                  <td>
+                    {% if tx.proof_file %}
+                      <a href="/transactions/proof/{{ tx.id }}" class="nav-link" style="display:inline-block; width:auto;">View</a>
+                    {% else %}
+                      <span class="muted">—</span>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="muted">No transaction records yet.</div>
+      {% endif %}
+
+      <div style="margin-top:14px;">
+        <a href="/payments" class="nav-link" style="display:inline-block; width:auto;">← Back to Pay</a>
+      </div>
+
+    </div>
+  </div>
+</body>
+</html>
