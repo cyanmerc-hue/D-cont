@@ -155,7 +155,7 @@ body.app-body {
   }
 
   /* Reduce top desktop nav on small screens */
-  .topbar .nav-inner {
+  body.app-body.hasTabs .topbar .nav-inner {
     display: none;
   }
 
