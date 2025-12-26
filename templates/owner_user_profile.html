@@ -115,6 +115,17 @@
             </form>
         </div>
 
+        <div style="margin-top:14px; border:1px solid #f2d3d3; border-radius:10px; padding:14px;">
+            <div style="font-weight:800; color:#b42318;">Danger zone</div>
+            <div style="margin-top:8px; color:#777; font-size:0.95em; line-height:1.4;">Delete removes the user and their related records (memberships, transactions, referrals, app-fee ledger, etc.). This cannot be undone.</div>
+
+            <form method="post" action="/owner/users/delete" style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                <input type="hidden" name="username" value="{{ user.username }}">
+                <input name="confirm_username" type="text" placeholder="Type username to confirm" class="input" style="margin:0; max-width: 320px;" />
+                <button type="submit" style="background:#b42318; color:#fff; border:none; padding:8px 12px; border-radius:8px; cursor:pointer;" onclick="return confirm('Delete user {{ user.username }}? This cannot be undone.');">Delete User</button>
+            </form>
+        </div>
+
         <div style="margin-top:14px; border:1px solid #e8eef0; border-radius:10px; padding:14px;">
             <div style="font-weight:700; color:#222;">Reset password (Owner only)</div>
             <form method="post" action="/owner/users/reset_password" style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">

@@ -374,6 +374,118 @@ def _unverify_app_fee_payment(conn: sqlite3.Connection, username: str, month_key
     return bool(changed)
 
 
+def _delete_user_and_related(conn: sqlite3.Connection, username: str) -> tuple[bool, str]:
+    """Delete a customer user and best-effort cleanup related records.
+
+    Returns (ok, message).
+    """
+    uname = (username or '').strip()
+    if not uname:
+        return (False, 'Missing username.')
+
+    c = conn.cursor()
+
+    # Do not allow deleting admin accounts.
+    try:
+        c.execute("SELECT COALESCE(NULLIF(role,''),'customer') FROM users WHERE username=?", (uname,))
+        row = c.fetchone()
+    except sqlite3.OperationalError:
+        row = None
+    if not row:
+        return (False, 'User not found.')
+    if (row[0] or '').strip().lower() == 'admin':
+        return (False, 'Admin users cannot be deleted.')
+
+    # Capture uploaded filenames (best-effort)
+    files_to_delete: list[str] = []
+    try:
+        c.execute(
+            """
+            SELECT COALESCE(photo,''),
+                   COALESCE(aadhaar_doc,''),
+                   COALESCE(pan_doc,''),
+                   COALESCE(passport_doc,'')
+            FROM users WHERE username=?
+            """,
+            (uname,),
+        )
+        frow = c.fetchone() or ('', '', '', '')
+        for fn in frow:
+            fn = (fn or '').strip()
+            if fn:
+                files_to_delete.append(fn)
+    except sqlite3.OperationalError:
+        files_to_delete = []
+
+    # Clean references in groups (best-effort)
+    try:
+        c.execute(
+            """
+            UPDATE groups
+            SET payout_receiver_username='',
+                payout_receiver_name='',
+                payout_receiver_upi='',
+                receiver_name=CASE WHEN COALESCE(receiver_name,'')='' THEN receiver_name ELSE receiver_name END,
+                receiver_upi=CASE WHEN COALESCE(receiver_upi,'')='' THEN receiver_upi ELSE receiver_upi END
+            WHERE COALESCE(payout_receiver_username,'')=?
+            """,
+            (uname,),
+        )
+    except sqlite3.OperationalError:
+        pass
+
+    # Delete related rows (best-effort per table)
+    for sql, params in [
+        ("DELETE FROM group_members WHERE username=?", (uname,)),
+        ("DELETE FROM transactions WHERE username=?", (uname,)),
+        ("DELETE FROM trust_events WHERE username=?", (uname,)),
+        ("DELETE FROM early_payout_requests WHERE username=?", (uname,)),
+        ("DELETE FROM app_fee_payments WHERE username=?", (uname,)),
+        ("DELETE FROM support_handoffs WHERE username=?", (uname,)),
+        ("DELETE FROM referrals WHERE referrer_username=? OR new_username=?", (uname, uname)),
+    ]:
+        try:
+            c.execute(sql, params)
+        except sqlite3.OperationalError:
+            pass
+
+    # Auth attempts may store username or phone as identifier (best-effort)
+    try:
+        c.execute("SELECT COALESCE(mobile,'') FROM users WHERE username=?", (uname,))
+        mrow = c.fetchone()
+        mobile_val = (mrow[0] if mrow else '') or ''
+        try:
+            c.execute("DELETE FROM auth_attempts WHERE identifier=?", (uname,))
+        except sqlite3.OperationalError:
+            pass
+        if mobile_val.strip():
+            try:
+                c.execute("DELETE FROM auth_attempts WHERE identifier=?", (mobile_val.strip(),))
+            except sqlite3.OperationalError:
+                pass
+    except sqlite3.OperationalError:
+        pass
+
+    # Finally delete the user row
+    try:
+        c.execute("DELETE FROM users WHERE username=?", (uname,))
+        if not (c.rowcount and int(c.rowcount) > 0):
+            return (False, 'User not deleted (not found).')
+    except sqlite3.OperationalError:
+        return (False, 'Unable to delete user right now.')
+
+    # Delete uploads (ignore errors)
+    for fn in files_to_delete:
+        try:
+            path = os.path.join(app.config.get('UPLOAD_FOLDER') or UPLOAD_FOLDER, fn)
+            if os.path.isfile(path):
+                os.remove(path)
+        except OSError:
+            pass
+
+    return (True, 'User deleted.')
+
+
 def _normalize_referral_code(raw: str) -> str:
     code = (raw or '').strip().upper()
     return re.sub(r'[^A-Z0-9]', '', code)
@@ -4057,6 +4169,38 @@ def owner_add_trust_event():
 
     recalculate_and_store_trust(target_username)
     flash('Trust event recorded. Score updated.')
+    return redirect(url_for('owner_user_profile', username=target_username))
+
+
+@app.route('/owner/users/delete', methods=['POST'])
+@admin_required
+def owner_delete_user():
+    target_username = (request.form.get('username') or '').strip()
+    confirm_username = (request.form.get('confirm_username') or '').strip()
+    if not target_username:
+        flash('Missing username.')
+        return redirect(url_for('owner_users'))
+    if target_username == session.get('username'):
+        flash('You cannot delete your own account.')
+        return redirect(url_for('owner_users'))
+    if confirm_username != target_username:
+        flash('Confirmation username does not match. User not deleted.')
+        return redirect(url_for('owner_user_profile', username=target_username))
+
+    conn = get_db()
+    ok, msg = _delete_user_and_related(conn, target_username)
+    if ok:
+        try:
+            conn.commit()
+        except sqlite3.OperationalError:
+            conn.close()
+            flash('Deleted user, but failed to commit changes.')
+            return redirect(url_for('owner_users'))
+        conn.close()
+        flash(msg)
+        return redirect(url_for('owner_users'))
+    conn.close()
+    flash(msg)
     return redirect(url_for('owner_user_profile', username=target_username))
 
 
