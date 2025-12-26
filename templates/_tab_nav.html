@@ -11,7 +11,7 @@
       <a href="/home" class="nav-link {{ 'active' if tab=='home' else '' }}">{{ t('nav_home') }}</a>
       <a href="/groups" class="nav-link {{ 'active' if tab=='groups' else '' }}">{{ t('nav_groups') }}</a>
       <a href="/payments" class="nav-link {{ 'active' if tab=='payments' else '' }}">PAY</a>
-      <a href="/benefits" class="nav-link {{ 'active' if tab=='rewards' else '' }}">{{ t('nav_rewards') }}</a>
+      <a href="/rewards" class="nav-link {{ 'active' if tab=='rewards' else '' }}">{{ t('nav_rewards') }}</a>
       <a href="/chat" class="nav-link {{ 'active' if tab=='support' else '' }}">{{ t('nav_support') }}</a>
     </div>
     {% if nav_user_pill %}
@@ -52,7 +52,7 @@
     {% endif %}
   </a>
 
-  <a href="/benefits" class="tabItem {{ 'active' if tab=='rewards' else '' }}" aria-label="{{ t('nav_rewards') }}">
+  <a href="/rewards" class="tabItem {{ 'active' if tab=='rewards' else '' }}" aria-label="{{ t('nav_rewards') }}">
     <svg class="tabIcon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M12 17.5l-5.5 3 1.05-6.25L3 9.75l6.3-.9L12 3l2.7 5.85 6.3.9-4.55 4.5L17.5 20.5 12 17.5Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
     </svg>
