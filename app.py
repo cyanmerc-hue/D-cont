@@ -27,6 +27,7 @@ try:
     from webauthn.helpers.structs import (
         AuthenticatorSelectionCriteria,
         PublicKeyCredentialDescriptor,
+        ResidentKeyRequirement,
         UserVerificationRequirement,
     )
     from webauthn.helpers import base64url_to_bytes, bytes_to_base64url
@@ -38,6 +39,7 @@ except Exception:
     options_to_json = None
     AuthenticatorSelectionCriteria = None
     PublicKeyCredentialDescriptor = None
+    ResidentKeyRequirement = None
     UserVerificationRequirement = None
     base64url_to_bytes = None
     bytes_to_base64url = None
@@ -2699,11 +2701,12 @@ def webauthn_register_options():
                 exclude = []
 
         authenticator_selection = None
-        if AuthenticatorSelectionCriteria is not None:
+        # Some webauthn package versions expect enum values (with .value), not raw strings.
+        if AuthenticatorSelectionCriteria is not None and ResidentKeyRequirement is not None and UserVerificationRequirement is not None:
             try:
                 authenticator_selection = AuthenticatorSelectionCriteria(
-                    resident_key='preferred',
-                    user_verification='preferred',
+                    resident_key=ResidentKeyRequirement.PREFERRED,
+                    user_verification=UserVerificationRequirement.PREFERRED,
                 )
             except Exception:
                 authenticator_selection = None
