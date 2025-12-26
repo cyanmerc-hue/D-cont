@@ -939,9 +939,24 @@ FAQ_INTENTS = [
     },
     {
         'key': 'utr_proof',
-        'triggers': ["utr", "proof", "screenshot", "reference number"],
-        'answer': "UTR/proof upload isn’t available in the app yet. Please contact support on WhatsApp with your group name, amount, and UTR/reference.",
-        'handoff': True,
+        'triggers': [
+            "how to upload utr",
+            "upload utr",
+            "utr",
+            "transaction id",
+            "reference number",
+            "proof",
+            "upload proof",
+            "screenshot",
+            "transaction history",
+            "open transaction history",
+        ],
+        'answer': (
+            "To upload UTR/Proof: go to Payments tab → Transaction Records → Open Transaction History. "
+            "Fill the form (Group optional, Amount, Paid Date, UTR/Transaction ID) and attach your proof file (optional), then tap Submit Record. "
+            "You can see all your uploaded records in the same page."
+        ),
+        'link': '/transactions',
     },
     {
         'key': 'leave_group',
@@ -2092,6 +2107,8 @@ def chat():
                         intent_link_label = 'Open Home'
                     elif intent_link == '/add-upi':
                         intent_link_label = 'Open Add UPI'
+                    elif intent_link == '/transactions':
+                        intent_link_label = 'Open Transaction History'
                     else:
                         intent_link_label = 'Open'
                 if intent.get('handoff'):
