@@ -1426,6 +1426,38 @@ def _webauthn_origin() -> str:
     return f"{proto}://{host}".rstrip('/')
 
 
+def _webauthn_expected_origin() -> str:
+    """Best-effort origin that matches what the browser uses.
+
+    On mobile/PWA, origin mismatches are the most common cause of WebAuthn failures.
+    Prefer the request's Origin header when present.
+    """
+    try:
+        hdr = (request.headers.get('Origin') or '').strip()
+    except Exception:
+        hdr = ''
+    if hdr:
+        return hdr.rstrip('/')
+    return _webauthn_origin()
+
+
+def _webauthn_expected_rp_id() -> str:
+    """Best-effort RP ID for WebAuthn verification."""
+    rp_id = (_webauthn_rp_id() or '').strip()
+    if rp_id:
+        return rp_id
+    # Fallback: derive from Origin header.
+    try:
+        origin = (request.headers.get('Origin') or '').strip().rstrip('/')
+    except Exception:
+        origin = ''
+    if origin.startswith('https://'):
+        return origin[len('https://') :].split('/', 1)[0].split(':', 1)[0]
+    if origin.startswith('http://'):
+        return origin[len('http://') :].split('/', 1)[0].split(':', 1)[0]
+    return ''
+
+
 def _lookup_customer_candidates_by_mobile(conn: sqlite3.Connection, mobile_identifier: str):
     identifier = (mobile_identifier or '').strip()
     if not identifier:
@@ -2641,10 +2673,9 @@ def webauthn_register_options():
             return jsonify({'error': 'Fingerprint login is not available on this server.'}), 501
 
         username = session['username']
-        rp_id = _webauthn_rp_id()
-        origin = _webauthn_origin()
-        if not rp_id or not origin:
-            return jsonify({'error': 'Unable to determine RP settings.'}), 400
+        rp_id = _webauthn_expected_rp_id()
+        if not rp_id:
+            return jsonify({'error': 'Unable to determine RP ID.'}), 400
 
         # Use a stable user_id
         user_id = f"dcont:{username}".encode('utf-8')
@@ -2689,7 +2720,12 @@ def webauthn_register_options():
             exclude_credentials=exclude or None,
         )
         return app.response_class(options_to_json(options), mimetype='application/json')
-    except Exception:
+    except Exception as e:
+        app.logger.exception('WebAuthn register/options failed')
+        msg = (str(e) or '').strip()
+        msg = msg[:220]
+        if msg:
+            return jsonify({'error': f'Unable to start fingerprint setup: {msg}'}), 500
         return jsonify({'error': 'Unable to start fingerprint setup. Please try again.'}), 500
 
 
@@ -2701,12 +2737,15 @@ def webauthn_register_verify():
             return jsonify({'error': 'Fingerprint login is not available on this server.'}), 501
 
         username = session['username']
-        rp_id = _webauthn_rp_id()
-        origin = _webauthn_origin()
+        rp_id = _webauthn_expected_rp_id()
+        origin = _webauthn_expected_origin()
         challenge_b64 = (session.get('webauthn_reg_challenge') or '').strip()
         if not challenge_b64 or base64url_to_bytes is None:
             return jsonify({'error': 'Registration challenge expired. Please try again.'}), 400
         expected_challenge = base64url_to_bytes(challenge_b64)
+
+        if not rp_id or not origin:
+            return jsonify({'error': 'Unable to determine RP/origin. Please re-open the site and try again.'}), 400
 
         credential = request.get_json(silent=True) or {}
         try:
@@ -2717,8 +2756,22 @@ def webauthn_register_verify():
                 expected_origin=origin,
                 require_user_verification=False,
             )
-        except Exception:
-            return jsonify({'error': 'Unable to verify fingerprint setup.'}), 400
+        except Exception as e:
+            app.logger.warning('WebAuthn register/verify failed: %s', e)
+            detail = (str(e) or '').strip()[:240]
+            # Common failure is origin mismatch; include computed values to aid debugging.
+            return jsonify(
+                {
+                    'error': 'Unable to verify fingerprint setup.' + (f' {detail}' if detail else ''),
+                    'debug': {
+                        'expected_rp_id': rp_id,
+                        'expected_origin': origin,
+                        'request_origin': (request.headers.get('Origin') or ''),
+                        'xf_proto': (request.headers.get('X-Forwarded-Proto') or ''),
+                        'xf_host': (request.headers.get('X-Forwarded-Host') or ''),
+                    },
+                }
+            ), 400
 
         # Persist credential
         cred_id = bytes_to_base64url(verified.credential_id) if bytes_to_base64url else ''
@@ -2740,7 +2793,11 @@ def webauthn_register_verify():
         conn.close()
         session.pop('webauthn_reg_challenge', None)
         return jsonify({'ok': True})
-    except Exception:
+    except Exception as e:
+        app.logger.exception('WebAuthn register/verify crashed')
+        msg = (str(e) or '').strip()[:220]
+        if msg:
+            return jsonify({'error': f'Fingerprint setup failed: {msg}'}), 500
         return jsonify({'error': 'Fingerprint setup failed. Please try again.'}), 500
 
 
@@ -2753,10 +2810,9 @@ def webauthn_auth_options():
     if not mobile_identifier:
         return jsonify({'error': 'Mobile number is required.'}), 400
 
-    rp_id = _webauthn_rp_id()
-    origin = _webauthn_origin()
-    if not rp_id or not origin:
-        return jsonify({'error': 'Unable to determine RP settings.'}), 400
+    rp_id = _webauthn_expected_rp_id()
+    if not rp_id:
+        return jsonify({'error': 'Unable to determine RP ID.'}), 400
 
     conn = get_db()
     candidates = _lookup_customer_candidates_by_mobile(conn, mobile_identifier)
@@ -2803,13 +2859,16 @@ def webauthn_auth_verify():
     if verify_authentication_response is None:
         return jsonify({'error': 'Fingerprint login is not available on this server.'}), 501
 
-    rp_id = _webauthn_rp_id()
-    origin = _webauthn_origin()
+    rp_id = _webauthn_expected_rp_id()
+    origin = _webauthn_expected_origin()
     uname = (session.get('webauthn_auth_username') or '').strip()
     challenge_b64 = (session.get('webauthn_auth_challenge') or '').strip()
     if not uname or not challenge_b64 or base64url_to_bytes is None:
         return jsonify({'error': 'Fingerprint challenge expired. Please try again.'}), 400
     expected_challenge = base64url_to_bytes(challenge_b64)
+
+    if not rp_id or not origin:
+        return jsonify({'error': 'Unable to determine RP/origin. Please re-open the site and try again.'}), 400
 
     conn = get_db()
     c = conn.cursor()
@@ -2852,9 +2911,22 @@ def webauthn_auth_verify():
             credential_current_sign_count=sign_count,
             require_user_verification=False,
         )
-    except Exception:
+    except Exception as e:
+        app.logger.warning('WebAuthn auth/verify failed: %s', e)
         conn.close()
-        return jsonify({'error': 'Fingerprint verification failed.'}), 400
+        detail = (str(e) or '').strip()[:240]
+        return jsonify(
+            {
+                'error': 'Fingerprint verification failed.' + (f' {detail}' if detail else ''),
+                'debug': {
+                    'expected_rp_id': rp_id,
+                    'expected_origin': origin,
+                    'request_origin': (request.headers.get('Origin') or ''),
+                    'xf_proto': (request.headers.get('X-Forwarded-Proto') or ''),
+                    'xf_host': (request.headers.get('X-Forwarded-Host') or ''),
+                },
+            }
+        ), 400
 
     new_sign_count = int(getattr(verified, 'new_sign_count', sign_count) or sign_count)
     try:
