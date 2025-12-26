@@ -1,89 +1,116 @@
-{% extends 'admin.html' %}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Owner Referrals - D-cont</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='app.css', v=asset_version) }}">
+</head>
+<body class="app-body">
+    {% include '_owner_nav.html' %}
 
-{% block content %}
-<div class="container">
-  <h2 style="margin-top: 10px;">Referrals</h2>
-  <p style="margin-top: 6px; opacity: 0.9;">
-    Reward: ₹{{ referral_reward_amount }} (one-time). Status flow: PENDING → ELIGIBLE → CREDITED.
-  </p>
+    <div class="container container-wide" style="margin: 18px auto 48px auto;">
+      <div class="card" style="padding:24px;">
+        <div style="display:flex; justify-content: space-between; align-items:center; gap: 12px;">
+            <h2 class="pageTitle">Referrals</h2>
+            <a href="/logout" class="btn btn-sm" style="width:auto; padding:6px 16px; border-radius:6px;">Logout</a>
+        </div>
 
-  {% if referrals and referrals|length > 0 %}
-    <div style="overflow-x:auto; margin-top: 12px;">
-      <table class="table" style="min-width: 980px;">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Referrer</th>
-            <th>New User</th>
-            <th>Joined Group</th>
-            <th>App Fee Paid</th>
-            <th>Status</th>
-            <th>Credit</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for r in referrals %}
-          <tr>
-            <td>{{ r.id }}</td>
-            <td>
-              <div><strong>{{ r.referrer_full_name or r.referrer_username }}</strong></div>
-              <div style="font-size: 12px; opacity: 0.85;">@{{ r.referrer_username }}</div>
-            </td>
-            <td>
-              <div><strong>{{ r.new_full_name or r.new_username }}</strong></div>
-              <div style="font-size: 12px; opacity: 0.85;">@{{ r.new_username }}{% if r.new_mobile %} • {{ r.new_mobile }}{% endif %}</div>
-            </td>
-            <td>{{ 'Yes' if r.joined_group else 'No' }}</td>
-            <td>{{ 'Yes' if r.app_fee_paid else 'No' }}</td>
-            <td>
-              <strong>{{ r.status }}</strong>
-              {% if r.created_at %}<div style="font-size: 12px; opacity: 0.85;">Created: {{ r.created_at }}</div>{% endif %}
-              {% if r.eligible_at %}<div style="font-size: 12px; opacity: 0.85;">Eligible: {{ r.eligible_at }}</div>{% endif %}
-              {% if r.credited_at %}<div style="font-size: 12px; opacity: 0.85;">Credited: {{ r.credited_at }}</div>{% endif %}
-            </td>
-            <td>
-              {% if r.status == 'CREDITED' %}
-                <div>₹{{ r.credit_amount or referral_reward_amount }}</div>
-                {% if r.credit_expires_at %}<div style="font-size: 12px; opacity: 0.85;">Expires: {{ r.credit_expires_at }}</div>{% endif %}
-                {% if r.credit_used %}<div style="font-size: 12px; opacity: 0.85;">Used ({{ r.credit_used_month or '' }})</div>{% endif %}
-              {% else %}
-                <span style="opacity:0.85;">—</span>
-              {% endif %}
-            </td>
-            <td>
-              {% if not r.app_fee_paid %}
-                <form method="post" action="{{ url_for('owner_referrals_verify_app_fee') }}" style="display:inline;">
-                  <input type="hidden" name="new_username" value="{{ r.new_username }}" />
-                  <button class="btn btn-sm btn-primary" type="submit">Verify App Fee</button>
-                </form>
-              {% endif %}
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            <div class="notice" style="margin-top:12px; padding:10px 12px;">
+              {{ messages[0] }}
+            </div>
+          {% endif %}
+        {% endwith %}
 
-              {% if r.status == 'PENDING' %}
-                <form method="post" action="{{ url_for('owner_referrals_refresh_eligibility') }}" style="display:inline;">
-                  <input type="hidden" name="new_username" value="{{ r.new_username }}" />
-                  <button class="btn btn-sm btn-secondary" type="submit">Refresh</button>
-                </form>
-              {% endif %}
+        <div class="notice" style="margin-top:14px;">
+            <div style="font-weight:800;">Reward</div>
+            <div class="muted" style="margin-top:6px; line-height:1.45;">₹{{ referral_reward_amount }} (one-time). Status flow: PENDING → ELIGIBLE → CREDITED.</div>
+        </div>
 
-              {% if r.status == 'ELIGIBLE' %}
-                <form method="post" action="{{ url_for('owner_referrals_mark_paid') }}" style="display:inline;">
-                  <input type="hidden" name="referral_id" value="{{ r.id }}" />
-                  <button class="btn btn-sm btn-success" type="submit">Credit Reward</button>
-                </form>
-              {% endif %}
+        <h3 class="sectionTitle">Referral list</h3>
 
-              {% if r.status == 'CREDITED' %}
-                <span style="opacity: 0.85;">Credited</span>
-              {% endif %}
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+        {% if referrals and referrals|length > 0 %}
+          <div style="margin-top:10px; overflow-x:auto;">
+            <table class="table" style="min-width: 980px;">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Referrer</th>
+                  <th>New User</th>
+                  <th>Joined Group</th>
+                  <th>App Fee Paid</th>
+                  <th>Status</th>
+                  <th>Credit</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+              {% for r in referrals %}
+                <tr>
+                  <td>{{ r.id }}</td>
+                  <td>
+                    <div style="font-weight:800;">{{ r.referrer_full_name or r.referrer_username }}</div>
+                    <div class="muted" style="font-size: 12px;">@{{ r.referrer_username }}</div>
+                  </td>
+                  <td>
+                    <div style="font-weight:800;">{{ r.new_full_name or r.new_username }}</div>
+                    <div class="muted" style="font-size: 12px;">@{{ r.new_username }}{% if r.new_mobile %} • {{ r.new_mobile }}{% endif %}</div>
+                  </td>
+                  <td>{{ 'Yes' if r.joined_group else 'No' }}</td>
+                  <td>{{ 'Yes' if r.app_fee_paid else 'No' }}</td>
+                  <td>
+                    <div style="font-weight:900;">{{ r.status }}</div>
+                    {% if r.created_at %}<div class="muted" style="font-size: 12px;">Created: {{ r.created_at }}</div>{% endif %}
+                    {% if r.eligible_at %}<div class="muted" style="font-size: 12px;">Eligible: {{ r.eligible_at }}</div>{% endif %}
+                    {% if r.credited_at %}<div class="muted" style="font-size: 12px;">Credited: {{ r.credited_at }}</div>{% endif %}
+                  </td>
+                  <td>
+                    {% if r.status == 'CREDITED' %}
+                      <div>₹{{ r.credit_amount or referral_reward_amount }}</div>
+                      {% if r.credit_expires_at %}<div class="muted" style="font-size: 12px;">Expires: {{ r.credit_expires_at }}</div>{% endif %}
+                      {% if r.credit_used %}<div class="muted" style="font-size: 12px;">Used ({{ r.credit_used_month or '' }})</div>{% endif %}
+                    {% else %}
+                      <span class="muted">—</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+                      {% if not r.app_fee_paid %}
+                        <form method="post" action="{{ url_for('owner_referrals_verify_app_fee') }}" style="margin:0;">
+                          <input type="hidden" name="new_username" value="{{ r.new_username }}" />
+                          <button class="btn btn-sm btn-secondary" type="submit" style="width:auto; padding:6px 10px; white-space:nowrap;">Verify App Fee</button>
+                        </form>
+                      {% endif %}
+
+                      {% if r.status == 'PENDING' %}
+                        <form method="post" action="{{ url_for('owner_referrals_refresh_eligibility') }}" style="margin:0;">
+                          <input type="hidden" name="new_username" value="{{ r.new_username }}" />
+                          <button class="btn btn-sm btn-secondary" type="submit" style="width:auto; padding:6px 10px; white-space:nowrap;">Refresh</button>
+                        </form>
+                      {% endif %}
+
+                      {% if r.status == 'ELIGIBLE' %}
+                        <form method="post" action="{{ url_for('owner_referrals_mark_paid') }}" style="margin:0;">
+                          <input type="hidden" name="referral_id" value="{{ r.id }}" />
+                          <button class="btn btn-sm" type="submit" style="width:auto; padding:6px 10px; white-space:nowrap;">Credit Reward</button>
+                        </form>
+                      {% endif %}
+
+                      {% if r.status == 'CREDITED' %}
+                        <span class="muted" style="font-size:12px;">Credited</span>
+                      {% endif %}
+                    </div>
+                  </td>
+                </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="muted" style="margin-top: 12px;">No referrals yet.</div>
+        {% endif %}
+      </div>
     </div>
-  {% else %}
-    <p style="margin-top: 14px;">No referrals yet.</p>
-  {% endif %}
-</div>
-{% endblock %}
+</body>
+</html>
