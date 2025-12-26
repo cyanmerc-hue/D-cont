@@ -265,6 +265,11 @@
                                         <input type="hidden" name="group_id" value="{{ g.id }}">
                                         <button type="submit" style="background:#fff; color:#b42318; border:1px solid #b42318; padding:6px 10px; border-radius:6px; cursor:pointer;">{{ 'Unpause' if g.is_paused else 'Pause' }}</button>
                                     </form>
+
+                                    <form method="post" action="/admin/delete_group" style="margin:0;" onsubmit="return confirm('Permanently delete this group? This cannot be undone.');">
+                                        <input type="hidden" name="group_id" value="{{ g.id }}">
+                                        <button type="submit" style="background:#fff; color:#b42318; border:1px solid #b42318; padding:6px 10px; border-radius:6px; cursor:pointer;">Delete</button>
+                                    </form>
                                 </div>
                             </td>
                         </tr>

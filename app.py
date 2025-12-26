@@ -5688,6 +5688,14 @@ def admin_delete_group():
     conn = get_db()
     c = conn.cursor()
     # Best-effort cleanup: remove memberships first.
+    try:
+        c.execute('DELETE FROM trust_events WHERE group_id=?', (group_id,))
+    except sqlite3.OperationalError:
+        pass
+    try:
+        c.execute('DELETE FROM early_payout_requests WHERE group_id=?', (group_id,))
+    except sqlite3.OperationalError:
+        pass
     c.execute('DELETE FROM group_members WHERE group_id=?', (group_id,))
     c.execute('DELETE FROM groups WHERE id=?', (group_id,))
     conn.commit()
