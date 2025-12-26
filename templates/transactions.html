@@ -89,7 +89,15 @@
                   <td>{{ tx.group_name or '—' }}</td>
                   <td>₹{{ tx.amount }}</td>
                   <td style="font-weight:800;">{{ tx.utr }}</td>
-                  <td>{{ (tx.status or 'pending')|capitalize }}</td>
+                  <td>
+                    {% set s = (tx.status or 'pending')|lower %}
+                    <span
+                      class="badge {{ 'badgeSuccess' if s == 'verified' else 'badgeDanger' if s == 'rejected' else 'badgeWarn' if s == 'pending' else '' }}"
+                      title="{{ 'Awaiting verification' if s == 'pending' else 'Verified by owner' if s == 'verified' else 'Rejected by owner' if s == 'rejected' else '' }}"
+                    >
+                      {{ 'Verified' if s == 'verified' else 'Rejected' if s == 'rejected' else 'Pending' if s == 'pending' else s|capitalize }}
+                    </span>
+                  </td>
                   <td>
                     {% if tx.proof_file %}
                       <a href="/transactions/proof/{{ tx.id }}" class="nav-link" style="display:inline-block; width:auto;">View</a>

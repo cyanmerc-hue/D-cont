@@ -15,6 +15,28 @@
 
   <div class="container container-pro">
     <div class="card card-pro card-lg">
+
+      <div class="card-pro" style="padding:14px; overflow:hidden;">
+        <div style="display:flex; gap:14px; align-items:center;">
+          <img
+            src="{{ url_for('static', filename='logo.svg', v=asset_version) }}"
+            data-fallback="{{ url_for('static', filename='logo.png', v=asset_version) }}"
+            onerror="this.onerror=null;this.src=this.dataset.fallback;"
+            alt="D-CONT"
+            style="width:44px; height:44px; border-radius:12px;"
+          />
+          <div style="min-width:0;">
+            <div style="font-weight:900; letter-spacing:0.08em; text-transform:uppercase;">D-CONT</div>
+            <div class="muted" style="margin-top:4px; line-height:1.45;">Save together, securely. Pay directly via UPI.</div>
+          </div>
+        </div>
+        <img
+          src="{{ url_for('static', filename='landing-banner.png', v=asset_version) }}"
+          alt=""
+          style="display:block; width:100%; height:auto; margin-top:12px; border-radius:16px; border:1px solid var(--border);"
+          onerror="this.style.display='none';"
+        />
+      </div>
       <div class="homeHeader">
         <div class="homeHeaderLeft">
           <div class="homeAvatar" aria-hidden="true"></div>

@@ -3785,6 +3785,16 @@ def home():
             return redirect(url_for('logout'))
         return redirect(url_for('home_tab'))
     return redirect(url_for('login'))
+
+
+@app.route('/splash')
+@require_customer
+def splash():
+    # Only show right after login.
+    if not session.get('show_splash'):
+        return redirect(url_for('home_tab'))
+    session.pop('show_splash', None)
+    return render_template('splash.html', next_url=url_for('home_tab'))
 @app.route('/dashboard')
 @login_required
 def dashboard():
@@ -4171,6 +4181,58 @@ def owner_add_trust_event():
 
     recalculate_and_store_trust(target_username)
     flash('Trust event recorded. Score updated.')
+    return redirect(url_for('owner_user_profile', username=target_username))
+
+
+@app.route('/owner/transactions/update', methods=['POST'])
+@admin_required
+def owner_transactions_update_status():
+    target_username = (request.form.get('username') or '').strip()
+    tx_id_raw = (request.form.get('tx_id') or '').strip()
+    new_status = (request.form.get('status') or '').strip().lower()
+
+    allowed = {'pending', 'verified', 'rejected'}
+    if not target_username or not tx_id_raw:
+        flash('Missing transaction details.')
+        return redirect(url_for('owner_users'))
+
+    try:
+        tx_id = int(tx_id_raw)
+    except Exception:
+        flash('Invalid transaction ID.')
+        return redirect(url_for('owner_user_profile', username=target_username))
+
+    if new_status not in allowed:
+        flash('Invalid transaction status.')
+        return redirect(url_for('owner_user_profile', username=target_username))
+
+    conn = get_db()
+    c = conn.cursor()
+    try:
+        c.execute('SELECT username FROM transactions WHERE id=?', (int(tx_id or 0),))
+        row = c.fetchone()
+    except sqlite3.OperationalError:
+        row = None
+
+    if not row:
+        conn.close()
+        flash('Transaction not found.')
+        return redirect(url_for('owner_user_profile', username=target_username))
+
+    owner_username = (row[0] or '').strip()
+    if owner_username:
+        target_username = owner_username
+
+    try:
+        c.execute('UPDATE transactions SET status=? WHERE id=?', (new_status, int(tx_id or 0)))
+        conn.commit()
+    except sqlite3.OperationalError:
+        conn.close()
+        flash('Unable to update transaction right now.')
+        return redirect(url_for('owner_user_profile', username=target_username))
+    conn.close()
+
+    flash('Transaction updated.')
     return redirect(url_for('owner_user_profile', username=target_username))
 
 
@@ -6018,7 +6080,8 @@ def login():
                 session['lang'] = requested_lang
             else:
                 session['lang'] = _get_user_language(matched[0])
-            return redirect(url_for('home'))
+            session['show_splash'] = 1
+            return redirect(url_for('splash'))
 
         # Customer login (username OR mobile + password)
         if login_type == 'admin':
@@ -6132,7 +6195,8 @@ def login():
         else:
             session['lang'] = _get_user_language(matched[0])
 
-        return redirect(url_for('home'))
+        session['show_splash'] = 1
+        return redirect(url_for('splash'))
 
     return render_template('login.html')
 

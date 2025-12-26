@@ -237,6 +237,7 @@
                                     <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">UTR</th>
                                     <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Status</th>
                                     <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Proof</th>
+                                    <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Action</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -253,6 +254,20 @@
                                             {% else %}
                                                 <span style="color:#777;">—</span>
                                             {% endif %}
+                                        </td>
+                                        <td style="padding:8px; border-bottom:1px solid #f2f2f2;">
+                                            <form method="post" action="/owner/transactions/update" style="display:flex; gap:8px; align-items:center;">
+                                                <input type="hidden" name="username" value="{{ user.username }}" />
+                                                <input type="hidden" name="tx_id" value="{{ tx.id }}" />
+                                                {% if (tx.status or 'pending') != 'verified' %}
+                                                    <button type="submit" name="status" value="verified" class="btn btn-sm" style="width:auto; padding:8px 12px;">Verify</button>
+                                                {% else %}
+                                                    <span style="color:#777;">—</span>
+                                                {% endif %}
+                                                {% if (tx.status or 'pending') != 'rejected' %}
+                                                    <button type="submit" name="status" value="rejected" class="btn btn-secondary btn-sm" style="width:auto; padding:8px 12px;">Reject</button>
+                                                {% endif %}
+                                            </form>
                                         </td>
                                     </tr>
                                 {% endfor %}
