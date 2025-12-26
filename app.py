@@ -2700,17 +2700,6 @@ def webauthn_register_options():
             except Exception:
                 exclude = []
 
-        authenticator_selection = None
-        # Some webauthn package versions expect enum values (with .value), not raw strings.
-        if AuthenticatorSelectionCriteria is not None and ResidentKeyRequirement is not None and UserVerificationRequirement is not None:
-            try:
-                authenticator_selection = AuthenticatorSelectionCriteria(
-                    resident_key=ResidentKeyRequirement.PREFERRED,
-                    user_verification=UserVerificationRequirement.PREFERRED,
-                )
-            except Exception:
-                authenticator_selection = None
-
         options = generate_registration_options(
             rp_id=rp_id,
             rp_name='D-CONT',
@@ -2719,7 +2708,6 @@ def webauthn_register_options():
             user_display_name=username,
             challenge=challenge,
             timeout=60000,
-            authenticator_selection=authenticator_selection,
             exclude_credentials=exclude or None,
         )
         return app.response_class(options_to_json(options), mimetype='application/json')
@@ -2852,7 +2840,6 @@ def webauthn_auth_options():
         challenge=challenge,
         timeout=60000,
         allow_credentials=allow,
-        user_verification=UserVerificationRequirement.PREFERRED if UserVerificationRequirement else 'preferred',
     )
     return app.response_class(options_to_json(options), mimetype='application/json')
 
