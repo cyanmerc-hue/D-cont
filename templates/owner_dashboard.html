@@ -24,6 +24,34 @@
         {% endwith %}
 
                 <div class="row" style="margin-top:18px;">
+                    <div class="card-pro" style="margin-bottom:24px;">
+                        <h3>Pending Group Joins</h3>
+                        {% if pending_joins and pending_joins|length > 0 %}
+                        <ul style="padding-left:0;">
+                            {% for username, full_name, mobile, group_name in pending_joins %}
+                            <li style="margin-bottom:8px;">
+                                <strong>{{ full_name or username }}</strong> ({{ mobile }}) joined <strong>{{ group_name }}</strong>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        {% else %}
+                        <div class="muted">No pending group joins.</div>
+                        {% endif %}
+                    </div>
+                    <div class="card-pro" style="margin-bottom:24px;">
+                        <h3>Pending Document Uploads</h3>
+                        {% if pending_docs and pending_docs|length > 0 %}
+                        <ul style="padding-left:0;">
+                            {% for username, full_name, mobile, doc_type, uploaded_at in pending_docs %}
+                            <li style="margin-bottom:8px;">
+                                <strong>{{ full_name or username }}</strong> ({{ mobile }}) uploaded <strong>{{ doc_type }}</strong> at {{ uploaded_at }}
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        {% else %}
+                        <div class="muted">No pending document uploads.</div>
+                        {% endif %}
+                    </div>
                         <div class="col" style="min-width: 220px;">
                             <div class="card-pro" style="padding:14px;">
                                 <div class="kpi">
