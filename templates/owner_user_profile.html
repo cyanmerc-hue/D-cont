@@ -224,7 +224,7 @@
                         <td style="padding:8px;">Aadhaar</td>
                         <td style="padding:8px;">
                             {% if user.aadhaar_doc %}
-                                <a href="/profile/doc/aadhaar?username={{ user.username }}" target="_blank" style="color:#2D9CDB; text-decoration:none;">View/Download</a>
+                                <a href="/owner/user_doc/aadhaar?username={{ user.username }}" target="_blank" style="color:#2D9CDB; text-decoration:none;">View/Download</a>
                             {% else %}
                                 <span style="color:#777;">Not uploaded</span>
                             {% endif %}
@@ -234,7 +234,7 @@
                         <td style="padding:8px;">PAN</td>
                         <td style="padding:8px;">
                             {% if user.pan_doc %}
-                                <a href="/profile/doc/pan?username={{ user.username }}" target="_blank" style="color:#2D9CDB; text-decoration:none;">View/Download</a>
+                                <a href="/owner/user_doc/pan?username={{ user.username }}" target="_blank" style="color:#2D9CDB; text-decoration:none;">View/Download</a>
                             {% else %}
                                 <span style="color:#777;">Not uploaded</span>
                             {% endif %}
@@ -244,7 +244,7 @@
                         <td style="padding:8px;">Passport</td>
                         <td style="padding:8px;">
                             {% if user.passport_doc %}
-                                <a href="/profile/doc/passport?username={{ user.username }}" target="_blank" style="color:#2D9CDB; text-decoration:none;">View/Download</a>
+                                <a href="/owner/user_doc/passport?username={{ user.username }}" target="_blank" style="color:#2D9CDB; text-decoration:none;">View/Download</a>
                             {% else %}
                                 <span style="color:#777;">Not uploaded</span>
                             {% endif %}
