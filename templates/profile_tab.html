@@ -374,9 +374,9 @@
           evt.preventDefault();
           var tabs = document.querySelectorAll('.tab-content');
           var links = document.querySelectorAll('.tab-link');
-          tabs.forEach(function(tab) { tab.style.display = 'none'; });
+          tabs.forEach(function(tab) { tab.classList.remove('active'); });
           links.forEach(function(link) { link.classList.remove('active'); });
-          document.getElementById(tabId).style.display = 'block';
+          document.getElementById(tabId).classList.add('active');
           evt.target.classList.add('active');
         }
         </script>
