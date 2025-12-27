@@ -2729,6 +2729,22 @@ def profile():
                 flash(str(e))
                 return redirect(url_for('profile'))
             c.execute(f'UPDATE users SET {column}=? WHERE username=?', (saved_name, username))
+            # Insert into documents table for admin visibility
+            try:
+                c.execute('''
+                    INSERT INTO documents (username, doc_type, file_path, uploaded_at, original_filename, status, notes)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    username,
+                    doc_type,
+                    saved_name,
+                    datetime.now().isoformat(timespec='seconds'),
+                    file_obj.filename,
+                    'pending',
+                    ''
+                ))
+            except Exception:
+                pass  # If documents table doesn't exist, ignore
             doc_uploaded = True
             if column == 'aadhaar_doc':
                 aadhaar_doc = saved_name
