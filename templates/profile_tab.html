@@ -321,47 +321,65 @@
       </div>
 
       <div style="margin-top:14px; padding-top:14px; border-top:1px solid #eef3f5;">
+
         <div class="sectionTitle" style="margin-top:0;">{{ t('documents_title') }}</div>
-        <div class="muted" style="font-size:0.95em; margin-top:6px; line-height:1.4;">
-          {{ t('documents_help') }}
-        </div>
+        <div class="muted" style="font-size:0.95em; margin-top:6px; line-height:1.4;">{{ t('documents_help') }}</div>
 
         <div class="card-pro" style="margin-top:12px; padding:12px;">
-          <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
-            <div style="font-weight:bold;">Aadhaar</div>
-            {% if aadhaar_doc %}
-              <a href="/profile/doc/aadhaar" class="btn btn-secondary btn-sm" style="width:auto;">{{ t('download') }}</a>
-            {% else %}
-              <span class="muted" style="font-size:0.9em;">{{ t('not_uploaded') }}</span>
-            {% endif %}
+          <ul class="tab-nav" style="display:flex; list-style:none; padding:0; margin:0 0 16px 0; gap:12px;">
+            <li><a href="#aadhaar-tab" onclick="showTab(event, 'aadhaar-tab')" class="tab-link active">Aadhaar</a></li>
+            <li><a href="#pan-tab" onclick="showTab(event, 'pan-tab')" class="tab-link">PAN</a></li>
+            <li><a href="#passport-tab" onclick="showTab(event, 'passport-tab')" class="tab-link">Passport</a></li>
+          </ul>
+          <div id="aadhaar-tab" class="tab-content" style="display:block;">
+            <form method="POST" action="/profile" enctype="multipart/form-data">
+              <div style="font-weight:bold;">Aadhaar</div>
+              {% if aadhaar_doc %}
+                <a href="/profile/doc/aadhaar" class="btn btn-secondary btn-sm" style="width:auto;">{{ t('download') }}</a>
+              {% else %}
+                <span class="muted" style="font-size:0.9em;">{{ t('not_uploaded') }}</span>
+              {% endif %}
+              <input type="file" name="aadhaar_file" accept=".pdf,image/*" style="width:100%; margin-top:10px;" required />
+              <button type="submit" class="btn" style="margin-top:10px;">Upload Aadhaar</button>
+            </form>
           </div>
-          <input type="file" name="aadhaar_file" accept=".pdf,image/*" style="width:100%; margin-top:10px;" />
+          <div id="pan-tab" class="tab-content" style="display:none;">
+            <form method="POST" action="/profile" enctype="multipart/form-data">
+              <div style="font-weight:bold;">PAN</div>
+              {% if pan_doc %}
+                <a href="/profile/doc/pan" class="btn btn-secondary btn-sm" style="width:auto;">{{ t('download') }}</a>
+              {% else %}
+                <span class="muted" style="font-size:0.9em;">{{ t('not_uploaded') }}</span>
+              {% endif %}
+              <input type="file" name="pan_file" accept=".pdf,image/*" style="width:100%; margin-top:10px;" required />
+              <button type="submit" class="btn" style="margin-top:10px;">Upload PAN</button>
+            </form>
+          </div>
+          <div id="passport-tab" class="tab-content" style="display:none;">
+            <form method="POST" action="/profile" enctype="multipart/form-data">
+              <div style="font-weight:bold;">Passport</div>
+              {% if passport_doc %}
+                <a href="/profile/doc/passport" class="btn btn-secondary btn-sm" style="width:auto;">{{ t('download') }}</a>
+              {% else %}
+                <span class="muted" style="font-size:0.9em;">{{ t('not_uploaded') }}</span>
+              {% endif %}
+              <input type="file" name="passport_file" accept=".pdf,image/*" style="width:100%; margin-top:10px;" required />
+              <button type="submit" class="btn" style="margin-top:10px;">Upload Passport</button>
+            </form>
+          </div>
         </div>
 
-        <div class="card-pro" style="margin-top:12px; padding:12px;">
-          <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
-            <div style="font-weight:bold;">PAN</div>
-            {% if pan_doc %}
-              <a href="/profile/doc/pan" class="btn btn-secondary btn-sm" style="width:auto;">{{ t('download') }}</a>
-            {% else %}
-              <span class="muted" style="font-size:0.9em;">{{ t('not_uploaded') }}</span>
-            {% endif %}
-          </div>
-          <input type="file" name="pan_file" accept=".pdf,image/*" style="width:100%; margin-top:10px;" />
-        </div>
-
-        <div class="card-pro" style="margin-top:12px; padding:12px;">
-          <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
-            <div style="font-weight:bold;">Passport</div>
-            {% if passport_doc %}
-              <a href="/profile/doc/passport" class="btn btn-secondary btn-sm" style="width:auto;">{{ t('download') }}</a>
-            {% else %}
-              <span class="muted" style="font-size:0.9em;">{{ t('not_uploaded') }}</span>
-            {% endif %}
-          </div>
-          <input type="file" name="passport_file" accept=".pdf,image/*" style="width:100%; margin-top:10px;" />
-        </div>
-      </div>
+        <script>
+        function showTab(evt, tabId) {
+          evt.preventDefault();
+          var tabs = document.querySelectorAll('.tab-content');
+          var links = document.querySelectorAll('.tab-link');
+          tabs.forEach(function(tab) { tab.style.display = 'none'; });
+          links.forEach(function(link) { link.classList.remove('active'); });
+          document.getElementById(tabId).style.display = 'block';
+          evt.target.classList.add('active');
+        }
+        </script>
 
       <button type="submit" class="btn" style="margin-top:12px;">{{ t('save') }}</button>
     </form>
