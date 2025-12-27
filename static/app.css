@@ -1,17 +1,3 @@
-/* Fix flicker for tabbed document upload section on mobile */
-.tab-content {
-  will-change: opacity, transform;
-  transition: opacity 0.2s ease, transform 0.2s ease;
-  opacity: 0;
-  transform: translateY(10px);
-  position: relative;
-  min-height: 120px;
-}
-.tab-content.active {
-  opacity: 1;
-  transform: translateY(0);
-  z-index: 1;
-}
 :root {
   /* D-CONT — Fintech Dark (Revolut-inspired, original) */
   --bg0: #05060A;
