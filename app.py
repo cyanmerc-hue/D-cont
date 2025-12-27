@@ -4018,27 +4018,29 @@ def owner_users():
 
 
 
+
+@app.route('/owner/users/approve_document', methods=['POST'])
+@admin_required
+def owner_approve_document():
+    doc_id = request.form.get('doc_id')
+    username = request.form.get('username')
+    if not doc_id or not username:
+        flash('Missing document or user.')
+        return redirect(url_for('owner_user_profile', username=username))
+    conn = get_db()
+    c = conn.cursor()
+    try:
+        c.execute('UPDATE documents SET status=? WHERE rowid=?', ('approved', doc_id))
+        conn.commit()
+        flash('Document approved.')
+    except Exception:
+        flash('Could not approve document.')
+    conn.close()
+    return redirect(url_for('owner_user_profile', username=username))
+
 @app.route('/owner/users/<path:username>')
 @admin_required
 def owner_user_profile(username):
-    @app.route('/owner/users/approve_document', methods=['POST'])
-    @admin_required
-    def owner_approve_document():
-        doc_id = request.form.get('doc_id')
-        username = request.form.get('username')
-        if not doc_id or not username:
-            flash('Missing document or user.')
-            return redirect(url_for('owner_user_profile', username=username))
-        conn = get_db()
-        c = conn.cursor()
-        try:
-            c.execute('UPDATE documents SET status=? WHERE rowid=?', ('approved', doc_id))
-            conn.commit()
-            flash('Document approved.')
-        except Exception:
-            flash('Could not approve document.')
-        conn.close()
-        return redirect(url_for('owner_user_profile', username=username))
     username = (username or '').strip()
     trust_details = recalculate_and_store_trust(username)
     conn = get_db()
