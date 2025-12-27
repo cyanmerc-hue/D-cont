@@ -1,4 +1,5 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash, abort, send_from_directory, g
+
+from flask import Flask, render_template, request, redirect, url_for, session, flash, abort, send_from_directory, g, jsonify
 import sqlite3
 import os
 import random
@@ -14,8 +15,95 @@ import re
 import time
 import calendar
 import mimetypes
+from dotenv import load_dotenv
 
-from flask import jsonify
+# Load environment variables from .env
+load_dotenv()
+
+# Supabase REST API config (to be used with requests)
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET", "documents")
+
+# ...existing code...
+
+app = Flask(__name__)
+
+
+
+# --- Admin List Documents Endpoint (Supabase REST API) ---
+import requests
+
+@app.route("/api/admin/documents", methods=["GET"])
+def admin_list_documents():
+    """List documents using Supabase REST API (PostgREST)"""
+    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        return jsonify({"error": "Supabase not configured"}), 500
+    status = request.args.get("status")
+    # Build PostgREST query
+    url = f"{SUPABASE_URL}/rest/v1/documents"
+    headers = {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+    }
+    params = {"order": "created_at.desc"}
+    if status:
+        params["status"] = f"eq.{status}"
+    resp = requests.get(url, headers=headers, params=params)
+    if not resp.ok:
+        return jsonify({"error": resp.text}), 500
+    return jsonify({"documents": resp.json()}), 200
+
+# --- Document Upload Endpoint (Supabase Storage REST API) ---
+@app.route("/api/upload-document", methods=["POST"])
+def upload_document():
+    """Upload document using Supabase Storage REST API and insert metadata via PostgREST"""
+    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        return jsonify({"error": "Supabase not configured"}), 500
+    user_id = request.form.get("user_id")
+    doc_type = request.form.get("doc_type", "kyc")
+    f = request.files.get("file")
+    if not user_id:
+        return jsonify({"error": "user_id missing"}), 400
+    if not f:
+        return jsonify({"error": "file missing"}), 400
+    filename = secure_filename(f.filename)
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "bin"
+    unique = f"{uuid.uuid4()}.{ext}"
+    file_path = f"{user_id}/{int(datetime.utcnow().timestamp())}-{unique}"
+    file_bytes = f.read()
+    content_type = f.mimetype or "application/octet-stream"
+    # 1) Upload to Supabase Storage via REST
+    storage_url = f"{SUPABASE_URL}/storage/v1/object/{SUPABASE_BUCKET}/{file_path}"
+    storage_headers = {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+        "Content-Type": content_type,
+    }
+    storage_resp = requests.post(storage_url, headers=storage_headers, data=file_bytes)
+    if not storage_resp.ok:
+        return jsonify({"error": storage_resp.text}), 500
+    # 2) Public URL (if bucket is public)
+    public_url = f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET}/{file_path}"
+    # 3) Insert DB record via PostgREST
+    db_url = f"{SUPABASE_URL}/rest/v1/documents"
+    db_headers = {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "return=representation"
+    }
+    db_payload = {
+        "user_id": str(user_id),
+        "doc_type": doc_type,
+        "file_path": file_path,
+        "file_url": public_url,
+        "status": "pending"
+    }
+    db_resp = requests.post(db_url, headers=db_headers, json=db_payload)
+    if not db_resp.ok:
+        return jsonify({"error": db_resp.text}), 500
+    return jsonify({"ok": True, "document": db_resp.json()[0]}), 200
 
 try:
     from webauthn import (
@@ -3355,6 +3443,15 @@ def init_db():
     # Create tables if they don't exist
     c.execute('''CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY
+    )''')
+    # Documents table for admin/user document management
+    c.execute('''CREATE TABLE IF NOT EXISTS documents (
+        id INTEGER PRIMARY KEY,
+        username TEXT,
+        doc_type TEXT,
+        file_path TEXT,
+        uploaded_at TEXT,
+        status TEXT
     )''')
     c.execute('''CREATE TABLE IF NOT EXISTS groups (id INTEGER PRIMARY KEY, name TEXT, description TEXT, monthly_amount INTEGER)''')
     c.execute('''CREATE TABLE IF NOT EXISTS group_members (id INTEGER PRIMARY KEY, group_id INTEGER, username TEXT, status TEXT)''')
