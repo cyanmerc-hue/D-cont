@@ -210,6 +210,50 @@
             <div style="color:#777;">No trust events recorded yet.</div>
         {% endif %}
 
+        <h3 style="margin-top:22px;">Documents Uploaded</h3>
+        <div style="margin-bottom:18px;">
+            <table style="width:100%; max-width:600px; border-collapse:collapse;">
+                <thead>
+                    <tr>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Type</th>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">File</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td style="padding:8px;">Aadhaar</td>
+                        <td style="padding:8px;">
+                            {% if user.aadhaar_doc %}
+                                <a href="/profile/doc/aadhaar?username={{ user.username }}" target="_blank" style="color:#2D9CDB; text-decoration:none;">View/Download</a>
+                            {% else %}
+                                <span style="color:#777;">Not uploaded</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:8px;">PAN</td>
+                        <td style="padding:8px;">
+                            {% if user.pan_doc %}
+                                <a href="/profile/doc/pan?username={{ user.username }}" target="_blank" style="color:#2D9CDB; text-decoration:none;">View/Download</a>
+                            {% else %}
+                                <span style="color:#777;">Not uploaded</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:8px;">Passport</td>
+                        <td style="padding:8px;">
+                            {% if user.passport_doc %}
+                                <a href="/profile/doc/passport?username={{ user.username }}" target="_blank" style="color:#2D9CDB; text-decoration:none;">View/Download</a>
+                            {% else %}
+                                <span style="color:#777;">Not uploaded</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
         <h3 style="margin-top:22px;">Groups</h3>
         {% if groups and groups|length > 0 %}
             <ul style="list-style:none; padding:0; margin:0;">
