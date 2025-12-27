@@ -5267,7 +5267,11 @@ def owner_decide_early_payout(request_id: int):
     if action == 'reject' and not reason:
         reason = 'Rejected by admin.'
 
-    try:
+
+@app.route('/owner/settings', methods=['GET', 'POST'])
+@admin_required
+def owner_settings():
+    if request.method == 'POST':
         set_setting('app_fee_amount', (request.form.get('app_fee_amount') or '').strip())
         set_setting('group_size_limit', (request.form.get('group_size_limit') or '').strip())
         set_setting('max_monthly_contribution', (request.form.get('max_monthly_contribution') or '').strip())
@@ -5275,7 +5279,6 @@ def owner_decide_early_payout(request_id: int):
         set_setting('legal_text', (request.form.get('legal_text') or '').strip())
         flash('Settings saved.')
         return redirect(url_for('owner_settings'))
-
     settings = {
         'app_fee_amount': get_setting('app_fee_amount', '0'),
         'group_size_limit': get_setting('group_size_limit', ''),
