@@ -42,9 +42,14 @@
                         <h3>Pending Document Uploads</h3>
                         {% if pending_docs and pending_docs|length > 0 %}
                         <ul style="padding-left:0;">
-                            {% for username, full_name, mobile, doc_type, uploaded_at in pending_docs %}
+                            {% for user_id, full_name, mobile, doc_type, created_at, file_path, file_url in pending_docs %}
                             <li style="margin-bottom:8px;">
-                                <strong>{{ full_name or username }}</strong> ({{ mobile }}) uploaded <strong>{{ doc_type }}</strong> at {{ uploaded_at }}
+                                <strong>{{ full_name or user_id }}</strong> ({{ mobile }}) uploaded <strong>{{ doc_type }}</strong> at {{ created_at }}
+                                {% if file_url %}
+                                    - <a href="{{ file_url }}" target="_blank">Download</a>
+                                {% elif file_path %}
+                                    - <a href="/static/{{ file_path }}" target="_blank">Download</a>
+                                {% endif %}
                             </li>
                             {% endfor %}
                         </ul>

@@ -2817,19 +2817,20 @@ def profile():
                 flash(str(e))
                 return redirect(url_for('profile'))
             c.execute(f'UPDATE users SET {column}=? WHERE username=?', (saved_name, username))
-            # Insert into documents table for admin visibility
+            # Insert into documents table for admin visibility (new schema)
             try:
+                now_iso = datetime.utcnow().isoformat()
+                file_url = None  # Local uploads may not have a public URL
                 c.execute('''
-                    INSERT INTO documents (username, doc_type, file_path, uploaded_at, original_filename, status, notes)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO documents (user_id, doc_type, file_path, file_url, status, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
                 ''', (
                     username,
                     doc_type,
                     saved_name,
-                    datetime.now().isoformat(timespec='seconds'),
-                    file_obj.filename,
+                    file_url,
                     'pending',
-                    ''
+                    now_iso
                 ))
             except Exception:
                 pass  # If documents table doesn't exist, ignore
@@ -3447,11 +3448,12 @@ def init_db():
     # Documents table for admin/user document management
     c.execute('''CREATE TABLE IF NOT EXISTS documents (
         id INTEGER PRIMARY KEY,
-        username TEXT,
+        user_id TEXT,
         doc_type TEXT,
         file_path TEXT,
-        uploaded_at TEXT,
-        status TEXT
+        file_url TEXT,
+        status TEXT,
+        created_at TEXT
     )''')
     c.execute('''CREATE TABLE IF NOT EXISTS groups (id INTEGER PRIMARY KEY, name TEXT, description TEXT, monthly_amount INTEGER)''')
     c.execute('''CREATE TABLE IF NOT EXISTS group_members (id INTEGER PRIMARY KEY, group_id INTEGER, username TEXT, status TEXT)''')
@@ -4026,11 +4028,11 @@ def owner_dashboard():
     # Fetch document uploads (if table exists)
     try:
         c.execute('''
-            SELECT d.username, u.full_name, u.mobile, d.doc_type, d.uploaded_at, d.file_path
+            SELECT d.user_id, u.full_name, u.mobile, d.doc_type, d.created_at, d.file_path, d.file_url
             FROM documents d
-            JOIN users u ON u.username = d.username
+            JOIN users u ON u.id = d.user_id
             WHERE COALESCE(d.status, 'pending') = 'pending'
-            ORDER BY d.uploaded_at DESC
+            ORDER BY d.created_at DESC
             LIMIT 20
         ''')
         pending_docs = c.fetchall()
@@ -4143,7 +4145,7 @@ def owner_approve_document():
     conn = get_db()
     c = conn.cursor()
     try:
-        c.execute('UPDATE documents SET status=? WHERE rowid=?', ('approved', doc_id))
+        c.execute('UPDATE documents SET status=? WHERE id=?', ('approved', doc_id))
         conn.commit()
         flash('Document approved.')
     except Exception:
@@ -4203,14 +4205,14 @@ def owner_user_profile(username):
     ]
 
     transactions = _fetch_user_transactions(conn, username, limit=200)
-    # Fetch all documents uploaded by this user from documents table
+    # Fetch all documents uploaded by this user from documents table (new schema)
     c = conn.cursor()
     try:
         c.execute('''
-            SELECT doc_type, file_path, notes, uploaded_at, original_filename
+            SELECT doc_type, file_path, file_url, status, created_at
             FROM documents
-            WHERE username=?
-            ORDER BY uploaded_at DESC
+            WHERE user_id=?
+            ORDER BY created_at DESC
         ''', (username,))
         user_docs = c.fetchall()
     except Exception:

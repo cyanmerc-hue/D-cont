@@ -217,8 +217,9 @@
                     <tr>
                         <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Type</th>
                         <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">File</th>
-                        <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Notes</th>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Status</th>
                         <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Uploaded At</th>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Action</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -227,17 +228,16 @@
                         <tr>
                             <td style="padding:8px;">{{ doc[0] }}</td>
                             <td style="padding:8px;">
-                                {% if doc[1] %}
+                                {% if doc[2] %}
+                                    <a href="{{ doc[2] }}" target="_blank" style="color:#2D9CDB; text-decoration:none;">View/Download</a>
+                                {% elif doc[1] %}
                                     <a href="/static/{{ doc[1] }}" target="_blank" style="color:#2D9CDB; text-decoration:none;">View/Download</a>
-                                    {% if doc[4] %}
-                                        <div class="muted" style="font-size:0.9em; margin-top:4px;">{{ doc[4] }}</div>
-                                    {% endif %}
                                 {% else %}
                                     <span style="color:#777;">Not uploaded</span>
                                 {% endif %}
                             </td>
-                            <td style="padding:8px;">{{ doc[2] or '' }}</td>
                             <td style="padding:8px;">{{ doc[3] or '' }}</td>
+                            <td style="padding:8px;">{{ doc[4] or '' }}</td>
                             <td style="padding:8px;">
                                 <form method="post" action="/owner/users/approve_document" style="display:inline;">
                                     <input type="hidden" name="doc_id" value="{{ loop.index }}">
