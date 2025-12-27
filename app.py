@@ -2717,6 +2717,7 @@ def profile():
             ('pan', 'pan_doc', 'pan_file'),
             ('passport', 'passport_doc', 'passport_file'),
         ]
+        doc_uploaded = False
         for doc_type, column, form_key in doc_fields:
             file_obj = request.files.get(form_key)
             if not file_obj or not (file_obj.filename or '').strip():
@@ -2728,14 +2729,19 @@ def profile():
                 flash(str(e))
                 return redirect(url_for('profile'))
             c.execute(f'UPDATE users SET {column}=? WHERE username=?', (saved_name, username))
+            doc_uploaded = True
             if column == 'aadhaar_doc':
                 aadhaar_doc = saved_name
+                flash('Aadhaar document uploaded successfully!')
             elif column == 'pan_doc':
                 pan_doc = saved_name
+                flash('PAN document uploaded successfully!')
             elif column == 'passport_doc':
                 passport_doc = saved_name
+                flash('Passport document uploaded successfully!')
         conn.commit()
-        flash('Profile updated!')
+        if not doc_uploaded:
+            flash('Profile updated!')
     # Referral list for this user as referrer
     referrals = []
     total_rewards_earned = 0
@@ -2769,7 +2775,22 @@ def profile():
             """,
             (username,),
         )
-        for rid, new_username, new_full_name, fee_paid, joined_group, status, created_at, eligible_at, paid_at, credited_at, credit_expires_at, credit_amount, credit_used, credit_used_month in c.fetchall() or []:
+        for (
+            rid,
+            new_username,
+            new_full_name,
+            fee_paid,
+            joined_group,
+            status,
+            created_at,
+            eligible_at,
+            paid_at,
+            credited_at,
+            credit_expires_at,
+            credit_amount,
+            credit_used,
+            credit_used_month,
+        ) in c.fetchall() or []:
             normalized_status = (status or '').strip().upper() or 'PENDING'
             if normalized_status == 'CREDITED':
                 try:
@@ -3119,7 +3140,7 @@ def webauthn_auth_options():
     candidates = _lookup_customer_candidates_by_mobile(conn, mobile_identifier)
     selected = None
     for row in candidates:
-        uname, role_raw, is_active_raw, db_mobile, _mpin_hash, cred_id, pub_key, sign_count = row
+        uname, role_raw, is_active_raw, db_mobile, _mpin_hash, cred_id, pub_key, _sign_count = row
         role = (role_raw or 'customer').strip().lower()
         if role == 'admin':
             continue
@@ -3423,7 +3444,7 @@ def init_db():
         )'''
     )
     try:
-        c.execute('CREATE INDEX IF NOT EXISTS idx_transactions_user_created ON transactions(username, created_at)')
+        c.execute("CREATE INDEX IF NOT EXISTS idx_transactions_user_created ON transactions(username, created_at)")
     except sqlite3.OperationalError:
         pass
 
@@ -3696,6 +3717,7 @@ def init_db():
 
     # Seed / update default groups
     c.execute('SELECT COUNT(1) FROM groups')
+   
     group_count = (c.fetchone() or [0])[0]
     if group_count == 0:
         c.execute(
@@ -3792,9 +3814,12 @@ def home():
 def splash():
     # Only show right after login.
     if not session.get('show_splash'):
-        return redirect(url_for('home_tab'))
+        next_url = request.args.get('next_url') or url_for('home_tab')
+        return redirect(next_url)
     session.pop('show_splash', None)
-    return render_template('splash.html', next_url=url_for('home_tab'))
+    next_url = request.args.get('next_url') or url_for('home_tab')
+    return render_template('splash.html', next_url=next_url)
+
 @app.route('/dashboard')
 @login_required
 def dashboard():
@@ -3872,6 +3897,33 @@ def owner_dashboard():
 
     defaults_this_month = 0  # Placeholder until contribution tracking exists
 
+    # Fetch pending group joins
+    c = conn.cursor()
+    c.execute('''
+        SELECT gm.username, u.full_name, u.mobile, g.name as group_name
+        FROM group_members gm
+        JOIN users u ON u.username = gm.username
+        JOIN groups g ON g.id = gm.group_id
+        WHERE gm.status = 'joined'
+        ORDER BY gm.id DESC
+        LIMIT 20
+    ''')
+    pending_joins = c.fetchall()
+
+    # Fetch document uploads (if table exists)
+    try:
+        c.execute('''
+            SELECT d.username, u.full_name, u.mobile, d.doc_type, d.uploaded_at, d.file_path
+            FROM documents d
+            JOIN users u ON u.username = d.username
+            WHERE COALESCE(d.status, 'pending') = 'pending'
+            ORDER BY d.uploaded_at DESC
+            LIMIT 20
+        ''')
+        pending_docs = c.fetchall()
+    except Exception:
+        pending_docs = []
+
     conn.close()
     return render_template(
         'owner_dashboard.html',
@@ -3884,6 +3936,8 @@ def owner_dashboard():
         app_fee_amount=app_fee_amount,
         app_fee_paid_count=app_fee_paid_count,
         app_fee_collected=app_fee_collected,
+        pending_joins=pending_joins,
+        pending_docs=pending_docs,
     )
 
 
@@ -3963,9 +4017,28 @@ def owner_users():
     return render_template('owner_users.html', active_owner_tab='users', users=users)
 
 
+
 @app.route('/owner/users/<path:username>')
 @admin_required
 def owner_user_profile(username):
+    @app.route('/owner/users/approve_document', methods=['POST'])
+    @admin_required
+    def owner_approve_document():
+        doc_id = request.form.get('doc_id')
+        username = request.form.get('username')
+        if not doc_id or not username:
+            flash('Missing document or user.')
+            return redirect(url_for('owner_user_profile', username=username))
+        conn = get_db()
+        c = conn.cursor()
+        try:
+            c.execute('UPDATE documents SET status=? WHERE rowid=?', ('approved', doc_id))
+            conn.commit()
+            flash('Document approved.')
+        except Exception:
+            flash('Could not approve document.')
+        conn.close()
+        return redirect(url_for('owner_user_profile', username=username))
     username = (username or '').strip()
     trust_details = recalculate_and_store_trust(username)
     conn = get_db()
@@ -3980,7 +4053,10 @@ def owner_user_profile(username):
                COALESCE(app_fee_paid,0) as app_fee_paid,
                COALESCE(upi_id,'') as upi_id,
                COALESCE(gender,'') as gender,
-               COALESCE(occupation,'') as occupation
+               COALESCE(occupation,'') as occupation,
+               COALESCE(aadhaar_doc,'') as aadhaar_doc,
+               COALESCE(pan_doc,'') as pan_doc,
+               COALESCE(passport_doc,'') as passport_doc
         FROM users WHERE username=?
         """,
         (username,),
@@ -4012,13 +4088,25 @@ def owner_user_profile(username):
     ]
 
     transactions = _fetch_user_transactions(conn, username, limit=200)
+    # Fetch all documents uploaded by this user from documents table
+    c = conn.cursor()
+    try:
+        c.execute('''
+            SELECT doc_type, file_path, notes, uploaded_at, original_filename
+            FROM documents
+            WHERE username=?
+            ORDER BY uploaded_at DESC
+        ''', (username,))
+        user_docs = c.fetchall()
+    except Exception:
+        user_docs = []
     conn.close()
 
     user = {
         'username': row[0],
-        'full_name': row[1] or '',
-        'mobile': row[2] or '',
-        'email': row[3] or '',
+        'full_name': row[1],
+        'mobile': row[2],
+        'email': row[3],
         'role': row[4] or 'customer',
         'is_active': int(row[5] or 1),
         'join_blocked': int(row[6] or 0),
@@ -4027,6 +4115,9 @@ def owner_user_profile(username):
         'upi_id': row[9] or '',
         'gender': (row[10] or '').strip(),
         'occupation': (row[11] or '').strip(),
+        'aadhaar_doc': (row[12] or '').strip(),
+        'pan_doc': (row[13] or '').strip(),
+        'passport_doc': (row[14] or '').strip(),
     }
     return render_template(
         'owner_user_profile.html',
@@ -4036,6 +4127,7 @@ def owner_user_profile(username):
         transactions=transactions,
         trust_breakdown=trust_details.get('breakdown', {}),
         trust_events=(trust_details.get('events', [])[:25]),
+        user_docs=user_docs,
     )
 
 
@@ -4305,7 +4397,7 @@ def owner_groups():
                 'id': r[0],
                 'name': r[1],
                 'description': r[2] or '',
-                'monthly_amount': int(r[3] or 0),
+                'monthly_amount': r[3],
                 'max_members': int(r[4] or 10),
                 'receiver_name': r[5] or '',
                 'receiver_upi': r[6] or '',
@@ -4932,7 +5024,7 @@ def owner_referrals_mark_paid():
     c = conn.cursor()
     try:
         c.execute(
-            "SELECT id, COALESCE(status,''), COALESCE(referrer_username,''), COALESCE(new_username,'') FROM referrals WHERE id=?",
+            "SELECT id, COALESCE(status,\'\'), COALESCE(referrer_username,''), COALESCE(new_username,'') FROM referrals WHERE id=?",
             (referral_id,),
         )
         row = c.fetchone()
@@ -5156,7 +5248,7 @@ def owner_decide_early_payout(request_id: int):
         flash('Request not found.')
         return redirect(url_for('owner_risk'))
 
-    status = (row[1] or '').strip()
+    status = (row[1] or '').strip().upper()
     deposit_status = (row[2] or '').strip()
     if status in {'approved', 'rejected'}:
         conn.close()
@@ -5174,25 +5266,6 @@ def owner_decide_early_payout(request_id: int):
         reason = 'Rejected by admin.'
 
     try:
-        c.execute(
-            'UPDATE early_payout_requests SET status=?, reason=?, updated_at=? WHERE id=?',
-            (new_status, reason, now, request_id),
-        )
-        conn.commit()
-    except sqlite3.OperationalError:
-        conn.close()
-        flash('Unable to update request right now.')
-        return redirect(url_for('owner_risk'))
-    conn.close()
-
-    flash(f'Request {new_status}.')
-    return redirect(url_for('owner_risk'))
-
-
-@app.route('/owner/settings', methods=['GET', 'POST'])
-@admin_required
-def owner_settings():
-    if request.method == 'POST':
         set_setting('app_fee_amount', (request.form.get('app_fee_amount') or '').strip())
         set_setting('group_size_limit', (request.form.get('group_size_limit') or '').strip())
         set_setting('max_monthly_contribution', (request.form.get('max_monthly_contribution') or '').strip())
