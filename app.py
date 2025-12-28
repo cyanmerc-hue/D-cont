@@ -1,4 +1,11 @@
+
 # --- Admin: List and Download Uploaded Documents from Local DB ---
+# (Moved below app = Flask(__name__))
+
+# ...existing code...
+
+# Place the following after app = Flask(__name__) and all config:
+
 @app.route("/admin/local-documents", methods=["GET"])
 def admin_list_local_documents():
     """List all uploaded documents stored as BLOBs in the local database."""
@@ -33,8 +40,6 @@ def admin_list_local_documents():
         } for row in docs
     ]})
 
-
-# Download a specific document BLOB by id
 @app.route("/admin/local-documents/<int:doc_id>/download", methods=["GET"])
 def admin_download_local_document(doc_id):
     conn = sqlite3.connect(DATABASE)
@@ -45,13 +50,10 @@ def admin_download_local_document(doc_id):
     if not row:
         return "Not found", 404
     filename, content_type, file_blob = row
-    return send_from_directory(
-        directory=None,
-        path=filename,
-        as_attachment=True,
-        mimetype=content_type,
-        file=bytes(file_blob)
-    )
+    from flask import Response
+    return Response(file_blob, mimetype=content_type, headers={
+        'Content-Disposition': f'attachment; filename={filename}'
+    })
 
 from flask import Flask, render_template, request, redirect, url_for, session, flash, abort, send_from_directory, g, jsonify
 import sqlite3
