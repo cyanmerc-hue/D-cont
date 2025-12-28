@@ -42,8 +42,8 @@ def admin_list_documents():
     if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
         return jsonify({"error": "Supabase not configured"}), 500
     status = request.args.get("status")
-    # Build PostgREST query
-    url = f"{SUPABASE_URL}/rest/v1/documents"
+    # Build PostgREST query for user_documents
+    url = f"{SUPABASE_URL}/rest/v1/user_documents"
     headers = {
         "apikey": SUPABASE_SERVICE_ROLE_KEY,
         "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
@@ -62,11 +62,11 @@ def admin_list_documents():
 @app.route("/api/upload-document", methods=["POST"])
 def upload_document():
     print("[UPLOAD ENDPOINT CALLED]")
-    """Upload document to Supabase and store file BLOB in local DB for admin verification."""
+    """Upload document to Supabase Storage and record metadata in user_documents table."""
     if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
         return jsonify({"error": "Supabase not configured"}), 500
     user_id = request.form.get("user_id")
-    doc_type = request.form.get("doc_type", "kyc")
+    doc_type = request.form.get("doc_type", "document")
     f = request.files.get("file")
     if not user_id:
         return jsonify({"error": "user_id missing"}), 400
@@ -94,8 +94,8 @@ def upload_document():
         return jsonify({"error": storage_resp.text}), 500
     public_url = f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET}/{file_path}"
 
-    # 2) Insert DB record via PostgREST (Supabase)
-    db_url = f"{SUPABASE_URL}/rest/v1/documents"
+    # 2) Insert DB record via PostgREST (Supabase user_documents table)
+    db_url = f"{SUPABASE_URL}/rest/v1/user_documents"
     db_headers = {
         "apikey": SUPABASE_SERVICE_ROLE_KEY,
         "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
@@ -106,34 +106,16 @@ def upload_document():
         "user_id": str(user_id),
         "doc_type": doc_type,
         "file_path": file_path,
-        "file_url": public_url,
-        "status": "pending"
+        "file_name": filename,
+        "content_type": content_type,
+        "status": "pending",
+        "created_at": datetime.utcnow().isoformat(),
     }
     db_resp = requests.post(db_url, headers=db_headers, json=db_payload)
+    print(f"[Supabase user_documents] Status: {db_resp.status_code}")
+    print(f"[Supabase user_documents] Response: {db_resp.text}")
     if not db_resp.ok:
         return jsonify({"error": db_resp.text}), 500
-
-    # 3) Store file BLOB in local SQLite for admin verification
-    conn = sqlite3.connect(DATABASE)
-    c = conn.cursor()
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS document_blobs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id TEXT,
-            doc_type TEXT,
-            filename TEXT,
-            file_path TEXT,
-            content_type TEXT,
-            file_blob BLOB,
-            uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    c.execute("""
-        INSERT INTO document_blobs (user_id, doc_type, filename, file_path, content_type, file_blob)
-        VALUES (?, ?, ?, ?, ?, ?)
-    """, (user_id, doc_type, filename, file_path, content_type, file_bytes))
-    conn.commit()
-    conn.close()
 
     return jsonify({"ok": True, "document": db_resp.json()[0]}), 200
 
