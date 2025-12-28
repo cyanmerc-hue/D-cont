@@ -41,6 +41,10 @@ def admin_list_documents():
     """List documents using Supabase REST API (PostgREST)"""
     if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
         return jsonify({"error": "Supabase not configured"}), 500
+    # Security: Only allow admin user
+    admin_user_id = os.getenv("ADMIN_USER_ID")
+    if str(session.get("user_id")) != str(admin_user_id):
+        return jsonify({"error": "forbidden"}), 403
     status = request.args.get("status")
     # Build PostgREST query for user_documents
     url = f"{SUPABASE_URL}/rest/v1/user_documents"
@@ -65,7 +69,10 @@ def upload_document():
     """Upload document to Supabase Storage and record metadata in user_documents table."""
     if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
         return jsonify({"error": "Supabase not configured"}), 500
-    user_id = request.form.get("user_id")
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "not logged in"}), 401
+    user_id = str(user_id)
     doc_type = request.form.get("doc_type", "document")
     f = request.files.get("file")
     if not user_id:
@@ -92,7 +99,7 @@ def upload_document():
     print(f"[Supabase Storage] Response: {storage_resp.text}")
     if not storage_resp.ok:
         return jsonify({"error": storage_resp.text}), 500
-    public_url = f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET}/{file_path}"
+    # Do NOT generate public_url if bucket is private. Only store file_path in DB.
 
     # 2) Insert DB record via PostgREST (Supabase user_documents table)
     db_url = f"{SUPABASE_URL}/rest/v1/user_documents"
@@ -112,8 +119,8 @@ def upload_document():
         "created_at": datetime.utcnow().isoformat(),
     }
     db_resp = requests.post(db_url, headers=db_headers, json=db_payload)
-    print(f"[Supabase user_documents] Status: {db_resp.status_code}")
-    print(f"[Supabase user_documents] Response: {db_resp.text}")
+    print(f"[PostgREST] Status: {db_resp.status_code}")
+    print(f"[PostgREST] Response: {db_resp.text}")
     if not db_resp.ok:
         return jsonify({"error": db_resp.text}), 500
 
