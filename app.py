@@ -1,9 +1,3 @@
-# --- Logout route ---
-@app.route("/logout")
-def logout():
-    session.clear()
-    flash("You have been logged out.")
-    return redirect(url_for("home"))
 # --- Catch-all request logger for debugging ---
 
 from flask import Flask, render_template, request, redirect, url_for, session, flash, abort, send_from_directory, g, jsonify
@@ -35,7 +29,20 @@ print("SERVICE_ROLE_KEY loaded =", bool(SUPABASE_SERVICE_ROLE_KEY))
 print("KEY prefix =", (SUPABASE_SERVICE_ROLE_KEY or "")[:15])
 
 
+
 app = Flask(__name__)
+# --- Home route for root URL ---
+@app.route("/")
+def home():
+    # You can change this to render_template("splash.html") or another template if desired
+    return "Welcome to D-CONT! The backend is running.", 200
+
+# --- Logout route ---
+@app.route("/logout")
+def logout():
+    session.clear()
+    flash("You have been logged out.")
+    return redirect(url_for("home"))
 
 # --- Home route for root URL ---
 @app.route("/")
