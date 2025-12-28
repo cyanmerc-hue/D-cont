@@ -86,6 +86,9 @@ def upload_document():
         "Content-Type": content_type,
     }
     storage_resp = requests.post(storage_url, headers=storage_headers, data=file_bytes)
+    print(f"[Supabase Storage] Upload URL: {storage_url}")
+    print(f"[Supabase Storage] Status: {storage_resp.status_code}")
+    print(f"[Supabase Storage] Response: {storage_resp.text}")
     if not storage_resp.ok:
         return jsonify({"error": storage_resp.text}), 500
     public_url = f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET}/{file_path}"
