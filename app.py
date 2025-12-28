@@ -1,3 +1,57 @@
+# --- Admin: List and Download Uploaded Documents from Local DB ---
+@app.route("/admin/local-documents", methods=["GET"])
+def admin_list_local_documents():
+    """List all uploaded documents stored as BLOBs in the local database."""
+    conn = sqlite3.connect(DATABASE)
+    c = conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS document_blobs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT,
+            doc_type TEXT,
+            filename TEXT,
+            file_path TEXT,
+            content_type TEXT,
+            file_blob BLOB,
+            uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    c.execute("SELECT id, user_id, doc_type, filename, file_path, content_type, uploaded_at FROM document_blobs ORDER BY uploaded_at DESC")
+    docs = c.fetchall()
+    conn.close()
+    # Return as JSON for now; can be rendered as HTML if needed
+    return jsonify({"documents": [
+        {
+            "id": row[0],
+            "user_id": row[1],
+            "doc_type": row[2],
+            "filename": row[3],
+            "file_path": row[4],
+            "content_type": row[5],
+            "uploaded_at": row[6],
+            "download_url": url_for('admin_download_local_document', doc_id=row[0], _external=True)
+        } for row in docs
+    ]})
+
+
+# Download a specific document BLOB by id
+@app.route("/admin/local-documents/<int:doc_id>/download", methods=["GET"])
+def admin_download_local_document(doc_id):
+    conn = sqlite3.connect(DATABASE)
+    c = conn.cursor()
+    c.execute("SELECT filename, content_type, file_blob FROM document_blobs WHERE id=?", (doc_id,))
+    row = c.fetchone()
+    conn.close()
+    if not row:
+        return "Not found", 404
+    filename, content_type, file_blob = row
+    return send_from_directory(
+        directory=None,
+        path=filename,
+        as_attachment=True,
+        mimetype=content_type,
+        file=bytes(file_blob)
+    )
 
 from flask import Flask, render_template, request, redirect, url_for, session, flash, abort, send_from_directory, g, jsonify
 import sqlite3
@@ -55,9 +109,11 @@ def admin_list_documents():
     return jsonify({"documents": resp.json()}), 200
 
 # --- Document Upload Endpoint (Supabase Storage REST API) ---
+
+# --- Enhanced Upload: Store file in local DB for admin verification ---
 @app.route("/api/upload-document", methods=["POST"])
 def upload_document():
-    """Upload document using Supabase Storage REST API and insert metadata via PostgREST"""
+    """Upload document to Supabase and store file BLOB in local DB for admin verification."""
     if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
         return jsonify({"error": "Supabase not configured"}), 500
     user_id = request.form.get("user_id")
@@ -73,6 +129,7 @@ def upload_document():
     file_path = f"{user_id}/{int(datetime.utcnow().timestamp())}-{unique}"
     file_bytes = f.read()
     content_type = f.mimetype or "application/octet-stream"
+
     # 1) Upload to Supabase Storage via REST
     storage_url = f"{SUPABASE_URL}/storage/v1/object/{SUPABASE_BUCKET}/{file_path}"
     storage_headers = {
@@ -83,9 +140,9 @@ def upload_document():
     storage_resp = requests.post(storage_url, headers=storage_headers, data=file_bytes)
     if not storage_resp.ok:
         return jsonify({"error": storage_resp.text}), 500
-    # 2) Public URL (if bucket is public)
     public_url = f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET}/{file_path}"
-    # 3) Insert DB record via PostgREST
+
+    # 2) Insert DB record via PostgREST (Supabase)
     db_url = f"{SUPABASE_URL}/rest/v1/documents"
     db_headers = {
         "apikey": SUPABASE_SERVICE_ROLE_KEY,
@@ -103,6 +160,29 @@ def upload_document():
     db_resp = requests.post(db_url, headers=db_headers, json=db_payload)
     if not db_resp.ok:
         return jsonify({"error": db_resp.text}), 500
+
+    # 3) Store file BLOB in local SQLite for admin verification
+    conn = sqlite3.connect(DATABASE)
+    c = conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS document_blobs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT,
+            doc_type TEXT,
+            filename TEXT,
+            file_path TEXT,
+            content_type TEXT,
+            file_blob BLOB,
+            uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    c.execute("""
+        INSERT INTO document_blobs (user_id, doc_type, filename, file_path, content_type, file_blob)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (user_id, doc_type, filename, file_path, content_type, file_bytes))
+    conn.commit()
+    conn.close()
+
     return jsonify({"ok": True, "document": db_resp.json()[0]}), 200
 
 try:
