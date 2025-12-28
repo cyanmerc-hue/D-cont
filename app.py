@@ -61,6 +61,7 @@ def admin_list_documents():
 # --- Enhanced Upload: Store file in local DB for admin verification ---
 @app.route("/api/upload-document", methods=["POST"])
 def upload_document():
+        print("[UPLOAD ENDPOINT CALLED]")
     """Upload document to Supabase and store file BLOB in local DB for admin verification."""
     if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
         return jsonify({"error": "Supabase not configured"}), 500
