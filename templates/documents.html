@@ -43,7 +43,7 @@
 
         <div class="section" style="margin-top:14px;">
             <div class="sectionTitle" style="margin-top:0;">Upload document</div>
-            <form method="post" enctype="multipart/form-data" style="display:grid; grid-template-columns: 220px 1fr 220px; gap:10px; align-items:center; margin:0;">
+            <form method="post" action="/api/upload-document" enctype="multipart/form-data" style="display:grid; grid-template-columns: 220px 1fr 220px; gap:10px; align-items:center; margin:0;">
                 <select name="doc_type" required class="input" style="margin:0;">
                     <option value="">Select type</option>
                     <option value="pan">PAN Card</option>
@@ -53,7 +53,7 @@
                     <option value="other">Other</option>
                 </select>
                 <input type="text" name="notes" placeholder="Notes (optional)" class="input" style="margin:0;">
-                <input type="file" name="document" required accept="image/*,application/pdf" class="input" style="margin:0; padding:10px;">
+                <input type="file" name="file" required accept="image/*,application/pdf" class="input" style="margin:0; padding:10px;">
                 <button type="submit" class="btn" style="grid-column: 1 / -1;">Upload</button>
             </form>
             <div class="muted" style="margin-top:10px; font-size:0.95em;">Allowed: PNG/JPG/JPEG/WEBP/GIF/PDF</div>
