@@ -4039,19 +4039,24 @@ def owner_dashboard():
     ''')
     pending_joins = c.fetchall()
 
-    # Fetch document uploads (if table exists)
+    # Fetch document uploads from Supabase user_documents
+    pending_docs = []
     try:
-        c.execute('''
-            SELECT d.user_id, u.full_name, u.mobile, d.doc_type, d.created_at, d.file_path, d.file_url
-            FROM documents d
-            JOIN users u ON u.id = d.user_id
-            WHERE COALESCE(d.status, 'pending') = 'pending'
-            ORDER BY d.created_at DESC
-            LIMIT 20
-        ''')
-        pending_docs = c.fetchall()
-    except Exception:
-        pending_docs = []
+        url = f"{SUPABASE_URL}/rest/v1/user_documents"
+        headers = {
+            "apikey": SUPABASE_SERVICE_ROLE_KEY,
+            "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+        }
+        params = {
+            "status": "eq.pending",
+            "order": "created_at.desc",
+            "limit": 20
+        }
+        resp = requests.get(url, headers=headers, params=params)
+        if resp.ok:
+            pending_docs = resp.json()
+    except Exception as e:
+        print(f"[Supabase user_documents] Error: {e}")
 
     conn.close()
     return render_template(
@@ -4219,18 +4224,31 @@ def owner_user_profile(username):
     ]
 
     transactions = _fetch_user_transactions(conn, username, limit=200)
-    # Fetch all documents uploaded by this user from documents table (new schema)
-    c = conn.cursor()
+    # Fetch all documents uploaded by this user from Supabase user_documents
+    user_docs = []
     try:
-        c.execute('''
-            SELECT doc_type, file_path, file_url, status, created_at
-            FROM documents
-            WHERE user_id=?
-            ORDER BY created_at DESC
-        ''', (username,))
-        user_docs = c.fetchall()
-    except Exception:
-        user_docs = []
+        url = f"{SUPABASE_URL}/rest/v1/user_documents"
+        headers = {
+            "apikey": SUPABASE_SERVICE_ROLE_KEY,
+            "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+        }
+        params = {
+            "user_id": f"eq.{username}",
+            "order": "created_at.desc"
+        }
+        resp = requests.get(url, headers=headers, params=params)
+        if resp.ok:
+            user_docs = [
+                (
+                    doc.get('doc_type'),
+                    doc.get('file_path'),
+                    doc.get('file_url'),
+                    doc.get('status'),
+                    doc.get('created_at')
+                ) for doc in resp.json()
+            ]
+    except Exception as e:
+        print(f"[Supabase user_documents] Error: {e}")
     conn.close()
 
     user = {
