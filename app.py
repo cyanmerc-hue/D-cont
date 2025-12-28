@@ -1,11 +1,39 @@
+# --- Catch-all request logger for debugging ---
 
+from flask import Flask, render_template, request, redirect, url_for, session, flash, abort, send_from_directory, g, jsonify
+import sqlite3
+import os
+import random
+import uuid
+from werkzeug.utils import secure_filename
+from werkzeug.security import generate_password_hash, check_password_hash
+from datetime import date, datetime, timedelta
+from functools import wraps
+from urllib.parse import quote
+import smtplib
+from email.message import EmailMessage
+import re
+import time
+import calendar
+import mimetypes
 
 from dotenv import load_dotenv
-import os
 load_dotenv()  # THIS is critical
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET", "documents")
+
+print("SUPABASE_URL =", SUPABASE_URL)
+print("SERVICE_ROLE_KEY loaded =", bool(SUPABASE_SERVICE_ROLE_KEY))
+print("KEY prefix =", (SUPABASE_SERVICE_ROLE_KEY or "")[:15])
+
+app = Flask(__name__)
+
+# --- Catch-all request logger for debugging ---
+@app.before_request
+def log_request():
+    print("REQ:", request.method, request.path)
 SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET", "documents")
 
 print("SUPABASE_URL =", SUPABASE_URL)
@@ -96,8 +124,8 @@ def upload_document():
     }
     storage_resp = requests.post(storage_url, headers=storage_headers, data=file_bytes)
     print(f"[Supabase Storage] Upload URL: {storage_url}")
-    print(f"[Supabase Storage] Status: {storage_resp.status_code}")
-    print(f"[Supabase Storage] Response: {storage_resp.text}")
+    print(f"[STORAGE] Status: {storage_resp.status_code}")
+    print(f"[STORAGE] Body: {storage_resp.text}")
     if not storage_resp.ok:
         return jsonify({"error": storage_resp.text}), 500
     # Do NOT generate public_url if bucket is private. Only store file_path in DB.
@@ -120,8 +148,8 @@ def upload_document():
         "created_at": datetime.utcnow().isoformat(),
     }
     db_resp = requests.post(db_url, headers=db_headers, json=db_payload)
-    print(f"[PostgREST] Status: {db_resp.status_code}")
-    print(f"[PostgREST] Response: {db_resp.text}")
+    print("[DB INSERT] Status:", db_resp.status_code)
+    print("[DB INSERT] Body:", db_resp.text)
     if not db_resp.ok:
         return jsonify({"error": db_resp.text}), 500
 
@@ -178,7 +206,12 @@ def _compute_asset_version() -> str:
         return str(int(time.time()))
 
 
+
+import requests
+import uuid
 ASSET_VERSION = _compute_asset_version()
+# --- Supabase User Upsert Helper ---
+pass  # No longer needed; user management is now handled by Supabase Auth
 
 # Render's filesystem is ephemeral unless you attach a persistent disk.
 # You can override these paths via env vars to point at a persistent mount.
@@ -531,37 +564,11 @@ def _delete_user_and_related(conn: sqlite3.Connection, username: str) -> tuple[b
     try:
         c.execute(
             """
-            UPDATE groups
-            SET payout_receiver_username='',
-                payout_receiver_name='',
-                payout_receiver_upi='',
-                receiver_name=CASE WHEN COALESCE(receiver_name,'')='' THEN receiver_name ELSE receiver_name END,
-                receiver_upi=CASE WHEN COALESCE(receiver_upi,'')='' THEN receiver_upi ELSE receiver_upi END
-            WHERE COALESCE(payout_receiver_username,'')=?
+            DELETE FROM group_members WHERE username=?;
+            DELETE FROM user_documents WHERE user_id=?;
             """,
-            (uname,),
+            (uname, uname),
         )
-    except sqlite3.OperationalError:
-        pass
-
-    # Delete related rows (best-effort per table)
-    for sql, params in [
-        ("DELETE FROM group_members WHERE username=?", (uname,)),
-        ("DELETE FROM transactions WHERE username=?", (uname,)),
-        ("DELETE FROM trust_events WHERE username=?", (uname,)),
-        ("DELETE FROM early_payout_requests WHERE username=?", (uname,)),
-        ("DELETE FROM app_fee_payments WHERE username=?", (uname,)),
-        ("DELETE FROM support_handoffs WHERE username=?", (uname,)),
-        ("DELETE FROM referrals WHERE referrer_username=? OR new_username=?", (uname, uname)),
-    ]:
-        try:
-            c.execute(sql, params)
-        except sqlite3.OperationalError:
-            pass
-
-    # Auth attempts may store username or phone as identifier (best-effort)
-    try:
-        c.execute("SELECT COALESCE(mobile,'') FROM users WHERE username=?", (uname,))
         mrow = c.fetchone()
         mobile_val = (mrow[0] if mrow else '') or ''
         try:
@@ -6190,246 +6197,32 @@ def login():
         return render_template('login.html')
 
     if request.method == 'POST':
-        login_type = (request.form.get('login_type') or '').strip().lower()
-
-        requested_lang = _normalize_lang(request.form.get('lang') or '')
-        if requested_lang in SUPPORTED_LANGS:
-            # Persist early so error states render in the selected language.
-            session['lang'] = requested_lang
-
-        # Read both forms' fields up-front (browser autofill can populate hidden/unused fields)
-        identifier = (request.form.get('username') or '').strip()
+        email = (request.form.get('username') or '').strip().lower()
         password = request.form.get('password') or ''
-        admin_username = (request.form.get('admin_username') or '').strip()
-        admin_password = request.form.get('admin_password') or ''
+        if not email or not password:
+            flash('Enter your email and password.')
+            return render_template('login.html')
 
-        # Admin login (username/password)
-        is_admin_attempt = login_type == 'admin'
-        if not is_admin_attempt:
-            # Back-compat: treat as admin attempt only if admin creds are fully provided
-            # and customer creds are empty (avoids autofill breaking customer logins).
-            if admin_username and admin_password and (not identifier) and (not password):
-                is_admin_attempt = True
-
-        if is_admin_attempt:
-            if not admin_username or not admin_password:
-                flash('Enter admin user id and password.')
-                return render_template('login.html')
-
-            client_ip = _client_ip()
-            if _auth_is_rate_limited('admin_pw', admin_username, client_ip):
-                flash(t('login_rate_limited'))
-                return render_template('login.html')
-
-            conn = get_db()
-            c = conn.cursor()
-            try:
-                c.execute('SELECT username, password, role, is_active FROM users WHERE username=?', (admin_username,))
-                row = c.fetchone()
-            except sqlite3.OperationalError:
-                row = None
-            conn.close()
-
-            if not row or (row[2] or '').strip().lower() != 'admin':
-                flash('Invalid admin credentials.')
-                return render_template('login.html')
-            if int(row[3] if row[3] is not None else 1) != 1:
-                flash('Your account is blocked. Please contact support.')
-                return render_template('login.html')
-
-            stored_pw = row[1] or ''
-            password_ok = False
-            try:
-                password_ok = check_password_hash(stored_pw, admin_password)
-            except (ValueError, TypeError):
-                password_ok = False
-            if not password_ok:
-                # Back-compat: if password was stored in plain text
-                password_ok = stored_pw == admin_password
-
-            if not password_ok:
-                flash('Invalid admin credentials.')
-                _auth_record_attempt('admin_pw', admin_username, client_ip, success=False)
-                return render_template('login.html')
-
-            _auth_record_attempt('admin_pw', admin_username, client_ip, success=True)
-
-            session['username'] = row[0]
-            session['role'] = 'admin'
-            session['lang'] = 'en'
-            return redirect(url_for('dashboard'))
-
-        mode = (request.form.get('mode') or '').strip().lower()
-
-        # Customer MPIN login
-        if mode == 'mpin':
-            mobile_identifier = (request.form.get('mobile') or '').strip()
-            mpin = (request.form.get('mpin') or '').strip()
-            if not mobile_identifier:
-                flash('Enter your mobile number.')
-                return render_template('login.html')
-            if not _is_valid_mpin(mpin):
-                flash('Enter your 4-digit MPIN.')
-                return render_template('login.html')
-
-            client_ip = _client_ip()
-            if _auth_is_rate_limited('mpin', mobile_identifier, client_ip):
-                flash(t('login_rate_limited'))
-                return render_template('login.html')
-
-            conn = get_db()
-            candidates = _lookup_customer_candidates_by_mobile(conn, mobile_identifier)
-            matched = None
-            for row in candidates:
-                db_username, role_raw, is_active_raw, db_mobile, mpin_hash, _cred_id, _pub_key, _sign_count = row
-                db_username = _repair_blank_username(conn, db_username, db_mobile)
-                if not (db_username or '').strip():
-                    continue
-                role = (role_raw or 'customer').strip().lower()
-                if role == 'admin':
-                    continue
-                if int(is_active_raw if is_active_raw is not None else 1) != 1:
-                    continue
-                if not (mpin_hash or '').strip():
-                    continue
-                try:
-                    if check_password_hash(mpin_hash, mpin):
-                        matched = (db_username, role)
-                        break
-                except (ValueError, TypeError):
-                    continue
-            conn.close()
-
-            if not matched:
-                _auth_record_attempt('mpin', mobile_identifier, client_ip, success=False)
-                flash('Invalid MPIN or mobile number.')
-                return render_template('login.html')
-
-            _auth_record_attempt('mpin', mobile_identifier, client_ip, success=True)
-
-            session['username'] = matched[0]
-            session['role'] = matched[1]
-            if requested_lang in SUPPORTED_LANGS:
-                session['lang'] = requested_lang
-            else:
-                session['lang'] = _get_user_language(matched[0])
+        # Supabase Auth login
+        url = f"{SUPABASE_URL}/auth/v1/token?grant_type=password"
+        headers = {
+            "apikey": SUPABASE_SERVICE_ROLE_KEY,
+            "Content-Type": "application/json",
+        }
+        payload = {"email": email, "password": password}
+        resp = requests.post(url, headers=headers, json=payload)
+        if resp.status_code == 200:
+            data = resp.json()
+            session['user_id'] = data.get('user', {}).get('id')
+            session['email'] = email
+            session['access_token'] = data.get('access_token')
+            session['refresh_token'] = data.get('refresh_token')
+            session['lang'] = session.get('lang', 'en')
             session['show_splash'] = 1
             return redirect(url_for('splash'))
-
-        # Customer login (username OR mobile + password)
-        if login_type == 'admin':
-            # Explicit admin submission already handled above.
-            flash('Invalid admin credentials.')
-            return render_template('login.html')
-
-        if not identifier or not password:
-            flash('Enter your username/mobile and password.')
-            return render_template('login.html')
-
-        client_ip = _client_ip()
-        if _auth_is_rate_limited('password', identifier, client_ip):
-            flash(t('login_rate_limited'))
-            return render_template('login.html')
-
-        conn = get_db()
-        c = conn.cursor()
-
-        candidate_rows = []
-        try:
-            # Username: tolerate case/spacing differences
-            c.execute(
-                'SELECT username, password, role, is_active, mobile FROM users WHERE lower(trim(username)) = lower(?)',
-                (identifier.strip(),),
-            )
-            candidate_rows.extend(c.fetchall() or [])
-
-            # Mobile: try exact candidates (raw/digits/+91 variations)
-            for mobile_value in _mobile_candidates(identifier):
-                c.execute(
-                    'SELECT username, password, role, is_active, mobile FROM users WHERE mobile=?',
-                    (mobile_value,),
-                )
-                candidate_rows.extend(c.fetchall() or [])
-
-            # Last-resort fallback: digit-normalized mobile matching
-            identifier_digits = _normalize_mobile_digits(identifier)
-            if identifier_digits:
-                c.execute('SELECT username, password, role, is_active, mobile FROM users')
-                for cand in c.fetchall() or []:
-                    cand_mobile = cand[4] if len(cand) > 4 else ''
-                    if _normalize_mobile_digits(cand_mobile) == identifier_digits:
-                        candidate_rows.append(cand)
-        except sqlite3.OperationalError:
-            candidate_rows = []
-
-        candidate_rows = _dedupe_user_rows(candidate_rows)
-
-        if not candidate_rows:
-            conn.close()
-            _auth_record_attempt('password', identifier, client_ip, success=False)
-            flash('Invalid credentials.')
-            return render_template('login.html')
-
-        matched = None
-        for row in candidate_rows:
-            db_username, stored_pw, role_raw, is_active_raw, db_mobile = row
-            db_username = _repair_blank_username(conn, db_username, db_mobile)
-            if not (db_username or '').strip():
-                continue
-
-            role = (role_raw or 'customer').strip().lower()
-            if role == 'admin':
-                # Don't allow admin to login via customer section
-                continue
-
-            if int(is_active_raw if is_active_raw is not None else 1) != 1:
-                # Preserve earlier behavior for blocked accounts
-                continue
-
-            if _password_matches(stored_pw, password):
-                matched = (db_username, role)
-                break
-
-        conn.close()
-
-        if not matched:
-            # If any candidate is blocked, show the blocked message (more helpful than Invalid credentials)
-            any_blocked = False
-            for row in candidate_rows:
-                try:
-                    if int(row[3] if row[3] is not None else 1) != 1:
-                        any_blocked = True
-                        break
-                except Exception:
-                    continue
-            if any_blocked:
-                flash('Your account is blocked. Please contact support.')
-            else:
-                _auth_record_attempt('password', identifier, client_ip, success=False)
-                flash('Invalid credentials.')
-            return render_template('login.html')
-
-        _auth_record_attempt('password', identifier, client_ip, success=True)
-
-        session['username'] = matched[0]
-        session['role'] = matched[1]
-
-        # Store preferred language for customer UI
-        if requested_lang in SUPPORTED_LANGS:
-            session['lang'] = requested_lang
-            try:
-                conn = get_db()
-                c = conn.cursor()
-                c.execute('UPDATE users SET language=? WHERE username=?', (requested_lang, matched[0]))
-                conn.commit()
-                conn.close()
-            except sqlite3.OperationalError:
-                pass
         else:
-            session['lang'] = _get_user_language(matched[0])
-
-        session['show_splash'] = 1
-        return redirect(url_for('splash'))
+            flash('Invalid credentials or Supabase error.')
+            return render_template('login.html')
 
     return render_template('login.html')
 
@@ -6440,97 +6233,39 @@ def register():
         if agree_terms != 'yes':
             flash('You must agree to the Terms & Conditions to register.')
             return render_template('register.html')
-        username = (request.form.get('username') or '').strip()
+        email = (request.form.get('email') or '').strip().lower()
         password = request.form.get('password') or ''
-        mobile_raw = request.form.get('mobile')
-        # Store mobile in a normalized digits format when possible so
-        # users can log in even if they type +91/spaces/dashes later.
-        mobile = _normalize_mobile_digits(mobile_raw) or (mobile_raw or '').strip()
-        full_name = request.form.get('full_name')
-        language = _normalize_lang(request.form.get('language'))
-        city_state = request.form.get('city_state')
-        email = request.form.get('email')
-        referral_code_input = _normalize_referral_code(request.form.get('referral_code') or '')
-
-        if not username:
-            flash('Username is required.')
+        full_name = request.form.get('full_name') or ''
+        mobile = request.form.get('mobile') or ''
+        city_state = request.form.get('city_state') or ''
+        if not email or not password or not full_name or not mobile:
+            flash('All fields are required.')
             return render_template('register.html')
-        if not password or len(password.strip()) < 6:
-            flash('Password is required (min 6 characters).')
+        if len(password) < 6:
+            flash('Password must be at least 6 characters.')
             return render_template('register.html')
-        if not mobile:
-            flash('Mobile number is required.')
-            return render_template('register.html')
-        try:
-            password_hash = generate_password_hash(password)
-            conn = get_db()
-            c = conn.cursor()
-
-            c.execute(
-                'INSERT INTO users (username, password, mobile, full_name, language, city_state, email, role, upi_id, onboarding_completed, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                (username, password_hash, mobile, full_name, language, city_state, email, 'customer', '', 0, 1),
-            )
-            user_id = int(c.lastrowid or 0)
-
-            # Assign referral code for the new user (best-effort)
-            new_referral_code = _make_referral_code_from_user_id(user_id)
-            try:
-                c.execute(
-                    'UPDATE users SET referral_code=?, wallet_credit=COALESCE(wallet_credit,0) WHERE username=?',
-                    (new_referral_code, username),
-                )
-            except sqlite3.OperationalError:
-                pass
-
-            # If a referral code was provided, validate and create a PENDING record.
-            if referral_code_input:
-                try:
-                    c.execute(
-                        "SELECT username, COALESCE(mobile,''), COALESCE(NULLIF(role,''),'customer') FROM users WHERE upper(COALESCE(referral_code,''))=upper(?)",
-                        (referral_code_input,),
-                    )
-                    ref = c.fetchone()
-                except sqlite3.OperationalError:
-                    ref = None
-
-                if not ref or (ref[2] or '').strip().lower() == 'admin':
-                    conn.rollback()
-                    conn.close()
-                    flash('Invalid referral code. Please remove it or enter a valid code.')
-                    return render_template('register.html')
-
-                referrer_username = (ref[0] or '').strip()
-                referrer_mobile = _normalize_mobile_digits(ref[1] or '')
-                new_mobile_digits = _normalize_mobile_digits(mobile)
-
-                # Anti-fraud: self-referral blocked (username or phone)
-                if referrer_username.lower() == username.lower() or (
-                    referrer_mobile and new_mobile_digits and referrer_mobile == new_mobile_digits
-                ):
-                    conn.rollback()
-                    conn.close()
-                    flash('Self-referral is not allowed. Please remove the referral code.')
-                    return render_template('register.html')
-
-                now = datetime.now().isoformat(timespec='seconds')
-                try:
-                    # One user = one referral record (no chain commissions)
-                    c.execute(
-                        'INSERT INTO referrals (referrer_username, new_username, status, created_at) VALUES (?,?,?,?)',
-                        (referrer_username, username, 'PENDING', now),
-                    )
-                    c.execute('UPDATE users SET referred_by=? WHERE username=?', (referrer_username, username))
-                except sqlite3.IntegrityError:
-                    pass
-                except sqlite3.OperationalError:
-                    pass
-
-            conn.commit()
-            conn.close()
-            flash('Registration successful! Please log in.')
+        # Supabase Auth registration
+        url = f"{SUPABASE_URL}/auth/v1/signup"
+        headers = {
+            "apikey": SERVICE_ROLE_KEY,
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "email": email,
+            "password": password,
+            "data": {
+                "full_name": full_name,
+                "mobile": mobile,
+                "city_state": city_state,
+            }
+        }
+        resp = requests.post(url, headers=headers, json=payload)
+        if resp.status_code in (200, 201):
+            flash('Registration successful! Please check your email to confirm your account, then log in.')
             return redirect(url_for('login'))
-        except sqlite3.IntegrityError:
-            flash('Username or mobile already exists!')
+        else:
+            flash('Registration failed: ' + resp.text)
+            return render_template('register.html')
     return render_template('register.html')
 
 @app.route('/owner/users/reset_password', methods=['POST'])
@@ -6549,54 +6284,6 @@ def owner_reset_user_password():
     conn = get_db()
     c = conn.cursor()
     c.execute('SELECT role FROM users WHERE username=?', (target_username,))
-    row = c.fetchone()
-    if not row:
-        conn.close()
-        flash('User not found.')
-        return redirect(url_for('owner_users'))
-    if (row[0] or '').strip().lower() == 'admin':
-        conn.close()
-        flash('Admin passwords are not reset here.')
-        return redirect(url_for('owner_users'))
-
-    new_hash = generate_password_hash(new_password)
-    c.execute('UPDATE users SET password=? WHERE username=?', (new_hash, target_username))
-    conn.commit()
-    conn.close()
-    flash('Password reset successfully.')
-    return redirect(url_for('owner_user_profile', username=target_username))
-
-@app.route('/logout')
-def logout():
-    session.pop('username', None)
-    session.pop('role', None)
-    return redirect(url_for('login'))
-
-
-@app.route('/admin')
-@admin_required
-def admin_panel():
-    # Legacy route: owner/admin UI lives under /owner/*
-    return redirect(url_for('owner_dashboard'))
-
-
-@app.route('/admin/update_group', methods=['POST'])
-@admin_required
-def admin_update_group():
-    group_id = request.form.get('group_id')
-    name = request.form.get('name')
-    description = request.form.get('description')
-    monthly_amount = request.form.get('monthly_amount')
-    try:
-        monthly_amount_int = int(monthly_amount) if monthly_amount is not None else 0
-    except ValueError:
-        monthly_amount_int = 0
-
-    conn = get_db()
-    c = conn.cursor()
-    c.execute('UPDATE groups SET name=?, description=?, monthly_amount=? WHERE id=?', (name, description, monthly_amount_int, group_id))
-    conn.commit()
-    conn.close()
     flash('Group updated.')
     return redirect(url_for('owner_groups'))
 
