@@ -1,3 +1,9 @@
+# --- Logout route ---
+@app.route("/logout")
+def logout():
+    session.clear()
+    flash("You have been logged out.")
+    return redirect(url_for("home"))
 # --- Catch-all request logger for debugging ---
 
 from flask import Flask, render_template, request, redirect, url_for, session, flash, abort, send_from_directory, g, jsonify
