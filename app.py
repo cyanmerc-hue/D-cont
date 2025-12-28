@@ -1,59 +1,5 @@
 
-# --- Admin: List and Download Uploaded Documents from Local DB ---
-# (Moved below app = Flask(__name__))
 
-# ...existing code...
-
-# Place the following after app = Flask(__name__) and all config:
-
-@app.route("/admin/local-documents", methods=["GET"])
-def admin_list_local_documents():
-    """List all uploaded documents stored as BLOBs in the local database."""
-    conn = sqlite3.connect(DATABASE)
-    c = conn.cursor()
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS document_blobs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id TEXT,
-            doc_type TEXT,
-            filename TEXT,
-            file_path TEXT,
-            content_type TEXT,
-            file_blob BLOB,
-            uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    c.execute("SELECT id, user_id, doc_type, filename, file_path, content_type, uploaded_at FROM document_blobs ORDER BY uploaded_at DESC")
-    docs = c.fetchall()
-    conn.close()
-    # Return as JSON for now; can be rendered as HTML if needed
-    return jsonify({"documents": [
-        {
-            "id": row[0],
-            "user_id": row[1],
-            "doc_type": row[2],
-            "filename": row[3],
-            "file_path": row[4],
-            "content_type": row[5],
-            "uploaded_at": row[6],
-            "download_url": url_for('admin_download_local_document', doc_id=row[0], _external=True)
-        } for row in docs
-    ]})
-
-@app.route("/admin/local-documents/<int:doc_id>/download", methods=["GET"])
-def admin_download_local_document(doc_id):
-    conn = sqlite3.connect(DATABASE)
-    c = conn.cursor()
-    c.execute("SELECT filename, content_type, file_blob FROM document_blobs WHERE id=?", (doc_id,))
-    row = c.fetchone()
-    conn.close()
-    if not row:
-        return "Not found", 404
-    filename, content_type, file_blob = row
-    from flask import Response
-    return Response(file_blob, mimetype=content_type, headers={
-        'Content-Disposition': f'attachment; filename={filename}'
-    })
 
 from flask import Flask, render_template, request, redirect, url_for, session, flash, abort, send_from_directory, g, jsonify
 import sqlite3
