@@ -1,9 +1,19 @@
 
 
+from dotenv import load_dotenv
+import os
+load_dotenv()  # THIS is critical
+
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET", "documents")
+
+print("SUPABASE_URL =", SUPABASE_URL)
+print("SERVICE_ROLE_KEY loaded =", bool(SUPABASE_SERVICE_ROLE_KEY))
+print("KEY prefix =", (SUPABASE_SERVICE_ROLE_KEY or "")[:15])
 
 from flask import Flask, render_template, request, redirect, url_for, session, flash, abort, send_from_directory, g, jsonify
 import sqlite3
-import os
 import random
 import uuid
 from werkzeug.utils import secure_filename
@@ -17,15 +27,6 @@ import re
 import time
 import calendar
 import mimetypes
-from dotenv import load_dotenv
-
-# Load environment variables from .env
-load_dotenv()
-
-# Supabase REST API config (to be used with requests)
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET", "documents")
 
 # ...existing code...
 
