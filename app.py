@@ -1,96 +1,135 @@
+import os
+import time
 from flask import Flask, render_template, request, redirect, url_for, session, flash, abort, send_from_directory, g, jsonify
 import sqlite3
-import os
 import random
 import uuid
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import date, datetime, timedelta
 from functools import wraps
-from urllib.parse import quote
-import smtplib
-from email.message import EmailMessage
-import re
-import time
-import calendar
-import mimetypes
-import requests
 
-from dotenv import load_dotenv
-load_dotenv()  # THIS is critical
+# --- Login Helper: Map phone to email for Supabase Auth ---
+def map_identifier_to_email(identifier):
+    identifier = (identifier or '').strip()
+    # If identifier looks like a phone number (all digits, 8-15 chars), map to placeholder email
+    if identifier.isdigit() and 8 <= len(identifier) <= 15:
+        return f"{identifier}@migrated.local"
+    return identifier
 
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
-SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET", "documents")
-SERVICE_ROLE_KEY = SUPABASE_SERVICE_ROLE_KEY
-
-print("SUPABASE_URL =", SUPABASE_URL)
-print("SERVICE_ROLE_KEY loaded =", bool(SUPABASE_SERVICE_ROLE_KEY))
-print("KEY prefix =", (SUPABASE_SERVICE_ROLE_KEY or "")[:15])
-
-app = Flask(__name__)
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", uuid.uuid4().hex)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Helper: Upload file to Supabase Storage and insert metadata
-def supabase_upload_and_record(*, user_id: str, doc_type: str, file_storage):
-    """
-    Upload file to Supabase Storage and insert metadata into public.user_documents.
-    Returns (ok: bool, payload: dict, status_code: int)
-    """
-    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
-        return False, {"error": "Supabase not configured"}, 500
+# ...existing code...
 
-    filename = secure_filename(file_storage.filename or "")
-    if not filename:
-        return False, {"error": "invalid filename"}, 400
+from urllib.parse import quote
 
-    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "bin"
-    unique = f"{uuid.uuid4().hex}.{ext}"
-    file_path = f"{user_id}/{int(datetime.utcnow().timestamp())}-{unique}"
-    content_type = file_storage.mimetype or "application/octet-stream"
+# --- Supabase Auth/Helper Functions ---
+import requests
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
-    file_bytes = file_storage.read()
-    if not file_bytes:
-        return False, {"error": "empty file"}, 400
+def supabase_login(email: str, password: str):
+    url = f"{SUPABASE_URL}/auth/v1/token?grant_type=password"
+    headers = {"apikey": SUPABASE_ANON_KEY, "Content-Type": "application/json"}
+    r = requests.post(url, headers=headers, json={"email": email, "password": password}, timeout=30)
+    return r
 
-    # 1) Upload to Storage (PUT)
-    storage_url = f"{SUPABASE_URL}/storage/v1/object/{SUPABASE_BUCKET}/{file_path}"
-    storage_headers = {
-        "apikey": SUPABASE_SERVICE_ROLE_KEY,
-        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
-        "Content-Type": content_type,
-        "x-upsert": "true",
-    }
-    storage_resp = requests.put(storage_url, headers=storage_headers, data=file_bytes)
-
-    print("[STORAGE] Status:", storage_resp.status_code)
-    if not storage_resp.ok:
-        print("[STORAGE] Error:", storage_resp.text)
-        return False, {"error": "storage upload failed", "details": storage_resp.text}, 500
-
-    # 2) Insert row into user_documents
-    db_url = f"{SUPABASE_URL}/rest/v1/user_documents"
-
-
-    db_headers = {
-        "apikey": SUPABASE_SERVICE_ROLE_KEY,
-        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
-        "Content-Type": "application/json"
-    }
-    url = f"{SUPABASE_URL}/rest/v1/user_documents"
+def supabase_is_admin(user_id: str) -> bool:
+    url = f"{SUPABASE_URL}/rest/v1/profiles"
     headers = {
         "apikey": SUPABASE_SERVICE_ROLE_KEY,
         "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
     }
-    params = {"order": "created_at.desc"}
-    if status:
-        params["status"] = f"eq.{status}"
-    resp = requests.get(url, headers=headers, params=params)
-    if not resp.ok:
-        return jsonify({"error": resp.text}), 500
-    return jsonify({"documents": resp.json()}), 200
+    params = {"id": f"eq.{user_id}", "select": "is_admin"}
+    r = requests.get(url, headers=headers, params=params, timeout=30)
+    if not r.ok:
+        print("[ADMIN CHECK ERROR]", r.status_code, r.text)
+        return False
+    rows = r.json()
+    return bool(rows and rows[0].get("is_admin") is True)
+
+app = Flask(__name__)
+
+# ...existing code...
+
+# --- /login route (Supabase Auth) ---
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        identifier = (request.form.get('username') or '').strip()
+        password = (request.form.get('password') or '').strip()
+        login_type = (request.form.get('login_type') or 'customer').strip().lower()
+        # Allow login with email or phone
+        if '@' in identifier:
+            email = identifier
+        else:
+            email = map_identifier_to_email(identifier)
+        # Supabase Auth login
+        resp = supabase_login(email, password)
+        if resp.ok:
+            data = resp.json()
+            session.clear()
+            session['user_id'] = data.get('user', {}).get('id')
+            session['email'] = data.get('user', {}).get('email')
+            # Admin check
+            if login_type == 'admin' or (identifier == ADMIN_USERNAME and password == ADMIN_PASSWORD):
+                if supabase_is_admin(session['user_id']):
+                    session['role'] = 'admin'
+                    session['username'] = identifier
+                    session['show_splash'] = True
+                    return redirect(url_for('dashboard'))
+                else:
+                    flash('Not an admin user.')
+                    return redirect(url_for('login'))
+            # Normal user
+            session['role'] = 'customer'
+            session['username'] = identifier
+            session['show_splash'] = True
+            return redirect(url_for('splash'))
+        else:
+            error = resp.json().get('error_description') if resp.headers.get('Content-Type', '').startswith('application/json') else resp.text
+            flash(f'Login failed: {error}')
+            return redirect(url_for('login'))
+    # GET: render login page
+    return render_template('login.html')
+from urllib.parse import quote
+
+# --- Supabase Auth/Helper Functions ---
+import requests
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+
+def supabase_login(email: str, password: str):
+    url = f"{SUPABASE_URL}/auth/v1/token?grant_type=password"
+    headers = {"apikey": SUPABASE_ANON_KEY, "Content-Type": "application/json"}
+    r = requests.post(url, headers=headers, json={"email": email, "password": password}, timeout=30)
+    return r
+
+def supabase_is_admin(user_id: str) -> bool:
+    url = f"{SUPABASE_URL}/rest/v1/profiles"
+    headers = {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+    }
+    params = {"id": f"eq.{user_id}", "select": "is_admin"}
+    r = requests.get(url, headers=headers, params=params, timeout=30)
+    if not r.ok:
+        print("[ADMIN CHECK ERROR]", r.status_code, r.text)
+        return False
+    rows = r.json()
+    return bool(rows and rows[0].get("is_admin") is True)
+
+# ...existing code...
+
+app = Flask(__name__)
+# ...existing code...
+
+# Debug route to verify session after login
+@app.route("/debug/session")
+def debug_session():
+    return {"user_id": session.get("user_id"), "email": session.get("email")}
 
 # --- Document Upload Endpoint (Supabase Storage REST API) ---
 
@@ -124,13 +163,14 @@ def upload_document():
         "apikey": SUPABASE_SERVICE_ROLE_KEY,
         "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
         "Content-Type": content_type,
+        "x-upsert": "true",
     }
-    storage_resp = requests.post(storage_url, headers=storage_headers, data=file_bytes)
+    storage_resp = requests.put(storage_url, headers=storage_headers, data=file_bytes)
     print(f"[Supabase Storage] Upload URL: {storage_url}")
     print(f"[STORAGE] Status: {storage_resp.status_code}")
     print(f"[STORAGE] Body: {storage_resp.text}")
     if not storage_resp.ok:
-        return jsonify({"error": storage_resp.text}), 500
+        return jsonify({"error": "storage upload failed", "details": storage_resp.text}), 500
     # Do NOT generate public_url if bucket is private. Only store file_path in DB.
 
     # 2) Insert DB record via PostgREST (Supabase user_documents table)
@@ -156,7 +196,9 @@ def upload_document():
     if not db_resp.ok:
         return jsonify({"error": db_resp.text}), 500
 
-    return jsonify({"ok": True, "document": db_resp.json()[0]}), 200
+    data = db_resp.json()
+    doc = data[0] if isinstance(data, list) and data else data
+    return jsonify({"ok": True, "document": doc}), 200
 
 try:
     from webauthn import (
@@ -1854,10 +1896,9 @@ def login_required(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
         if 'username' not in session:
-            return redirect(url_for('login'))
-        blocked_redirect = enforce_active_session()
-        if blocked_redirect is not None:
-            return blocked_redirect
+            blocked_redirect = enforce_active_session()
+            if blocked_redirect is not None:
+                return blocked_redirect
         return fn(*args, **kwargs)
 
     return wrapper
@@ -1867,10 +1908,9 @@ def admin_required(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
         if 'username' not in session:
-            return redirect(url_for('login'))
-        blocked_redirect = enforce_active_session()
-        if blocked_redirect is not None:
-            return blocked_redirect
+            blocked_redirect = enforce_active_session()
+            if blocked_redirect is not None:
+                return blocked_redirect
         if session.get('role') != 'admin':
             abort(403)
         return fn(*args, **kwargs)
@@ -2006,7 +2046,6 @@ def require_customer(fn):
         if 'username' not in session:
             if wants_json:
                 return jsonify({'error': 'Login required.'}), 401
-            return redirect(url_for('login'))
 
         blocked_redirect = enforce_active_session()
         if blocked_redirect is not None:
@@ -6203,98 +6242,6 @@ def join_group():
     flash('You joined the group.')
     return redirect(url_for('groups_tab'))
 
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    # Allow pre-login language switching (updates immediately on page reload).
-    if request.method == 'GET':
-        requested = _normalize_lang(request.args.get('lang') or '')
-        if requested in SUPPORTED_LANGS:
-            session['lang'] = requested
-        return render_template('login.html')
-
-    if request.method == 'POST':
-        user_input = (request.form.get('username') or '').strip()
-        password = request.form.get('password') or ''
-        if not user_input or not password:
-            flash('Enter your email/username and password.')
-            return render_template('login.html')
-
-        # If input is not an email, look up email by username
-        if '@' in user_input:
-            email = user_input.lower()
-        else:
-            user_row = get_user_row(user_input)
-            if not user_row or not user_row.get('email'):
-                flash('User not found or missing email.')
-                return render_template('login.html')
-            email = user_row['email'].strip().lower()
-
-        # Supabase Auth login
-        url = f"{SUPABASE_URL}/auth/v1/token?grant_type=password"
-        headers = {
-            "apikey": SUPABASE_ANON_KEY,
-            "Content-Type": "application/json",
-        }
-        payload = {"email": email, "password": password}
-        resp = requests.post(url, headers=headers, json=payload)
-        print("[SUPABASE LOGIN DEBUG] Status:", resp.status_code)
-        print("[SUPABASE LOGIN DEBUG] Response:", resp.text)
-        if resp.status_code == 200:
-            data = resp.json()
-            session['user_id'] = data.get('user', {}).get('id')
-            session['email'] = email
-            session['access_token'] = data.get('access_token')
-            session['refresh_token'] = data.get('refresh_token')
-            session['lang'] = session.get('lang', 'en')
-            session['show_splash'] = 1
-            return redirect(url_for('splash'))
-        else:
-            flash('Invalid credentials or Supabase error.')
-            return render_template('login.html')
-
-    return render_template('login.html')
-
-@app.route('/register', methods=['GET', 'POST'])
-def register():
-    if request.method == 'POST':
-        agree_terms = request.form.get('agree_terms')
-        if agree_terms != 'yes':
-            flash('You must agree to the Terms & Conditions to register.')
-            return render_template('register.html')
-        email = (request.form.get('email') or '').strip().lower()
-        password = request.form.get('password') or ''
-        full_name = request.form.get('full_name') or ''
-        mobile = request.form.get('mobile') or ''
-        city_state = request.form.get('city_state') or ''
-        if not email or not password or not full_name or not mobile:
-            flash('All fields are required.')
-            return render_template('register.html')
-        if len(password) < 6:
-            flash('Password must be at least 6 characters.')
-            return render_template('register.html')
-        # Supabase Auth registration
-        url = f"{SUPABASE_URL}/auth/v1/signup"
-        headers = {
-            "apikey": SUPABASE_ANON_KEY,
-            "Content-Type": "application/json",
-        }
-        payload = {
-            "email": email,
-            "password": password,
-            "data": {
-                "full_name": full_name,
-                "mobile": mobile,
-                "city_state": city_state,
-            }
-        }
-        resp = requests.post(url, headers=headers, json=payload)
-        if resp.status_code in (200, 201):
-            flash('Registration successful! Please check your email to confirm your account, then log in.')
-            return redirect(url_for('login'))
-        else:
-            flash('Registration failed: ' + resp.text)
-            return render_template('register.html')
-    return render_template('register.html')
 
 @app.route('/owner/users/reset_password', methods=['POST'])
 @admin_required
