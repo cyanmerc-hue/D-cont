@@ -6227,6 +6227,8 @@ def login():
         }
         payload = {"email": email, "password": password}
         resp = requests.post(url, headers=headers, json=payload)
+        print("[SUPABASE LOGIN DEBUG] Status:", resp.status_code)
+        print("[SUPABASE LOGIN DEBUG] Response:", resp.text)
         if resp.status_code == 200:
             data = resp.json()
             session['user_id'] = data.get('user', {}).get('id')
