@@ -73,10 +73,12 @@ def supabase_upload_and_record(*, user_id: str, doc_type: str, file_storage):
 
     # 2) Insert row into user_documents
     db_url = f"{SUPABASE_URL}/rest/v1/user_documents"
+
     db_headers = {
         "apikey": SUPABASE_SERVICE_ROLE_KEY,
         "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
-        "Content-Type": "application/json",
+        "Content-Type": "application/json"
+    }
 
     # Build PostgREST query for user_documents
             # If using a mounted disk path like /var/data/users.db on Render,
