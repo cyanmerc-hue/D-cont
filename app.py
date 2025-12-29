@@ -6213,11 +6213,21 @@ def login():
         return render_template('login.html')
 
     if request.method == 'POST':
-        email = (request.form.get('username') or '').strip().lower()
+        user_input = (request.form.get('username') or '').strip()
         password = request.form.get('password') or ''
-        if not email or not password:
-            flash('Enter your email and password.')
+        if not user_input or not password:
+            flash('Enter your email/username and password.')
             return render_template('login.html')
+
+        # If input is not an email, look up email by username
+        if '@' in user_input:
+            email = user_input.lower()
+        else:
+            user_row = get_user_row(user_input)
+            if not user_row or not user_row.get('email'):
+                flash('User not found or missing email.')
+                return render_template('login.html')
+            email = user_row['email'].strip().lower()
 
         # Supabase Auth login
         url = f"{SUPABASE_URL}/auth/v1/token?grant_type=password"
