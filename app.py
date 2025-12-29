@@ -51,8 +51,6 @@ def supabase_is_admin(user_id: str) -> bool:
 
 app = Flask(__name__)
 
-# ...existing code...
-
 # --- /login route (Supabase Auth) ---
 @app.route('/login', methods=['GET', 'POST'])
 def login():
