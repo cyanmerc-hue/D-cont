@@ -97,17 +97,27 @@ def supabase_upload_and_record(*, user_id: str, doc_type: str, file_storage):
 
     return True, {"ok": True, "file_path": file_path, "row": db_resp.json()}, 200
 # --- Home route for root URL ---
+
+# Unified home route: handles both logged-in and logged-out users
 @app.route("/")
 def home():
-    # You can change this to render_template("splash.html") or another template if desired
-    return "Welcome to D-CONT! The backend is running.", 200
+    if 'username' in session:
+        if session.get('role') == 'admin':
+            return redirect(url_for('dashboard'))
+        user = get_user_row(session['username'])
+        if not user:
+            return redirect(url_for('logout'))
+        return redirect(url_for('home_tab'))
+    return redirect(url_for('login'))
 
 # --- Logout route ---
+
+# Logout route: always redirect to login
 @app.route("/logout")
 def logout():
     session.clear()
     flash("You have been logged out.")
-    return redirect(url_for("home"))
+    return redirect(url_for("login"))
 
 # --- Catch-all request logger for debugging ---
 @app.before_request
