@@ -77,94 +77,96 @@ def supabase_upload_and_record(*, user_id: str, doc_type: str, file_storage):
         "apikey": SUPABASE_SERVICE_ROLE_KEY,
         "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
         "Content-Type": "application/json",
-        "Prefer": "return=representation",
-    }
-    db_payload = {
-        "user_id": str(user_id),
-        "doc_type": str(doc_type),
-        "file_path": file_path,
-        "file_name": filename,
-        "content_type": content_type,
-        "status": "pending",
-        "created_at": datetime.utcnow().isoformat(),
-    }
-    db_resp = requests.post(db_url, headers=db_headers, json=db_payload)
 
-    print("[DB INSERT] Status:", db_resp.status_code)
-    if not db_resp.ok:
-        print("[DB INSERT] Error:", db_resp.text)
-        return False, {"error": "db insert failed", "details": db_resp.text}, 500
-
-    return True, {"ok": True, "file_path": file_path, "row": db_resp.json()}, 200
-# --- Home route for root URL ---
-
-# Unified home route: handles both logged-in and logged-out users
-@app.route("/")
-def home():
-    if 'username' in session:
-        if session.get('role') == 'admin':
-            return redirect(url_for('dashboard'))
-        user = get_user_row(session['username'])
-        if not user:
-            return redirect(url_for('logout'))
-        return redirect(url_for('home_tab'))
-    return redirect(url_for('login'))
-
-# --- Logout route ---
-
-# Logout route: always redirect to login
-@app.route("/logout")
-def logout():
-    session.clear()
-    flash("You have been logged out.")
-    return redirect(url_for("login"))
-
-# --- Catch-all request logger for debugging ---
-@app.before_request
-def log_request():
-    print("REQ:", request.method, request.path)
-SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET", "documents")
-
-print("SUPABASE_URL =", SUPABASE_URL)
-print("SERVICE_ROLE_KEY loaded =", bool(SUPABASE_SERVICE_ROLE_KEY))
-print("KEY prefix =", (SUPABASE_SERVICE_ROLE_KEY or "")[:15])
-
-from flask import Flask, render_template, request, redirect, url_for, session, flash, abort, send_from_directory, g, jsonify
-import sqlite3
-import random
-import uuid
-from werkzeug.utils import secure_filename
-from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import date, datetime, timedelta
-from functools import wraps
-from urllib.parse import quote
-import smtplib
-from email.message import EmailMessage
-import re
-import time
-import calendar
-import mimetypes
-
-# ...existing code...
-
-app = Flask(__name__)
-
-
-
-# --- Admin List Documents Endpoint (Supabase REST API) ---
-import requests
-
-@app.route("/api/admin/documents", methods=["GET"])
-def admin_list_documents():
-    """List documents using Supabase REST API (PostgREST)"""
-    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
-        return jsonify({"error": "Supabase not configured"}), 500
-    # Security: Only allow admin user
-    admin_user_id = os.getenv("ADMIN_USER_ID")
-    if str(session.get("user_id")) != str(admin_user_id):
-        return jsonify({"error": "forbidden"}), 403
-    status = request.args.get("status")
     # Build PostgREST query for user_documents
+            # If using a mounted disk path like /var/data/users.db on Render,
+            # ensure the directory exists.
+            try:
+                db_dir = os.path.dirname(DATABASE)
+                if db_dir:
+                    os.makedirs(db_dir, exist_ok=True)
+            except OSError:
+                pass
+
+            conn = sqlite3.connect(DATABASE)
+            c = conn.cursor()
+
+            # App-fee payments ledger (for monthly fee + credits applied)
+            c.execute(
+                '''CREATE TABLE IF NOT EXISTS app_fee_payments (
+                    id INTEGER PRIMARY KEY,
+                    username TEXT,
+                    month TEXT,
+                    gross_amount INTEGER,
+                    credit_applied INTEGER,
+                    net_amount INTEGER,
+                    verified_at TEXT,
+                    UNIQUE(username, month)
+                )'''
+            )
+
+            # Login rate-limiting (failed attempt counters)
+            c.execute(
+                '''CREATE TABLE IF NOT EXISTS auth_attempts (
+                    id INTEGER PRIMARY KEY,
+                    method TEXT,
+                    identifier TEXT,
+                    ip TEXT,
+                    success INTEGER,
+                    created_at TEXT
+                )'''
+            )
+
+            # Support handoff logging
+            c.execute(
+                '''CREATE TABLE IF NOT EXISTS support_handoffs (
+                    id INTEGER PRIMARY KEY,
+                    username TEXT,
+                    channel TEXT,
+                    message TEXT,
+                    ip TEXT,
+                    created_at TEXT
+                )'''
+            )
+
+            # Customer transaction records (UTR + optional proof upload)
+            c.execute(
+                '''CREATE TABLE IF NOT EXISTS transactions (
+                    id INTEGER PRIMARY KEY,
+                    username TEXT,
+                    group_id INTEGER,
+                    amount INTEGER,
+                    paid_at TEXT,
+                    utr TEXT,
+                    note TEXT,
+                    proof_file TEXT,
+                    status TEXT,
+                    created_at TEXT,
+                    verified_at TEXT,
+                    verified_by TEXT
+                )'''
+            )
+            try:
+                c.execute("CREATE INDEX IF NOT EXISTS idx_transactions_user_created ON transactions(username, created_at)")
+            except sqlite3.OperationalError:
+                pass
+
+            # Ensure referrals table has credit columns (auto-migration)
+            c.execute("PRAGMA table_info(referrals)")
+            existing_referral_cols = {row[1] for row in c.fetchall()}
+            if "credited_at" not in existing_referral_cols:
+                c.execute("ALTER TABLE referrals ADD COLUMN credited_at TEXT")
+            if "credit_expires_at" not in existing_referral_cols:
+                c.execute("ALTER TABLE referrals ADD COLUMN credit_expires_at TEXT")
+            if "credit_amount" not in existing_referral_cols:
+                c.execute("ALTER TABLE referrals ADD COLUMN credit_amount INTEGER")
+            if "credit_used" not in existing_referral_cols:
+                c.execute("ALTER TABLE referrals ADD COLUMN credit_used INTEGER")
+            if "credit_used_at" not in existing_referral_cols:
+                c.execute("ALTER TABLE referrals ADD COLUMN credit_used_at TEXT")
+            if "credit_used_month" not in existing_referral_cols:
+                c.execute("ALTER TABLE referrals ADD COLUMN credit_used_month TEXT")
+            return conn, c
     url = f"{SUPABASE_URL}/rest/v1/user_documents"
     headers = {
         "apikey": SUPABASE_SERVICE_ROLE_KEY,
@@ -1968,8 +1970,7 @@ def admin_required(fn):
 
 
 def get_user_row(username):
-    conn = get_db()
-    c = conn.cursor()
+    conn, c = get_db()
     c.execute(
         'SELECT username, full_name, mobile, language, city_state, email, role, upi_id, onboarding_completed, app_fee_paid, app_fee_paid_month, first_app_fee_verified, trust_score, join_blocked, is_active FROM users WHERE username=?',
         (username,),
