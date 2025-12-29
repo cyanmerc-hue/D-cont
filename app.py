@@ -30,7 +30,72 @@ print("KEY prefix =", (SUPABASE_SERVICE_ROLE_KEY or "")[:15])
 
 
 
+
+
 app = Flask(__name__)
+
+# Helper: Upload file to Supabase Storage and insert metadata
+def supabase_upload_and_record(*, user_id: str, doc_type: str, file_storage):
+    """
+    Upload file to Supabase Storage and insert metadata into public.user_documents.
+    Returns (ok: bool, payload: dict, status_code: int)
+    """
+    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        return False, {"error": "Supabase not configured"}, 500
+
+    filename = secure_filename(file_storage.filename or "")
+    if not filename:
+        return False, {"error": "invalid filename"}, 400
+
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "bin"
+    unique = f"{uuid.uuid4().hex}.{ext}"
+    file_path = f"{user_id}/{int(datetime.utcnow().timestamp())}-{unique}"
+    content_type = file_storage.mimetype or "application/octet-stream"
+
+    file_bytes = file_storage.read()
+    if not file_bytes:
+        return False, {"error": "empty file"}, 400
+
+    # 1) Upload to Storage (PUT)
+    storage_url = f"{SUPABASE_URL}/storage/v1/object/{SUPABASE_BUCKET}/{file_path}"
+    storage_headers = {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+        "Content-Type": content_type,
+        "x-upsert": "true",
+    }
+    storage_resp = requests.put(storage_url, headers=storage_headers, data=file_bytes)
+
+    print("[STORAGE] Status:", storage_resp.status_code)
+    if not storage_resp.ok:
+        print("[STORAGE] Error:", storage_resp.text)
+        return False, {"error": "storage upload failed", "details": storage_resp.text}, 500
+
+    # 2) Insert row into user_documents
+    db_url = f"{SUPABASE_URL}/rest/v1/user_documents"
+    db_headers = {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "return=representation",
+    }
+    db_payload = {
+        "user_id": str(user_id),
+        "doc_type": str(doc_type),
+        "file_path": file_path,
+        "file_name": filename,
+        "content_type": content_type,
+        "status": "pending",
+        "created_at": datetime.utcnow().isoformat(),
+    }
+    db_resp = requests.post(db_url, headers=db_headers, json=db_payload)
+
+    print("[DB INSERT] Status:", db_resp.status_code)
+    if not db_resp.ok:
+        print("[DB INSERT] Error:", db_resp.text)
+        return False, {"error": "db insert failed", "details": db_resp.text}, 500
+
+    return True, {"ok": True, "file_path": file_path, "row": db_resp.json()}, 200
 # --- Home route for root URL ---
 @app.route("/")
 def home():
@@ -43,12 +108,6 @@ def logout():
     session.clear()
     flash("You have been logged out.")
     return redirect(url_for("home"))
-
-# --- Home route for root URL ---
-@app.route("/")
-def home():
-    # You can change this to render_template("splash.html") or another template if desired
-    return "Welcome to D-CONT! The backend is running.", 200
 
 # --- Catch-all request logger for debugging ---
 @app.before_request
@@ -2745,67 +2804,75 @@ def early_payout_request():
     return redirect(url_for('profile'))
 
 
-@app.route('/early-payout/deposit', methods=['POST'])
-@require_customer
-def early_payout_submit_deposit():
-    username = session['username']
-    try:
-        request_id = int(request.form.get('request_id') or 0)
-    except ValueError:
-        request_id = 0
-    utr = (request.form.get('utr') or '').strip()
-    if request_id <= 0 or not utr:
-        flash('Enter the UTR/reference number.')
-        return redirect(url_for('profile'))
 
-    now = datetime.now().isoformat(timespec='seconds')
-    conn = get_db()
-    c = conn.cursor()
-    try:
-        c.execute('SELECT id FROM early_payout_requests WHERE id=? AND username=?', (request_id, username))
-        row = c.fetchone()
-    except sqlite3.OperationalError:
-        row = None
-    if not row:
-        conn.close()
-        flash('Request not found.')
-        return redirect(url_for('profile'))
+@app.route("/api/upload-document", methods=["POST"])
+def api_upload_document():
 
-    try:
-        c.execute(
-            'UPDATE early_payout_requests SET utr=?, deposit_status=?, updated_at=? WHERE id=? AND username=?',
-            (utr, 'submitted', now, request_id, username),
-        )
-        conn.commit()
-    except sqlite3.OperationalError:
-        conn.close()
-        flash('Unable to submit deposit right now.')
-        return redirect(url_for('profile'))
-    conn.close()
-    flash('Deposit submitted. Support will verify and update your request.')
-    return redirect(url_for('profile'))
-@app.route('/profile', methods=['GET', 'POST'])
-@require_customer
-def profile():
-    username = session['username']
-    recalculate_and_store_trust(username)
-    conn = get_db()
-    c = conn.cursor()
+    print("HIT: /api/upload-document", "user_id=", session.get("user_id"))
+    print("[UPLOAD ENDPOINT CALLED]")
 
-    # Keep monthly app-fee flag aligned with current month.
-    _ensure_app_fee_current_month(conn, username)
-    conn.commit()
+    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        return jsonify({"error": "Supabase not configured"}), 500
 
-    c.execute(
-        'SELECT full_name, mobile, upi_id, COALESCE(gender,\'\'), COALESCE(occupation,\'\'), app_fee_paid, COALESCE(app_fee_paid_month,\'\'), aadhaar_doc, pan_doc, passport_doc, COALESCE(trust_score,50), COALESCE(referral_code,\'\'), COALESCE(mpin_hash,\'\'), COALESCE(webauthn_credential_id,\'\') FROM users WHERE username=?',
-        (username,),
-    )
-    row = c.fetchone()
-    full_name = mobile = upi_id = None
-    gender = ''
-    occupation = ''
-    aadhaar_doc = pan_doc = passport_doc = None
-    app_fee_paid = 0
+    # Must be logged in (Supabase user id stored in session)
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    doc_type = (request.form.get("doc_type") or "document").strip().lower()
+    f = request.files.get("file")
+    if not f or not f.filename:
+        return jsonify({"error": "file missing"}), 400
+
+    filename = secure_filename(f.filename)
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "bin"
+    unique = f"{uuid.uuid4().hex}.{ext}"
+    file_path = f"{user_id}/{int(datetime.utcnow().timestamp())}-{unique}"
+
+    file_bytes = f.read()
+    content_type = f.mimetype or "application/octet-stream"
+
+    # 1) Upload to Supabase Storage (PUT)
+    storage_url = f"{SUPABASE_URL}/storage/v1/object/{SUPABASE_BUCKET}/{file_path}"
+    storage_headers = {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+        "Content-Type": content_type,
+        "x-upsert": "true",
+    }
+
+    storage_resp = requests.put(storage_url, headers=storage_headers, data=file_bytes)
+    print("[STORAGE] URL:", storage_url)
+    print("[STORAGE] Status:", storage_resp.status_code)
+    if not storage_resp.ok:
+        print("[STORAGE] Error:", storage_resp.text)
+        return jsonify({"error": "storage upload failed", "details": storage_resp.text}), 500
+
+    # 2) Insert row into user_documents via PostgREST
+    db_url = f"{SUPABASE_URL}/rest/v1/user_documents"
+    db_headers = {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "return=representation",
+    }
+    db_payload = {
+        "user_id": str(user_id),
+        "doc_type": doc_type,
+        "file_path": file_path,
+        "file_name": filename,
+        "content_type": content_type,
+        "status": "pending",
+        "created_at": datetime.utcnow().isoformat(),
+    }
+
+    db_resp = requests.post(db_url, headers=db_headers, json=db_payload)
+    print("[DB INSERT] Status:", db_resp.status_code)
+    if not db_resp.ok:
+        print("[DB INSERT] Error:", db_resp.text)
+        return jsonify({"error": "db insert failed", "details": db_resp.text}), 500
+
+    return jsonify({"ok": True, "file_path": file_path, "row": db_resp.json()}), 200
     app_fee_paid_month = ''
     trust_score = 50
     referral_code = ''
@@ -3448,31 +3515,108 @@ def _fetch_group_members_with_trust(group_id: int):
     return members
 
 
-@app.route('/profile/doc/<doc_type>')
+
+@app.route('/profile/doc/<doc_type>', methods=["GET", "POST"])
 @require_customer
 def profile_doc(doc_type: str):
-    doc_type = (doc_type or '').strip().lower()
-    column_by_type = {
-        'aadhaar': 'aadhaar_doc',
-        'pan': 'pan_doc',
-        'passport': 'passport_doc',
+    if request.method == "GET":
+        doc_type = (doc_type or '').strip().lower()
+        column_by_type = {
+            'aadhaar': 'aadhaar_doc',
+            'pan': 'pan_doc',
+            'passport': 'passport_doc',
+        }
+        if doc_type not in column_by_type:
+            abort(404)
+        username = session['username']
+        conn = get_db()
+        c = conn.cursor()
+        col = column_by_type[doc_type]
+        try:
+            c.execute(f'SELECT {col} FROM users WHERE username=?', (username,))
+            row = c.fetchone()
+        except sqlite3.OperationalError:
+            row = None
+        conn.close()
+        if not row or not row[0]:
+            abort(404)
+        filename = str(row[0])
+        return send_from_directory(app.config['UPLOAD_FOLDER'], filename, as_attachment=True)
+
+    # ---------- POST = upload ----------
+    doc_type = (doc_type or "").strip().lower()
+
+    # Optional: restrict allowed types (prevents random paths)
+    allowed = {"pan", "aadhaar", "passport", "photo", "other", "document"}
+    if doc_type not in allowed:
+        doc_type = "document"
+
+    f = request.files.get("file")
+    if not f or not f.filename:
+        # If your UI expects redirect + flash instead of JSON, tell me and I’ll adapt.
+        return "file missing", 400
+
+    # Your app stores Supabase auth user id in session["user_id"] (UUID string)
+    user_id = session.get("user_id")
+    if not user_id:
+        return redirect(url_for("login"))
+
+    print("[UPLOAD] profile_doc called. user_id =", user_id, "doc_type =", doc_type)
+
+    ok, payload, status = supabase_upload_and_record(
+        user_id=str(user_id),
+        doc_type=doc_type,
+        file_storage=f,
+    )
+
+    # Return JSON for debugging; if your page is HTML, we can redirect instead.
+    return jsonify(payload), status
+# Helper for document upload (Supabase)
+def api_upload_document_internal(*, user_id: str, doc_type: str, file):
+    filename = secure_filename(file.filename)
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "bin"
+    unique = f"{uuid.uuid4().hex}.{ext}"
+    file_path = f"{user_id}/{int(datetime.utcnow().timestamp())}-{unique}"
+
+    file_bytes = file.read()
+    content_type = file.mimetype or "application/octet-stream"
+
+    # 1) Upload to Supabase Storage (PUT)
+    storage_url = f"{SUPABASE_URL}/storage/v1/object/{SUPABASE_BUCKET}/{file_path}"
+    storage_headers = {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+        "Content-Type": content_type,
+        "x-upsert": "true",
     }
-    if doc_type not in column_by_type:
-        abort(404)
-    username = session['username']
-    conn = get_db()
-    c = conn.cursor()
-    col = column_by_type[doc_type]
-    try:
-        c.execute(f'SELECT {col} FROM users WHERE username=?', (username,))
-        row = c.fetchone()
-    except sqlite3.OperationalError:
-        row = None
-    conn.close()
-    if not row or not row[0]:
-        abort(404)
-    filename = str(row[0])
-    return send_from_directory(app.config['UPLOAD_FOLDER'], filename, as_attachment=True)
+    storage_resp = requests.put(storage_url, headers=storage_headers, data=file_bytes)
+    print("[STORAGE] Status:", storage_resp.status_code, storage_resp.text[:200])
+    if not storage_resp.ok:
+        return jsonify({"error": "storage upload failed", "details": storage_resp.text}), 500
+
+    # 2) Insert metadata
+    db_url = f"{SUPABASE_URL}/rest/v1/user_documents"
+    db_headers = {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "return=representation",
+    }
+    db_payload = {
+        "user_id": user_id,
+        "doc_type": doc_type,
+        "file_path": file_path,
+        "file_name": filename,
+        "content_type": content_type,
+        "status": "pending",
+        "created_at": datetime.utcnow().isoformat(),
+    }
+    db_resp = requests.post(db_url, headers=db_headers, json=db_payload)
+    print("[DB INSERT] Status:", db_resp.status_code, db_resp.text[:200])
+    if not db_resp.ok:
+        return jsonify({"error": "db insert failed", "details": db_resp.text}), 500
+
+    return jsonify({"ok": True, "file_path": file_path}), 200
 
 def get_db():
     # If using a mounted disk path like /var/data/users.db on Render,
@@ -3483,74 +3627,6 @@ def get_db():
             os.makedirs(db_dir, exist_ok=True)
     except OSError:
         pass
-    conn = sqlite3.connect(DATABASE)
-    return conn
-
-def init_db():
-    conn = get_db()
-    c = conn.cursor()
-
-    # Create tables if they don't exist
-    c.execute('''CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY
-    )''')
-    # Documents table for admin/user document management
-    c.execute('''CREATE TABLE IF NOT EXISTS documents (
-        id INTEGER PRIMARY KEY,
-        user_id TEXT,
-        doc_type TEXT,
-        file_path TEXT,
-        file_url TEXT,
-        status TEXT,
-        created_at TEXT
-    )''')
-    c.execute('''CREATE TABLE IF NOT EXISTS groups (id INTEGER PRIMARY KEY, name TEXT, description TEXT, monthly_amount INTEGER)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS group_members (id INTEGER PRIMARY KEY, group_id INTEGER, username TEXT, status TEXT)''')
-
-    # Trust score history (Option A: recompute from events)
-    c.execute(
-        '''CREATE TABLE IF NOT EXISTS trust_events (
-            id INTEGER PRIMARY KEY,
-            username TEXT,
-            event_type TEXT,
-            group_id INTEGER,
-            due_date TEXT,
-            verified_at TEXT,
-            created_at TEXT,
-            note TEXT
-        )'''
-    )
-
-    # Early payout requests (schedule/priority request + security deposit tracking)
-    c.execute(
-        '''CREATE TABLE IF NOT EXISTS early_payout_requests (
-            id INTEGER PRIMARY KEY,
-            username TEXT,
-            group_id INTEGER,
-            monthly_amount INTEGER,
-            trust_score INTEGER,
-            deposit_amount INTEGER,
-            status TEXT,
-            deposit_status TEXT,
-            utr TEXT,
-            reason TEXT,
-            created_at TEXT,
-            updated_at TEXT
-        )'''
-    )
-
-    # Referral records
-    c.execute(
-        '''CREATE TABLE IF NOT EXISTS referrals (
-            id INTEGER PRIMARY KEY,
-            referrer_username TEXT,
-            new_username TEXT,
-            status TEXT,
-            created_at TEXT,
-            eligible_at TEXT,
-            paid_at TEXT
-        )'''
-    )
 
     # App-fee payments ledger (for monthly fee + credits applied)
     c.execute(
