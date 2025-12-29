@@ -80,69 +80,6 @@ def supabase_upload_and_record(*, user_id: str, doc_type: str, file_storage):
         "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
         "Content-Type": "application/json"
     }
-
-            # Login rate-limiting (failed attempt counters)
-            c.execute(
-                '''CREATE TABLE IF NOT EXISTS auth_attempts (
-                    id INTEGER PRIMARY KEY,
-                    method TEXT,
-                    identifier TEXT,
-                    ip TEXT,
-                    success INTEGER,
-                    created_at TEXT
-                )'''
-            )
-
-            # Support handoff logging
-            c.execute(
-                '''CREATE TABLE IF NOT EXISTS support_handoffs (
-                    id INTEGER PRIMARY KEY,
-                    username TEXT,
-                    channel TEXT,
-                    message TEXT,
-                    ip TEXT,
-                    created_at TEXT
-                )'''
-            )
-
-            # Customer transaction records (UTR + optional proof upload)
-            c.execute(
-                '''CREATE TABLE IF NOT EXISTS transactions (
-                    id INTEGER PRIMARY KEY,
-                    username TEXT,
-                    group_id INTEGER,
-                    amount INTEGER,
-                    paid_at TEXT,
-                    utr TEXT,
-                    note TEXT,
-                    proof_file TEXT,
-                    status TEXT,
-                    created_at TEXT,
-                    verified_at TEXT,
-                    verified_by TEXT
-                )'''
-            )
-            try:
-                c.execute("CREATE INDEX IF NOT EXISTS idx_transactions_user_created ON transactions(username, created_at)")
-            except sqlite3.OperationalError:
-                pass
-
-            # Ensure referrals table has credit columns (auto-migration)
-            c.execute("PRAGMA table_info(referrals)")
-            existing_referral_cols = {row[1] for row in c.fetchall()}
-            if "credited_at" not in existing_referral_cols:
-                c.execute("ALTER TABLE referrals ADD COLUMN credited_at TEXT")
-            if "credit_expires_at" not in existing_referral_cols:
-                c.execute("ALTER TABLE referrals ADD COLUMN credit_expires_at TEXT")
-            if "credit_amount" not in existing_referral_cols:
-                c.execute("ALTER TABLE referrals ADD COLUMN credit_amount INTEGER")
-            if "credit_used" not in existing_referral_cols:
-                c.execute("ALTER TABLE referrals ADD COLUMN credit_used INTEGER")
-            if "credit_used_at" not in existing_referral_cols:
-                c.execute("ALTER TABLE referrals ADD COLUMN credit_used_at TEXT")
-            if "credit_used_month" not in existing_referral_cols:
-                c.execute("ALTER TABLE referrals ADD COLUMN credit_used_month TEXT")
-            return conn, c
     url = f"{SUPABASE_URL}/rest/v1/user_documents"
     headers = {
         "apikey": SUPABASE_SERVICE_ROLE_KEY,
