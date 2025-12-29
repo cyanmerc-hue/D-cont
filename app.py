@@ -74,38 +74,12 @@ def supabase_upload_and_record(*, user_id: str, doc_type: str, file_storage):
     # 2) Insert row into user_documents
     db_url = f"{SUPABASE_URL}/rest/v1/user_documents"
 
+
     db_headers = {
         "apikey": SUPABASE_SERVICE_ROLE_KEY,
         "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
         "Content-Type": "application/json"
     }
-
-    # Build PostgREST query for user_documents
-            # If using a mounted disk path like /var/data/users.db on Render,
-            # ensure the directory exists.
-            try:
-                db_dir = os.path.dirname(DATABASE)
-                if db_dir:
-                    os.makedirs(db_dir, exist_ok=True)
-            except OSError:
-                pass
-
-            conn = sqlite3.connect(DATABASE)
-            c = conn.cursor()
-
-            # App-fee payments ledger (for monthly fee + credits applied)
-            c.execute(
-                '''CREATE TABLE IF NOT EXISTS app_fee_payments (
-                    id INTEGER PRIMARY KEY,
-                    username TEXT,
-                    month TEXT,
-                    gross_amount INTEGER,
-                    credit_applied INTEGER,
-                    net_amount INTEGER,
-                    verified_at TEXT,
-                    UNIQUE(username, month)
-                )'''
-            )
 
             # Login rate-limiting (failed attempt counters)
             c.execute(
