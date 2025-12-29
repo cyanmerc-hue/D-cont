@@ -1,5 +1,3 @@
-# --- Catch-all request logger for debugging ---
-
 from flask import Flask, render_template, request, redirect, url_for, session, flash, abort, send_from_directory, g, jsonify
 import sqlite3
 import os
@@ -16,23 +14,23 @@ import re
 import time
 import calendar
 import mimetypes
+import requests
 
 from dotenv import load_dotenv
 load_dotenv()  # THIS is critical
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
 SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET", "documents")
+SERVICE_ROLE_KEY = SUPABASE_SERVICE_ROLE_KEY
 
 print("SUPABASE_URL =", SUPABASE_URL)
 print("SERVICE_ROLE_KEY loaded =", bool(SUPABASE_SERVICE_ROLE_KEY))
 print("KEY prefix =", (SUPABASE_SERVICE_ROLE_KEY or "")[:15])
 
-
-
-
-
 app = Flask(__name__)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Helper: Upload file to Supabase Storage and insert metadata
 def supabase_upload_and_record(*, user_id: str, doc_type: str, file_storage):
@@ -187,10 +185,7 @@ except Exception:
     base64url_to_bytes = None
     bytes_to_base64url = None
 
-app = Flask(__name__)
-# In production (Render/Heroku/etc.), set SECRET_KEY as an environment variable.
-app.secret_key = os.environ.get('SECRET_KEY', 'your_secret_key')
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 
 
 def _compute_asset_version() -> str:
@@ -6226,7 +6221,7 @@ def login():
         # Supabase Auth login
         url = f"{SUPABASE_URL}/auth/v1/token?grant_type=password"
         headers = {
-            "apikey": SUPABASE_SERVICE_ROLE_KEY,
+            "apikey": SUPABASE_ANON_KEY,
             "Content-Type": "application/json",
         }
         payload = {"email": email, "password": password}
@@ -6267,7 +6262,7 @@ def register():
         # Supabase Auth registration
         url = f"{SUPABASE_URL}/auth/v1/signup"
         headers = {
-            "apikey": SERVICE_ROLE_KEY,
+            "apikey": SUPABASE_ANON_KEY,
             "Content-Type": "application/json",
         }
         payload = {
