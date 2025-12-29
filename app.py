@@ -30,6 +30,7 @@ print("SERVICE_ROLE_KEY loaded =", bool(SUPABASE_SERVICE_ROLE_KEY))
 print("KEY prefix =", (SUPABASE_SERVICE_ROLE_KEY or "")[:15])
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", uuid.uuid4().hex)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Helper: Upload file to Supabase Storage and insert metadata
