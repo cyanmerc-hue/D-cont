@@ -1,14 +1,18 @@
+
 # --- Debug route: List all registered endpoints ---
-@app.route('/debug/routes')
-def debug_routes():
-    routes = []
-    for rule in app.url_map.iter_rules():
-        routes.append({
-            'endpoint': rule.endpoint,
-            'methods': list(rule.methods),
-            'rule': str(rule)
-        })
-    return {'routes': routes}
+def register_debug_routes(app):
+    @app.route('/debug/routes')
+    def debug_routes():
+        routes = []
+        for rule in app.url_map.iter_rules():
+            routes.append({
+                'endpoint': rule.endpoint,
+                'methods': list(rule.methods),
+                'rule': str(rule)
+            })
+        return {'routes': routes}
+
+register_debug_routes(app)
 import os
 import re
 import time
