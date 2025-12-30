@@ -53,65 +53,75 @@ app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-only-change-me")
 
 # --- /login route (Supabase Auth) ---
-@app.route('/login', methods=['GET', 'POST'])
+@app.route("/login", methods=["GET", "def login():
+"])
 def login():
-    if request.method == 'POST':
-        identifier = (request.form.get('username') or '').strip()
-        password = (request.form.get('password') or '').strip()
-        login_type = (request.form.get('login_type') or 'customer').strip().lower()
-        # Allow login with email or phone
-        if '@' in identifier:
-            email = identifier
-        else:
-            email = map_identifier_to_email(identifier)
-        # Supabase Auth login
-        resp = supabase_login(email, password)
+    if request.method == "POST":
+        identifier = (
+            request.form.get("username")
+            or request.form.get("identifier")
+            or request.form.get("email")
+            or request.form.get("phone")
+            or ""
+        ).strip()
+
+        mpin = (request.form.get("password") or request.form.get("mpin") or "").strip()
+
+        if not identifier or not mpin:
+            flash("Please enter phone/email and MPIN.")
+            return redirect(url_for("login"))
+
+        # ---------- MPIN LOGIN (LOCAL SQLITE) ----------
+        if identifier.isdigit():
+            import sqlite3
+            from werkzeug.security import check_password_hash
+
+            con = sqlite3.connect(os.path.join(BASE_DIR, "users.db"))
+            con.row_factory = sqlite3.Row
+            user = con.execute(
+                "SELECT * FROM users WHERE phone = ? LIMIT 1", (identifier,)
+            ).fetchone()
+            con.close()
+
+            if not user or not user["mpin_hash"]:
+                flash("Login failed: user not found.")
+                return redirect(url_for("login"))
+
+            if not check_password_hash(user["mpin_hash"], mpin):
+                flash("Login failed: incorrect MPIN.")
+                return redirect(url_for("login"))
+
+            # SUCCESS
+            session.clear()
+            session["user_id"] = str(user["id"])
+            session["username"] = identifier
+            session["role"] = "customer"
+            session["show_splash"] = True
+            return redirect(url_for("splash"))
+
+        # ---------- EMAIL LOGIN (SUPABASE) ----------
+        email = identifier if "@" in identifier else map_identifier_to_email(identifier)
+        resp = supabase_login(email, mpin)
+
         if resp.ok:
             data = resp.json()
             session.clear()
-            session['user_id'] = data.get('user', {}).get('id')
-            session['email'] = data.get('user', {}).get('email')
-            # Admin check
-            if login_type == 'admin' or (identifier == ADMIN_USERNAME and password == ADMIN_PASSWORD):
-                if supabase_is_admin(session['user_id']):
-                    session['role'] = 'admin'
-                    session['username'] = identifier
-                    session['show_splash'] = True
-                    return redirect(url_for('dashboard'))
-                else:
-                    flash('Not an admin user.')
-                    return redirect(url_for('login'))
-            # Normal user
-            session['role'] = 'customer'
-            session['username'] = identifier
-            session['show_splash'] = True
-            return redirect(url_for('splash'))
-        else:
-            # --- Better error handling ---
-            try:
-                data = resp.json()
-            except Exception:
-                data = None
+            session["user_id"] = data.get("user", {}).get("id")
+            session["email"] = data.get("user", {}).get("email")
+            session["role"] = "customer"
+            session["username"] = identifier
+            session["show_splash"] = True
+            return redirect(url_for("splash"))
 
-            content_type = resp.headers.get("Content-Type", "")
-            status = getattr(resp, "status_code", None)
+        try:
+            err = resp.json().get("error_description") or resp.json().get("msg")
+        except Exception:
+            err = "Invalid credentials"
 
-            print("[LOGIN ERROR]", "status=", status, "content-type=", content_type)
-            print("[LOGIN ERROR] text=", getattr(resp, "text", "")[:500])
-            print("[LOGIN ERROR] json=", data)
+        flash(f"Login failed: {err}")
+        return redirect(url_for("login"))
 
-            error = None
-            if isinstance(data, dict):
-                # Supabase commonly returns "error_description", sometimes "message" or "error"
-                error = data.get("error_description") or data.get("message") or data.get("error")
-
-            if not error:
-                error = getattr(resp, "text", "") or "Unknown login error"
-
-            flash(f"Login failed: {error}")
-            return redirect(url_for("login"))
-    # GET: render login page
-    return render_template('login.html')
+    return render_template("login.html")
 from urllib.parse import quote
 
 # --- Supabase Auth/Helper Functions ---
@@ -1534,6 +1544,10 @@ def calculate_trust_from_history(username: str) -> dict:
     default_after_payout = 0
 
     events = []
+
+        print("[LOGIN] form:", dict(request.form))
+        print("[LOGIN] identifier:", repr(identifier), "is_digit:", identifier.isdigit())
+        print("[LOGIN] mpin_len:", len(mpin))
     for r in rows:
         event_id, event_type, group_id, due_date, verified_at, created_at, note = r
         event_type = (event_type or '').strip().lower()
@@ -1550,6 +1564,11 @@ def calculate_trust_from_history(username: str) -> dict:
                     if (verified - due).days > grace_days:
                         missed += 1
             else:
+
+            print("[LOGIN] user found:", bool(user))
+            if user:
+                print("[LOGIN] user keys:", list(user.keys()))
+                print("[LOGIN] has mpin_hash:", bool(user.get("mpin_hash")))
                 # If dates are missing, treat as late (minimal positive, avoids abuse)
                 late += 1
         elif event_type == 'contribution_rejected':
