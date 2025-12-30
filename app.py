@@ -1,3 +1,6 @@
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    return "Login page here"
 import os
 import time
 from flask import Flask, render_template, request, redirect, url_for, session, flash, abort, send_from_directory, g, jsonify
