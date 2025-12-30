@@ -24,39 +24,48 @@
         {% endwith %}
 
                 <div class="row" style="margin-top:18px;">
-                    <div class="card-pro" style="margin-bottom:24px;">
-                        <h3>Pending Group Joins</h3>
-                        {% if pending_joins and pending_joins|length > 0 %}
-                        <ul style="padding-left:0;">
-                            {% for username, full_name, mobile, group_name in pending_joins %}
-                            <li style="margin-bottom:8px;">
-                                <strong>{{ full_name or username }}</strong> ({{ mobile }}) joined <strong>{{ group_name }}</strong>
-                            </li>
-                            {% endfor %}
-                        </ul>
-                        {% else %}
-                        <div class="muted">No pending group joins.</div>
-                        {% endif %}
-                    </div>
-                    <div class="card-pro" style="margin-bottom:24px;">
-                        <h3>Pending Document Uploads</h3>
-                        {% if pending_docs and pending_docs|length > 0 %}
-                        <ul style="padding-left:0;">
-                            {% for user_id, full_name, mobile, doc_type, created_at, file_path, file_url in pending_docs %}
-                            <li style="margin-bottom:8px;">
-                                <strong>{{ full_name or user_id }}</strong> ({{ mobile }}) uploaded <strong>{{ doc_type }}</strong> at {{ created_at }}
-                                {% if file_url %}
-                                    - <a href="{{ file_url }}" target="_blank">Download</a>
-                                {% elif file_path %}
-                                    - <a href="/static/{{ file_path }}" target="_blank">Download</a>
-                                {% endif %}
-                            </li>
-                            {% endfor %}
-                        </ul>
-                        {% else %}
-                        <div class="muted">No pending document uploads.</div>
-                        {% endif %}
-                    </div>
+                        <div class="col" style="min-width: 220px;">
+                            <div class="card-pro" style="padding:14px;">
+                                <div class="kpi">
+                                    <div class="kpiLabel">Total users</div>
+                                    <div class="kpiValue">{{ total_users }}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col" style="min-width: 220px;">
+                            <div class="card-pro" style="padding:14px;">
+                                <div class="kpi">
+                                    <div class="kpiLabel">Active groups</div>
+                                    <div class="kpiValue">{{ active_groups }}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col" style="min-width: 220px;">
+                            <div class="card-pro" style="padding:14px;">
+                                <div class="kpi">
+                                    <div class="kpiLabel">Formation groups</div>
+                                    <div class="kpiValue">{{ formation_groups }}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col" style="min-width: 220px;">
+                            <div class="card-pro" style="padding:14px;">
+                                <div class="kpi">
+                                    <div class="kpiLabel">Defaults this month</div>
+                                    <div class="kpiValue">{{ defaults_this_month }}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col" style="min-width: 220px;">
+                            <div class="card-pro" style="padding:14px;">
+                                <div class="kpi">
+                                    <div class="kpiLabel">App fee collected</div>
+                                    <div class="kpiValue">₹{{ app_fee_collected }}</div>
+                                </div>
+                                    <div class="small muted" style="margin-top:6px;">{{ app_fee_paid_count }} paid × ₹{{ app_fee_amount }}</div>
+                            </div>
+                        </div>
+                </div>
                         <div class="col" style="min-width: 220px;">
                             <div class="card-pro" style="padding:14px;">
                                 <div class="kpi">
