@@ -104,7 +104,7 @@ def app_home():
 def admin_home():
     if session.get("role") != "admin":
         return redirect(url_for("login"))
-    return "Logged in (admin)."
+    return render_template("owner_dashboard.html")
 
 # Debug endpoints
 @app.route("/debug/whoami")
