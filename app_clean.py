@@ -100,11 +100,40 @@ def app_home():
         return redirect(url_for("login"))
     return "Logged in (customer)."
 
-@app.route("/admin")
-def admin_home():
+
+# --- NAVBAR COMPATIBILITY ROUTES (to satisfy url_for in templates) ---
+
+@app.route("/owner/dashboard")
+def owner_dashboard():
+    # keep using the same admin template for now
     if session.get("role") != "admin":
         return redirect(url_for("login"))
     return render_template("owner_dashboard.html")
+
+@app.route("/owner/users")
+def owner_users():
+    if session.get("role") != "admin":
+        return redirect(url_for("login"))
+    # If you already have templates/owner_users.html, render it:
+    # return render_template("owner_users.html")
+    return "Owner Users page (not wired yet)."
+
+@app.route("/owner/groups")
+def owner_groups():
+    if session.get("role") != "admin":
+        return redirect(url_for("login"))
+    # If you already have templates/owner_groups.html, render it:
+    # return render_template("owner_groups.html")
+    return "Owner Groups page (not wired yet)."
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
+
+@app.route("/admin")
+def admin_home():
+    return redirect(url_for("owner_dashboard"))
 
 # Debug endpoints
 @app.route("/debug/whoami")
