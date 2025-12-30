@@ -122,10 +122,19 @@ def main():
 
         for row in rows:
             email = (row.get("email") or "").strip().lower()
-            if "@" not in email:
-                failed += 1
-                out.write(f"{email},,failed,failed,invalid email\n")
-                continue
+            # If no valid email, try to generate from phone
+            if not email or "@" not in email:
+                phone = (row.get("mobile") or row.get("phone") or "").strip()
+                if phone:
+                    email = f"{phone}@migrated.local"
+                    row["email"] = email
+                    note = "generated from phone"
+                else:
+                    failed += 1
+                    out.write(f"{email},,failed,failed,invalid email and no phone\n")
+                    continue
+            else:
+                note = ""
 
             temp_pw = gen_temp_password()
             user_id, err = create_auth_user(email, temp_pw)
@@ -147,7 +156,7 @@ def main():
             try:
                 upsert_profile(user_id, row)
                 profiles_ok += 1
-                out.write(f"{email},{temp_pw},{auth_status},ok,\n")
+                out.write(f"{email},{temp_pw},{auth_status},ok,{note}\n")
                 print(f"[OK] {email}")
             except Exception as e:
                 failed += 1
