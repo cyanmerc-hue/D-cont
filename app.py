@@ -1,6 +1,3 @@
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    return "Login page here"
 import os
 import time
 from flask import Flask, render_template, request, redirect, url_for, session, flash, abort, send_from_directory, g, jsonify
@@ -53,6 +50,7 @@ def supabase_is_admin(user_id: str) -> bool:
     return bool(rows and rows[0].get("is_admin") is True)
 
 app = Flask(__name__)
+app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-only-change-me")
 
 # --- /login route (Supabase Auth) ---
 @app.route('/login', methods=['GET', 'POST'])
@@ -89,9 +87,29 @@ def login():
             session['show_splash'] = True
             return redirect(url_for('splash'))
         else:
-            error = resp.json().get('error_description') if resp.headers.get('Content-Type', '').startswith('application/json') else resp.text
-            flash(f'Login failed: {error}')
-            return redirect(url_for('login'))
+            # --- Better error handling ---
+            try:
+                data = resp.json()
+            except Exception:
+                data = None
+
+            content_type = resp.headers.get("Content-Type", "")
+            status = getattr(resp, "status_code", None)
+
+            print("[LOGIN ERROR]", "status=", status, "content-type=", content_type)
+            print("[LOGIN ERROR] text=", getattr(resp, "text", "")[:500])
+            print("[LOGIN ERROR] json=", data)
+
+            error = None
+            if isinstance(data, dict):
+                # Supabase commonly returns "error_description", sometimes "message" or "error"
+                error = data.get("error_description") or data.get("message") or data.get("error")
+
+            if not error:
+                error = getattr(resp, "text", "") or "Unknown login error"
+
+            flash(f"Login failed: {error}")
+            return redirect(url_for("login"))
     # GET: render login page
     return render_template('login.html')
 from urllib.parse import quote
@@ -124,8 +142,6 @@ def supabase_is_admin(user_id: str) -> bool:
 
 # ...existing code...
 
-app = Flask(__name__)
-# ...existing code...
 
 # Debug route to verify session after login
 @app.route("/debug/session")
@@ -3061,83 +3077,67 @@ def api_upload_document():
     )
 
 
-@app.route('/profile/mpin', methods=['POST'])
-@require_customer
-def profile_set_mpin():
-    username = session['username']
-    current_password = request.form.get('current_password') or ''
-    new_mpin = (request.form.get('new_mpin') or '').strip()
-    confirm_mpin = (request.form.get('confirm_mpin') or '').strip()
+import os
+import time
+import sqlite3
+import random
+import uuid
+from datetime import date, datetime, timedelta
+from functools import wraps
+from urllib.parse import quote
 
-    if not current_password:
-        flash('Enter your password to set MPIN.')
-        return redirect(url_for('profile'))
-    if not _is_valid_mpin(new_mpin):
-        flash('MPIN must be exactly 4 digits.')
-        return redirect(url_for('profile'))
-    if new_mpin != confirm_mpin:
-        flash('MPIN confirmation does not match.')
-        return redirect(url_for('profile'))
+import requests
+from flask import Flask, render_template, request, redirect, url_for, session, flash, abort, send_from_directory, g, jsonify
+from werkzeug.utils import secure_filename
+from werkzeug.security import generate_password_hash, check_password_hash
 
-    conn = get_db()
-    c = conn.cursor()
-    try:
-        c.execute('SELECT password FROM users WHERE username=?', (username,))
-        row = c.fetchone()
-    except sqlite3.OperationalError:
-        row = None
-    if not row or not _password_matches(row[0] or '', current_password):
-        conn.close()
-        flash('Invalid password.')
-        return redirect(url_for('profile'))
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-    now = datetime.now().isoformat(timespec='seconds')
-    try:
-        c.execute(
-            'UPDATE users SET mpin_hash=?, mpin_set_at=? WHERE username=?',
-            (generate_password_hash(new_mpin), now, username),
-        )
-        conn.commit()
-    except sqlite3.OperationalError:
-        conn.close()
-        flash('Unable to set MPIN right now.')
-        return redirect(url_for('profile'))
-    conn.close()
-    flash('MPIN updated successfully.')
-    return redirect(url_for('profile'))
+# app = Flask(__name__)
+app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-only-change-me")
 
+# --- Login Helper: Map phone to email for Supabase Auth ---
+def map_identifier_to_email(identifier):
+    identifier = (identifier or '').strip()
+    # If identifier looks like a phone number (all digits, 8-15 chars), map to placeholder email
+    if identifier.isdigit() and 8 <= len(identifier) <= 15:
+        return f"{identifier}@migrated.local"
+    return identifier
 
-@app.route('/profile/mpin/disable', methods=['POST'])
-@require_customer
-def profile_disable_mpin():
-    username = session['username']
-    current_password = request.form.get('current_password') or ''
-    if not current_password:
-        flash('Enter your password to disable MPIN.')
-        return redirect(url_for('profile'))
+# --- Supabase Auth/Helper Functions ---
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
-    conn = get_db()
-    c = conn.cursor()
-    try:
-        c.execute('SELECT password FROM users WHERE username=?', (username,))
-        row = c.fetchone()
-    except sqlite3.OperationalError:
-        row = None
-    if not row or not _password_matches(row[0] or '', current_password):
-        conn.close()
-        flash('Invalid password.')
-        return redirect(url_for('profile'))
+ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
 
-    try:
-        c.execute('UPDATE users SET mpin_hash=?, mpin_set_at=NULL WHERE username=?', ('', username))
-        conn.commit()
-    except sqlite3.OperationalError:
-        conn.close()
-        flash('Unable to disable MPIN right now.')
-        return redirect(url_for('profile'))
-    conn.close()
-    flash('MPIN disabled.')
-    return redirect(url_for('profile'))
+missing = [k for k, v in {
+    "SUPABASE_URL": SUPABASE_URL,
+    "SUPABASE_ANON_KEY": SUPABASE_ANON_KEY,
+    "SUPABASE_SERVICE_ROLE_KEY": SUPABASE_SERVICE_ROLE_KEY,
+    "SECRET_KEY": app.config.get("SECRET_KEY"),
+}.items() if not v]
+
+if missing:
+    raise RuntimeError(f"Missing env vars: {', '.join(missing)}")
+
+def supabase_login(email: str, password: str):
+    url = f"{SUPABASE_URL}/auth/v1/token?grant_type=password"
+    headers = {"apikey": SUPABASE_ANON_KEY, "Content-Type": "application/json"}
+    return requests.post(url, headers=headers, json={"email": email, "password": password}, timeout=30)
+
+def supabase_is_admin(user_id: str) -> bool:
+    url = f"{SUPABASE_URL}/rest/v1/profiles"
+    headers = {"apikey": SUPABASE_SERVICE_ROLE_KEY, "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}"}
+    params = {"id": f"eq.{user_id}", "select": "is_admin"}
+    r = requests.get(url, headers=headers, params=params, timeout=30)
+    if not r.ok:
+        print("[ADMIN CHECK ERROR]", r.status_code, r.text)
+        return False
+    rows = r.json()
+    return bool(rows and rows[0].get("is_admin") is True)
+
 
 
 @app.route('/profile/fingerprint/disable', methods=['POST'])
