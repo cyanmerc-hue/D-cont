@@ -3112,12 +3112,11 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# app = Flask(__name__)
+app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-only-change-me")
 
-# --- Login Helper: Map phone to email for Supabase Auth ---
-def map_identifier_to_email(identifier):
-    identifier = (identifier or '').strip()
+# --- /login route (Supabase Auth) ---
+@app.route("/login", methods=["GET", "POST"])
     # If identifier looks like a phone number (all digits, 8-15 chars), map to placeholder email
     if identifier.isdigit() and 8 <= len(identifier) <= 15:
         return f"{identifier}@migrated.local"
