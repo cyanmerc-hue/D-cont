@@ -1,20 +1,4 @@
-
-# --- Debug route: List all registered endpoints ---
-def register_debug_routes(app):
-    @app.route('/debug/routes')
-    def debug_routes():
-        routes = []
-        for rule in app.url_map.iter_rules():
-            routes.append({
-                'endpoint': rule.endpoint,
-                'methods': list(rule.methods),
-                'rule': str(rule)
-            })
-        return {'routes': routes}
-
-register_debug_routes(app)
 import os
-import re
 import time
 from flask import Flask, render_template, request, redirect, url_for, session, flash, abort, send_from_directory, g, jsonify
 import sqlite3
@@ -172,7 +156,6 @@ def upload_document():
     content_type = f.mimetype or "application/octet-stream"
 
     # 1) Upload to Supabase Storage via REST
-    SUPABASE_BUCKET = os.environ.get('SUPABASE_BUCKET', 'your-default-bucket')
     storage_url = f"{SUPABASE_URL}/storage/v1/object/{SUPABASE_BUCKET}/{file_path}"
     storage_headers = {
         "apikey": SUPABASE_SERVICE_ROLE_KEY,
@@ -3787,7 +3770,6 @@ def get_db():
         pass
 
     # Backfill roles for existing users
-    conn, c = get_db()
     c.execute("UPDATE users SET role='customer' WHERE role IS NULL OR role='' ")
 
     # If a user already has app_fee_paid=1 in the legacy schema, treat it as first verified.
