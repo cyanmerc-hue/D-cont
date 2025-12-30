@@ -64,7 +64,6 @@ def login():
     ).strip()
 
     password = (request.form.get("password") or request.form.get("mpin") or "").strip()
-    login_type = (request.form.get("login_type") or "customer").strip().lower()
 
     if not identifier or not password:
         flash("Please enter email/phone and password.")
@@ -81,16 +80,9 @@ def login():
         session["email"] = data.get("user", {}).get("email")
         session["username"] = identifier
 
-        if login_type == "admin":
-            if supabase_is_admin(user_id):
-                session["role"] = "admin"
-                return redirect(url_for("admin_home"))
-            flash("Not an admin user.")
-            session.clear()
-            return redirect(url_for("login"))
-
-        session["role"] = "customer"
-        return redirect(url_for("app_home"))
+        is_admin = supabase_is_admin(user_id)
+        session["role"] = "admin" if is_admin else "customer"
+        return redirect(url_for("admin_home" if is_admin else "app_home"))
 
     # show readable error
     try:
