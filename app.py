@@ -53,7 +53,7 @@ app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-only-change-me")
 
 # --- /login route (Supabase Auth) ---
-@app.route("/login", methods=["GET", "def login():
+@app.route("/login", methods=["GET", "POST"])
 "])
 def login():
     if request.method == "POST":
