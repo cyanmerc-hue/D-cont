@@ -1,26 +1,115 @@
 import os
+import requests
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 
 app = Flask(__name__)
-
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-only-change-me")
 
-# Minimal translation helper so templates using {{ t('...') }} don't crash
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+
+def map_identifier_to_email(identifier: str) -> str:
+    identifier = (identifier or "").strip()
+    if identifier.isdigit() and 8 <= len(identifier) <= 15:
+        return f"{identifier}@migrated.local"
+    return identifier
+
+def supabase_login(email: str, password: str):
+    url = f"{SUPABASE_URL}/auth/v1/token?grant_type=password"
+    headers = {"apikey": SUPABASE_ANON_KEY, "Content-Type": "application/json"}
+    return requests.post(url, headers=headers, json={"email": email, "password": password}, timeout=30)
+
+def supabase_is_admin(user_id: str) -> bool:
+    url = f"{SUPABASE_URL}/rest/v1/profiles"
+    headers = {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+    }
+    params = {"id": f"eq.{user_id}", "select": "is_admin"}
+    r = requests.get(url, headers=headers, params=params, timeout=30)
+    if not r.ok:
+        print("[ADMIN CHECK ERROR]", r.status_code, r.text)
+        return False
+    rows = r.json()
+    return bool(rows and rows[0].get("is_admin") is True)
+
+# Minimal translation helper so {{ t('...') }} in templates doesn't crash
 @app.context_processor
 def inject_t():
     def t(key, default=None):
-        # If you have a real translations dict later, plug it here.
         return default or key
     return {"t": t}
-
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    if request.method == "GET":
-        return render_template("login.html")
-    # For now just accept the form and redirect (we’ll wire Supabase next)
-    flash("Login backend not connected yet.")
-    return redirect(url_for("login"))
 
 @app.route("/")
 def home():
     return redirect(url_for("login"))
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    # Safety: ensure env vars exist
+    missing = [k for k in ["SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY"] if not os.getenv(k)]
+    if missing:
+        return f"Missing env vars: {', '.join(missing)}", 500
+
+    if request.method == "GET":
+        return render_template("login.html")
+
+    identifier = (
+        request.form.get("username")
+        or request.form.get("identifier")
+        or request.form.get("email")
+        or request.form.get("phone")
+        or ""
+    ).strip()
+
+    password = (request.form.get("password") or request.form.get("mpin") or "").strip()
+    login_type = (request.form.get("login_type") or "customer").strip().lower()
+
+    if not identifier or not password:
+        flash("Please enter email/phone and password.")
+        return redirect(url_for("login"))
+
+    email = identifier if "@" in identifier else map_identifier_to_email(identifier)
+    resp = supabase_login(email, password)
+
+    if resp.ok:
+        data = resp.json()
+        user_id = data.get("user", {}).get("id")
+        session.clear()
+        session["user_id"] = user_id
+        session["email"] = data.get("user", {}).get("email")
+        session["username"] = identifier
+
+        if login_type == "admin":
+            if supabase_is_admin(user_id):
+                session["role"] = "admin"
+                return redirect(url_for("admin_home"))
+            flash("Not an admin user.")
+            session.clear()
+            return redirect(url_for("login"))
+
+        session["role"] = "customer"
+        return redirect(url_for("app_home"))
+
+    # show readable error
+    try:
+        d = resp.json()
+        err = d.get("error_description") or d.get("msg") or d.get("message") or d.get("error") or "Invalid credentials"
+    except Exception:
+        err = resp.text or "Invalid credentials"
+    flash(f"Login failed: {err}")
+    return redirect(url_for("login"))
+
+@app.route("/app")
+def app_home():
+    # placeholder customer landing
+    if not session.get("user_id"):
+        return redirect(url_for("login"))
+    return "Logged in (customer)."
+
+@app.route("/admin")
+def admin_home():
+    if session.get("role") != "admin":
+        return redirect(url_for("login"))
+    return "Logged in (admin)."
