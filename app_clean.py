@@ -28,8 +28,8 @@ def supabase_is_admin(user_id: str) -> bool:
     }
     params = {"id": f"eq.{user_id}", "select": "is_admin"}
     r = requests.get(url, headers=headers, params=params, timeout=30)
+    print("[ADMIN CHECK]", r.status_code, r.text)
     if not r.ok:
-        print("[ADMIN CHECK ERROR]", r.status_code, r.text)
         return False
     rows = r.json()
     return bool(rows and rows[0].get("is_admin") is True)
@@ -105,3 +105,19 @@ def admin_home():
     if session.get("role") != "admin":
         return redirect(url_for("login"))
     return "Logged in (admin)."
+
+# Debug endpoints
+@app.route("/debug/whoami")
+def debug_whoami():
+    return {
+        "user_id": session.get("user_id"),
+        "email": session.get("email"),
+        "role": session.get("role"),
+    }
+
+@app.route("/debug/admincheck")
+def debug_admincheck():
+    uid = session.get("user_id")
+    if not uid:
+        return {"error": "not logged in"}, 401
+    return {"user_id": uid, "is_admin": supabase_is_admin(uid)}
