@@ -56,72 +56,7 @@ app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-only-change-me")
 "])
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    if request.method == "POST":
-        identifier = (
-            request.form.get("username")
-            or request.form.get("identifier")
-            or request.form.get("email")
-            or request.form.get("phone")
-            or ""
-        ).strip()
-
-        mpin = (request.form.get("password") or request.form.get("mpin") or "").strip()
-
-        if not identifier or not mpin:
-            flash("Please enter phone/email and MPIN.")
-            return redirect(url_for("login"))
-
-        # ---------- MPIN LOGIN (LOCAL SQLITE) ----------
-        if identifier.isdigit():
-            import sqlite3
-            from werkzeug.security import check_password_hash
-
-            con = sqlite3.connect(os.path.join(BASE_DIR, "users.db"))
-            con.row_factory = sqlite3.Row
-            user = con.execute(
-                "SELECT * FROM users WHERE phone = ? LIMIT 1", (identifier,)
-            ).fetchone()
-            con.close()
-
-            if not user or not user["mpin_hash"]:
-                flash("Login failed: user not found.")
-                return redirect(url_for("login"))
-
-            if not check_password_hash(user["mpin_hash"], mpin):
-                flash("Login failed: incorrect MPIN.")
-                return redirect(url_for("login"))
-
-            # SUCCESS
-            session.clear()
-            session["user_id"] = str(user["id"])
-            session["username"] = identifier
-            session["role"] = "customer"
-            session["show_splash"] = True
-            return redirect(url_for("splash"))
-
-        # ---------- EMAIL LOGIN (SUPABASE) ----------
-        email = identifier if "@" in identifier else map_identifier_to_email(identifier)
-        resp = supabase_login(email, mpin)
-
-        if resp.ok:
-            data = resp.json()
-            session.clear()
-            session["user_id"] = data.get("user", {}).get("id")
-            session["email"] = data.get("user", {}).get("email")
-            session["role"] = "customer"
-            session["username"] = identifier
-            session["show_splash"] = True
-            return redirect(url_for("splash"))
-
-        try:
-            err = resp.json().get("error_description") or resp.json().get("msg")
-        except Exception:
-            err = "Invalid credentials"
-
-        flash(f"Login failed: {err}")
-        return redirect(url_for("login"))
-
-    return render_template("login.html")
+    return "TEMP LOGIN OK"
 from urllib.parse import quote
 
 # --- Supabase Auth/Helper Functions ---
