@@ -1,3 +1,15 @@
+
+import os
+import requests
+from flask import Flask, render_template, request, redirect, url_for, session, flash
+
+app = Flask(__name__)
+app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-only-change-me")
+
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+
 # --- ADMIN OWNER ROUTES (risk, payments, settings, transactions, referrals) ---
 def _admin_required():
     return session.get("role") == "admin"
@@ -46,16 +58,6 @@ def owner_referrals():
         return render_template("owner_referrals.html")
     except Exception:
         return redirect(url_for("owner_dashboard"))
-import os
-import requests
-from flask import Flask, render_template, request, redirect, url_for, session, flash
-
-app = Flask(__name__)
-app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-only-change-me")
-
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
-SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
 def map_identifier_to_email(identifier: str) -> str:
     identifier = (identifier or "").strip()
