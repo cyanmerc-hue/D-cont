@@ -1,0 +1,17 @@
+<!-- Minimal MPIN Setup Page -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>MPIN Setup</title>
+</head>
+<body>
+    <h1>Set Your MPIN</h1>
+    <form method="post">
+        <label>MPIN: <input type="password" name="mpin" required></label><br>
+        <label>Confirm MPIN: <input type="password" name="mpin_confirm" required></label><br>
+        <button type="submit">Set MPIN</button>
+    </form>
+    <a href="{{ url_for('logout') }}">Logout</a>
+</body>
+</html>
