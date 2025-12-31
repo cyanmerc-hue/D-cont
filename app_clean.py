@@ -10,6 +10,34 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
+# --- TRANSLATION DICTIONARY ---
+TRANSLATIONS = {
+    "en": {
+        "login_title": "Login",
+        "trust_notice_title": "Trust & Safety Notice",
+        "trust_notice_line1": "Never share your MPIN or password with anyone.",
+        "trust_notice_line2": "If someone asks, report it immediately.",
+        "login_language": "Language",
+        "login_mpin_title": "Login with MPIN",
+        "login_mpin_help": "Enter your MPIN to continue.",
+        "login_mpin_btn": "Login with MPIN",
+        "login_or": "OR",
+        "login_mobile_title": "Login with Mobile / Email",
+        "login_mobile_label": "Mobile / Email",
+        "login_password_label": "Password",
+        "login_btn": "Login",
+        "login_fingerprint_btn": "Login with Fingerprint",
+        "login_fingerprint_help": "Use your device fingerprint if set up.",
+        "login_admin_title": "Admin Login",
+        "login_admin_user": "Admin Email",
+        "login_admin_pw": "Admin Password",
+        "login_admin_btn": "Admin Login",
+        "login_no_account": "Don't have an account?",
+        "login_register": "Register",
+        "terms": "Terms & Conditions",
+    }
+}
+
 # --- ADMIN OWNER ROUTES (risk, payments, settings, transactions, referrals) ---
 def _admin_required():
     return session.get("role") == "admin"
@@ -84,12 +112,19 @@ def supabase_is_admin(user_id: str) -> bool:
     rows = r.json()
     return bool(rows and rows[0].get("is_admin") is True)
 
-# Minimal translation helper so {{ t('...') }} in templates doesn't crash
+# Minimal translation helper using TRANSLATIONS dict
 @app.context_processor
 def inject_t():
     def t(key, default=None):
-        return default or key
+        lang = (session.get("lang") or "en").lower()
+        return TRANSLATIONS.get(lang, {}).get(key, default or key)
     return {"t": t}
+
+# Optional: Language switch route
+@app.route("/set-lang/<lang>")
+def set_lang(lang):
+    session["lang"] = (lang or "en").lower()
+    return redirect(request.referrer or url_for("login"))
 
 @app.route("/")
 def home():
