@@ -231,28 +231,4 @@ def owner_users():
     return render_template("owner_users.html")
 
 @app.route("/owner/groups")
-def owner_groups():
-    if session.get("role") != "admin":
-        return redirect(url_for("login"))
-    return render_template("owner_groups.html")
 
-@app.route("/logout")
-def logout():
-    session.clear()
-    return redirect(url_for("login"))
-
-# Debug endpoints
-@app.route("/debug/whoami")
-def debug_whoami():
-    return {
-        "user_id": session.get("user_id"),
-        "email": session.get("email"),
-        "role": session.get("role"),
-    }
-
-@app.route("/debug/admincheck")
-def debug_admincheck():
-    uid = session.get("user_id")
-    if not uid:
-        return {"error": "not logged in"}, 401
-    return {"user_id": uid, "is_admin": supabase_is_admin(uid)}
