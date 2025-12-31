@@ -1,3 +1,21 @@
+from functools import wraps
+from flask import redirect, url_for, session
+
+def customer_required(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not session.get("user_id"):
+            return redirect(url_for("login"))
+        # if admin logged in, block customer pages (optional)
+        if session.get("role") == "admin":
+            return redirect(url_for("admin_home"))
+        return fn(*args, **kwargs)
+    return wrapper
+# Helper: ensure_logged_in (not a decorator)
+def ensure_logged_in():
+    if not session.get("user_id"):
+        return redirect(url_for("login"))
+    return None
 
 import os
 import requests
@@ -5,8 +23,112 @@ from flask import Flask, render_template, request, redirect, url_for, session, f
 from datetime import datetime, timezone
 from werkzeug.security import generate_password_hash, check_password_hash
 
+
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-only-change-me")
+
+from functools import wraps
+
+def require_login(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not session.get("user_id"):
+            return redirect(url_for("login"))
+        return fn(*args, **kwargs)
+    return wrapper
+
+def require_admin(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not session.get("user_id"):
+            return redirect(url_for("login"))
+        if session.get("role") != "admin":
+            return redirect(url_for("login"))
+        return fn(*args, **kwargs)
+    return wrapper
+
+def require_customer(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not session.get("user_id"):
+            return redirect(url_for("login"))
+        if session.get("role") == "admin":
+            return redirect(url_for("admin_home"))
+        return fn(*args, **kwargs)
+    return wrapper
+
+# --- PUBLIC PAGES ---
+@app.route("/welcome")
+def welcome():
+    return render_template("welcome.html")
+
+@app.route("/terms")
+def terms():
+    return render_template("terms.html")
+
+@app.route("/how-it-works")
+def how_it_works():
+    return render_template("how_it_works.html")
+
+@app.route("/setup")
+def setup():
+    return render_template("setup.html")
+
+# --- CUSTOMER ROUTES (minimal, working) ---
+@app.route("/home")
+@app.route("/app")
+@require_login
+def app_home():
+    return render_template("home_tab.html", tab="home")
+
+@app.route("/profile")
+def profile():
+    guard = login_required()
+    if guard: return guard
+    return render_template("profile_tab.html", tab="profile")
+
+@app.route("/groups")
+def groups():
+    guard = login_required()
+    if guard: return guard
+    return render_template("groups_tab.html", tab="groups")
+
+@app.route("/payments")
+def payments():
+    guard = login_required()
+    if guard: return guard
+    return render_template("payments_tab.html", tab="payments")
+
+@app.route("/rewards")
+def rewards():
+    guard = login_required()
+    if guard: return guard
+    return render_template("rewards_tab.html", tab="rewards")
+
+@app.route("/chat")
+def chat():
+    guard = login_required()
+    if guard: return guard
+    return render_template("chat.html", tab="support")
+
+@app.route("/transactions")
+def transactions():
+    guard = login_required()
+    if guard: return guard
+    return render_template("transactions.html")
+
+@app.route("/support/whatsapp")
+def support_whatsapp():
+    guard = login_required()
+    if guard: return guard
+    return redirect("https://wa.me/")  # TODO: put your number here
+
+
+# --- ADMIN GATE HELPER ---
+def admin_required():
+    if not session.get("user_id") or session.get("role") != "admin":
+        return redirect(url_for("login"))
+    return None
 
 
 # --- REGISTER ROUTE ---
@@ -50,34 +172,33 @@ def register():
 
 # --- MPIN SETUP ROUTE ---
 @app.route("/mpin/setup", methods=["GET", "POST"])
+@require_login
+@customer_required
 def mpin_setup():
-    if not session.get("user_id"):
-        return redirect(url_for("login"))
+    guard = login_required()
+    if guard: return guard
 
-    if session.get("role") == "admin":
-        return redirect(url_for("owner_dashboard"))
-
-    if request.method == "GET":
-        return render_template("add_upi.html", user={})
-
-    mpin = request.form.get("mpin", "").strip()
-    if not mpin:
-        flash("Please enter an MPIN.")
-        return redirect(url_for("mpin_setup"))
-    # Store mpin_hash and mpin_set_at in profiles
-    import hashlib, datetime
-    mpin_hash = hashlib.sha256(mpin.encode()).hexdigest()
-    now = datetime.datetime.utcnow().isoformat()
-    url = f"{SUPABASE_URL}/rest/v1/profiles?id=eq.{session['user_id']}"
-    headers = {
-        "apikey": SUPABASE_SERVICE_ROLE_KEY,
-        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
-        "Content-Type": "application/json"
-    }
-    data = {"mpin_hash": mpin_hash, "mpin_set_at": now}
-    requests.patch(url, headers=headers, json=data, timeout=30)
-    flash("MPIN set successfully.")
-    return redirect(url_for("app_home"))
+    if request.method == "POST":
+        mpin = request.form.get("mpin", "").strip()
+        if not mpin:
+            flash("Please enter an MPIN.")
+            return redirect(url_for("mpin_setup"))
+        import hashlib, datetime
+        mpin_hash = hashlib.sha256(mpin.encode()).hexdigest()
+        now = datetime.datetime.utcnow().isoformat()
+        url = f"{SUPABASE_URL}/rest/v1/profiles?id=eq.{session['user_id']}"
+        headers = {
+            "apikey": SUPABASE_SERVICE_ROLE_KEY,
+            "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+            "Content-Type": "application/json"
+        }
+        data = {"mpin_hash": mpin_hash, "mpin_set_at": now}
+        requests.patch(url, headers=headers, json=data, timeout=30)
+        flash("MPIN set successfully.")
+        return redirect(url_for("home"))
+    # TEMP user object to satisfy template
+    user = {"upi_id": ""}
+    return render_template("add_upi.html", user=user)
 
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -253,11 +374,16 @@ def set_lang(lang):
     return redirect(request.referrer or url_for("login"))
 
 @app.route("/")
-def home():
+def root():
+    if session.get("user_id"):
+        if session.get("role") == "admin":
+            return redirect(url_for("owner_dashboard"))
+        return redirect(url_for("app_home"))
     return redirect(url_for("login"))
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
+    from flask import abort
     # Safety: ensure env vars exist
     missing = [k for k in ["SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY"] if not os.getenv(k)]
     if missing:
@@ -292,43 +418,29 @@ def login():
         session["username"] = identifier
 
         is_admin = supabase_is_admin(user_id)
-        session["role"] = "admin" if is_admin else "customer"
-
         if is_admin:
-            return redirect(url_for("owner_dashboard"))
-        else:
-            # Check if MPIN is set in profiles
-            prof = supabase_get_profile(session["user_id"])
-            mpin_set = False
-            if prof.ok:
-                rows = prof.json()
-                if rows and rows[0].get("mpin_hash"):
-                    mpin_set = True
-            # If MPIN not set → force MPIN setup on first login
-            if not mpin_set:
-                return redirect(url_for("mpin_setup"))
-            return redirect(url_for("app_home"))
+            session["role"] = "admin"
+            return redirect("/owner/dashboard")
+
+        # customer
+        session["role"] = "customer"
+        # Check if MPIN is set in profiles
+        prof = supabase_get_profile(session["user_id"])
+        mpin_set = False
+        if prof.ok:
+            rows = prof.json()
+            if rows and rows[0].get("mpin_hash"):
+                mpin_set = True
+        if not mpin_set:
+            return redirect("/mpin/setup")
+        return redirect("/home")
 # --- LOGOUT ROUTE (ensure present) ---
 @app.route("/logout")
 def logout():
     session.clear()
     return redirect(url_for("login"))
 
-    # show readable error
-    try:
-        d = resp.json()
-        err = d.get("error_description") or d.get("msg") or d.get("message") or d.get("error") or "Invalid credentials"
-    except Exception:
-        err = resp.text or "Invalid credentials"
-    flash(f"Login failed: {err}")
-    return redirect(url_for("login"))
 
-@app.route("/app")
-def app_home():
-    # placeholder customer landing
-    if not session.get("user_id"):
-        return redirect(url_for("login"))
-    return "Logged in (customer)."
 
 
 
