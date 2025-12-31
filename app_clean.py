@@ -1,3 +1,7 @@
+@app.route("/register-test", methods=["GET", "POST"])
+def register_v2():
+    # TODO: Implement alternate registration logic here
+    return "Register V2 endpoint (not implemented yet)"
 
 import os
 import requests
