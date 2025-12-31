@@ -11,6 +11,66 @@ def logout():
     session.clear()
     return redirect(url_for("login"))
 
+# --- REGISTER ROUTE ---
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if request.method == "GET":
+        return render_template("register.html")
+    email = request.form.get("email", "").strip()
+    password = request.form.get("password", "").strip()
+    if not email or not password:
+        flash("Please enter email and password.")
+        return redirect(url_for("register"))
+    # Create user in Supabase Auth
+    url = f"{SUPABASE_URL}/auth/v1/signup"
+    headers = {"apikey": SUPABASE_ANON_KEY, "Content-Type": "application/json"}
+    resp = requests.post(url, headers=headers, json={"email": email, "password": password}, timeout=30)
+    if not resp.ok:
+        try:
+            err = resp.json().get("msg") or resp.json().get("error") or resp.text
+        except Exception:
+            err = resp.text
+        flash(f"Registration failed: {err}")
+        return redirect(url_for("register"))
+    # Insert profile row
+    user_id = resp.json().get("user", {}).get("id")
+    if user_id:
+        prof_url = f"{SUPABASE_URL}/rest/v1/profiles"
+        prof_headers = {
+            "apikey": SUPABASE_SERVICE_ROLE_KEY,
+            "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+            "Content-Type": "application/json"
+        }
+        requests.post(prof_url, headers=prof_headers, json={"id": user_id, "email": email}, timeout=30)
+    flash("Registration successful. Please log in.")
+    return redirect(url_for("login"))
+
+# --- MPIN SETUP ROUTE ---
+@app.route("/mpin/setup", methods=["GET", "POST"])
+def mpin_setup():
+    if not session.get("user_id"):
+        return redirect(url_for("login"))
+    if request.method == "GET":
+        return render_template("add_upi.html")
+    mpin = request.form.get("mpin", "").strip()
+    if not mpin:
+        flash("Please enter an MPIN.")
+        return redirect(url_for("mpin_setup"))
+    # Store mpin_hash and mpin_set_at in profiles
+    import hashlib, datetime
+    mpin_hash = hashlib.sha256(mpin.encode()).hexdigest()
+    now = datetime.datetime.utcnow().isoformat()
+    url = f"{SUPABASE_URL}/rest/v1/profiles?id=eq.{session['user_id']}"
+    headers = {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+        "Content-Type": "application/json"
+    }
+    data = {"mpin_hash": mpin_hash, "mpin_set_at": now}
+    requests.patch(url, headers=headers, json=data, timeout=30)
+    flash("MPIN set successfully.")
+    return redirect(url_for("app_home"))
+
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
@@ -177,6 +237,21 @@ def login():
         session["user_id"] = user_id
         session["email"] = data.get("user", {}).get("email")
         session["username"] = identifier
+
+        # Check if MPIN is set in profiles
+        prof_url = f"{SUPABASE_URL}/rest/v1/profiles?id=eq.{user_id}&select=mpin_hash"
+        prof_headers = {
+            "apikey": SUPABASE_SERVICE_ROLE_KEY,
+            "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}"
+        }
+        prof_resp = requests.get(prof_url, headers=prof_headers, timeout=30)
+        mpin_hash = None
+        if prof_resp.ok:
+            profs = prof_resp.json()
+            if profs and profs[0].get("mpin_hash"):
+                mpin_hash = profs[0]["mpin_hash"]
+        if not mpin_hash:
+            return redirect(url_for("mpin_setup"))
 
         is_admin = supabase_is_admin(user_id)
         session["role"] = "admin" if is_admin else "customer"
