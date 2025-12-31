@@ -323,23 +323,56 @@ def login():
         session["username"] = identifier
 
         # Check if MPIN is set in profiles
-        prof_url = f"{SUPABASE_URL}/rest/v1/profiles?id=eq.{user_id}&select=mpin_hash"
-        prof_headers = {
-            "apikey": SUPABASE_SERVICE_ROLE_KEY,
-            "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}"
-        }
-        prof_resp = requests.get(prof_url, headers=prof_headers, timeout=30)
-        mpin_hash = None
-        if prof_resp.ok:
-            profs = prof_resp.json()
-            if profs and profs[0].get("mpin_hash"):
-                mpin_hash = profs[0]["mpin_hash"]
-        if not mpin_hash:
+        prof = supabase_get_profile(session["user_id"])
+        mpin_set = False
+        if prof.ok:
+            rows = prof.json()
+            if rows and rows[0].get("mpin_hash"):
+                mpin_set = True
+        # If MPIN not set → force MPIN setup on first login
+        if not mpin_set:
             return redirect(url_for("mpin_setup"))
 
         is_admin = supabase_is_admin(user_id)
         session["role"] = "admin" if is_admin else "customer"
         return redirect(url_for("admin_home" if is_admin else "app_home"))
+# --- MPIN SETUP ROUTE ---
+@app.route("/mpin/setup", methods=["GET", "POST"])
+def mpin_setup():
+    if not session.get("user_id"):
+        return redirect(url_for("login"))
+
+    if request.method == "POST":
+        mpin = (request.form.get("mpin") or "").strip()
+        mpin2 = (request.form.get("mpin_confirm") or "").strip()
+
+        if not (mpin.isdigit() and 4 <= len(mpin) <= 6):
+            flash("MPIN must be 4 to 6 digits.")
+            return redirect(url_for("mpin_setup"))
+
+        if mpin != mpin2:
+            flash("MPINs do not match.")
+            return redirect(url_for("mpin_setup"))
+
+        hashed = generate_password_hash(mpin)
+        r = supabase_set_mpin(session["user_id"], hashed)
+        if not r.ok:
+            flash("Failed to save MPIN.")
+            print("[MPIN SAVE ERROR]", r.status_code, r.text)
+            return redirect(url_for("mpin_setup"))
+
+        flash("MPIN set successfully.")
+        # Redirect based on role
+        if session.get("role") == "admin":
+            return redirect(url_for("owner_dashboard"))
+        return redirect(url_for("home"))
+
+    return render_template("mpin_setup.html")
+# --- LOGOUT ROUTE (ensure present) ---
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
 
     # show readable error
     try:
