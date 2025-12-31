@@ -1,7 +1,3 @@
-@app.route("/logout")
-def logout():
-    session.clear()
-    return redirect(url_for("login"))
 
 import os
 import requests
@@ -9,6 +5,11 @@ from flask import Flask, render_template, request, redirect, url_for, session, f
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-only-change-me")
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
 
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
