@@ -212,4 +212,8 @@ def owner_users():
     return render_template("owner_users.html")
 
 @app.route("/owner/groups")
+def owner_groups():
+    if session.get("role") != "admin":
+        return redirect(url_for("login"))
+    return render_template("owner_groups.html")
 
