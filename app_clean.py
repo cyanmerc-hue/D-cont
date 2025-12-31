@@ -237,7 +237,13 @@ TRANSLATIONS = {
 def inject_t():
     def t(key, default=None):
         lang = (session.get("lang") or "en").lower()
-        return TRANSLATIONS.get(lang, {}).get(key, default or key)
+        text = TRANSLATIONS.get(lang, {}).get(key, default or key)
+        try:
+            return text.format(**kwargs) if kwargs else text
+        except Exception:
+            return text
+    return {"t": t}
+        "home_greeting": "Hello, {name} 👋",
     return {"t": t}
 
 # --- ADMIN OWNER ROUTES (risk, payments, settings, transactions, referrals) ---
