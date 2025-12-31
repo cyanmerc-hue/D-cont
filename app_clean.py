@@ -39,6 +39,13 @@ TRANSLATIONS = {
     }
 }
 
+@app.context_processor
+def inject_t():
+    def t(key, default=None):
+        lang = (session.get("lang") or "en").lower()
+        return TRANSLATIONS.get(lang, {}).get(key, default or key)
+    return {"t": t}
+
 # --- ADMIN OWNER ROUTES (risk, payments, settings, transactions, referrals) ---
 def _admin_required():
     return session.get("role") == "admin"
