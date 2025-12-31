@@ -6,32 +6,6 @@ from flask import Flask, render_template, request, redirect, url_for, session, f
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-only-change-me")
 
-TRANSLATIONS = {
-    "en": {
-        "login_title": "Login",
-        "trust_notice_title": "Trust & Safety Notice",
-        "trust_notice_line1": "Never share your MPIN or password with anyone.",
-        "trust_notice_line2": "If someone asks, report it immediately.",
-        "login_language": "Language",
-        "login_mpin_title": "Login with MPIN",
-        "login_mpin_help": "Enter your MPIN to continue.",
-        "login_mpin_btn": "Login with MPIN",
-        "login_or": "OR",
-        "login_mobile_title": "Login with Mobile / Email",
-        "login_mobile_label": "Mobile / Email",
-        "login_password_label": "Password",
-        "login_btn": "Login",
-        "login_fingerprint_btn": "Login with Fingerprint",
-        "login_fingerprint_help": "Use your device fingerprint if set up.",
-        "login_admin_title": "Admin Login",
-        "login_admin_user": "Admin Email",
-        "login_admin_pw": "Admin Password",
-        "login_admin_btn": "Admin Login",
-        "login_no_account": "Don't have an account?",
-        "login_register": "Register",
-        "terms": "Terms & Conditions",
-    }
-}
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
