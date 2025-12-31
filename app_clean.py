@@ -1,3 +1,51 @@
+# --- ADMIN OWNER ROUTES (risk, payments, settings, transactions, referrals) ---
+def _admin_required():
+    return session.get("role") == "admin"
+
+@app.route("/owner/risk")
+def owner_risk():
+    if not _admin_required():
+        return redirect(url_for("login"))
+    try:
+        return render_template("owner_risk.html")
+    except Exception:
+        return redirect(url_for("owner_dashboard"))
+
+@app.route("/owner/payments")
+def owner_payments():
+    if not _admin_required():
+        return redirect(url_for("login"))
+    try:
+        return render_template("owner_payments.html")
+    except Exception:
+        return redirect(url_for("owner_dashboard"))
+
+@app.route("/owner/settings")
+def owner_settings():
+    if not _admin_required():
+        return redirect(url_for("login"))
+    try:
+        return render_template("owner_settings.html")
+    except Exception:
+        return redirect(url_for("owner_dashboard"))
+
+@app.route("/owner/transactions")
+def owner_transactions():
+    if not _admin_required():
+        return redirect(url_for("login"))
+    try:
+        return render_template("owner_transactions.html")
+    except Exception:
+        return redirect(url_for("owner_dashboard"))
+
+@app.route("/owner/referrals")
+def owner_referrals():
+    if not _admin_required():
+        return redirect(url_for("login"))
+    try:
+        return render_template("owner_referrals.html")
+    except Exception:
+        return redirect(url_for("owner_dashboard"))
 import os
 import requests
 from flask import Flask, render_template, request, redirect, url_for, session, flash
