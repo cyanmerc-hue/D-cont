@@ -53,8 +53,13 @@ def register():
 def mpin_setup():
     if not session.get("user_id"):
         return redirect(url_for("login"))
+
+    if session.get("role") == "admin":
+        return redirect(url_for("owner_dashboard"))
+
     if request.method == "GET":
-        return render_template("add_upi.html")
+        return render_template("add_upi.html", user={})
+
     mpin = request.form.get("mpin", "").strip()
     if not mpin:
         flash("Please enter an MPIN.")
@@ -286,20 +291,23 @@ def login():
         session["email"] = data.get("user", {}).get("email")
         session["username"] = identifier
 
-        # Check if MPIN is set in profiles
-        prof = supabase_get_profile(session["user_id"])
-        mpin_set = False
-        if prof.ok:
-            rows = prof.json()
-            if rows and rows[0].get("mpin_hash"):
-                mpin_set = True
-        # If MPIN not set → force MPIN setup on first login
-        if not mpin_set:
-            return redirect(url_for("mpin_setup"))
-
         is_admin = supabase_is_admin(user_id)
         session["role"] = "admin" if is_admin else "customer"
-        return redirect(url_for("admin_home" if is_admin else "app_home"))
+
+        if is_admin:
+            return redirect(url_for("owner_dashboard"))
+        else:
+            # Check if MPIN is set in profiles
+            prof = supabase_get_profile(session["user_id"])
+            mpin_set = False
+            if prof.ok:
+                rows = prof.json()
+                if rows and rows[0].get("mpin_hash"):
+                    mpin_set = True
+            # If MPIN not set → force MPIN setup on first login
+            if not mpin_set:
+                return redirect(url_for("mpin_setup"))
+            return redirect(url_for("app_home"))
 # --- LOGOUT ROUTE (ensure present) ---
 @app.route("/logout")
 def logout():
