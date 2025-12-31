@@ -235,7 +235,7 @@ TRANSLATIONS = {
 
 @app.context_processor
 def inject_t():
-    def t(key, default=None):
+    def t(key, default=None, **kwargs):
         lang = (session.get("lang") or "en").lower()
         text = TRANSLATIONS.get(lang, {}).get(key, default or key)
         try:
@@ -243,7 +243,6 @@ def inject_t():
         except Exception:
             return text
     return {"t": t}
-        "home_greeting": "Hello, {name} 👋",
     return {"t": t}
 
 # --- ADMIN OWNER ROUTES (risk, payments, settings, transactions, referrals) ---
