@@ -51,38 +51,6 @@ def register():
         return redirect(url_for("login"))
 
     return render_template("register.html")
-@app.route("/register", methods=["GET", "POST"])
-def register():
-    if request.method == "GET":
-        return render_template("register.html")
-    email = request.form.get("email", "").strip()
-    password = request.form.get("password", "").strip()
-    if not email or not password:
-        flash("Please enter email and password.")
-        return redirect(url_for("register"))
-    # Create user in Supabase Auth
-    url = f"{SUPABASE_URL}/auth/v1/signup"
-    headers = {"apikey": SUPABASE_ANON_KEY, "Content-Type": "application/json"}
-    resp = requests.post(url, headers=headers, json={"email": email, "password": password}, timeout=30)
-    if not resp.ok:
-        try:
-            err = resp.json().get("msg") or resp.json().get("error") or resp.text
-        except Exception:
-            err = resp.text
-        flash(f"Registration failed: {err}")
-        return redirect(url_for("register"))
-    # Insert profile row
-    user_id = resp.json().get("user", {}).get("id")
-    if user_id:
-        prof_url = f"{SUPABASE_URL}/rest/v1/profiles"
-        prof_headers = {
-            "apikey": SUPABASE_SERVICE_ROLE_KEY,
-            "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
-            "Content-Type": "application/json"
-        }
-        requests.post(prof_url, headers=prof_headers, json={"id": user_id, "email": email}, timeout=30)
-    flash("Registration successful. Please log in.")
-    return redirect(url_for("login"))
 
 # --- MPIN SETUP ROUTE ---
 @app.route("/mpin/setup", methods=["GET", "POST"])
