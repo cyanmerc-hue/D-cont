@@ -304,38 +304,6 @@ def login():
         is_admin = supabase_is_admin(user_id)
         session["role"] = "admin" if is_admin else "customer"
         return redirect(url_for("admin_home" if is_admin else "app_home"))
-# --- MPIN SETUP ROUTE ---
-@app.route("/mpin/setup", methods=["GET", "POST"])
-def mpin_setup():
-    if not session.get("user_id"):
-        return redirect(url_for("login"))
-
-    if request.method == "POST":
-        mpin = (request.form.get("mpin") or "").strip()
-        mpin2 = (request.form.get("mpin_confirm") or "").strip()
-
-        if not (mpin.isdigit() and 4 <= len(mpin) <= 6):
-            flash("MPIN must be 4 to 6 digits.")
-            return redirect(url_for("mpin_setup"))
-
-        if mpin != mpin2:
-            flash("MPINs do not match.")
-            return redirect(url_for("mpin_setup"))
-
-        hashed = generate_password_hash(mpin)
-        r = supabase_set_mpin(session["user_id"], hashed)
-        if not r.ok:
-            flash("Failed to save MPIN.")
-            print("[MPIN SAVE ERROR]", r.status_code, r.text)
-            return redirect(url_for("mpin_setup"))
-
-        flash("MPIN set successfully.")
-        # Redirect based on role
-        if session.get("role") == "admin":
-            return redirect(url_for("owner_dashboard"))
-        return redirect(url_for("home"))
-
-    return render_template("mpin_setup.html")
 # --- LOGOUT ROUTE (ensure present) ---
 @app.route("/logout")
 def logout():
