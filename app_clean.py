@@ -2,6 +2,8 @@
 import os
 import requests
 from flask import Flask, render_template, request, redirect, url_for, session, flash
+from datetime import datetime, timezone
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-only-change-me")
@@ -12,6 +14,43 @@ def logout():
     return redirect(url_for("login"))
 
 # --- REGISTER ROUTE ---
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if request.method == "POST":
+        email = (request.form.get("email") or "").strip().lower()
+        password = (request.form.get("password") or "").strip()
+        full_name = (request.form.get("full_name") or "").strip()
+        phone = (request.form.get("phone") or "").strip()
+
+        if not email or not password:
+            flash("Email and password are required.")
+            return redirect(url_for("register"))
+
+        # 1) Create user in Supabase Auth
+        r = supabase_signup(email, password)
+        if not r.ok:
+            try:
+                msg = r.json()
+            except Exception:
+                msg = r.text
+            flash(f"Registration failed: {msg}")
+            return redirect(url_for("register"))
+
+        data = r.json()
+        user_id = (data.get("user") or {}).get("id")
+        if not user_id:
+            flash("Registration created but no user id returned. Check Supabase email confirmation setting.")
+            return redirect(url_for("login"))
+
+        # 2) Create profile row
+        p = supabase_upsert_profile(user_id, email, full_name, phone, role="customer")
+        if not p.ok:
+            print("[PROFILE UPSERT ERROR]", p.status_code, p.text)
+
+        flash("Account created. Please log in.")
+        return redirect(url_for("login"))
+
+    return render_template("register.html")
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "GET":
@@ -184,6 +223,51 @@ def supabase_is_admin(user_id: str) -> bool:
         return False
     rows = r.json()
     return bool(rows and rows[0].get("is_admin") is True)
+
+# --- SUPABASE HELPER FUNCTIONS ---
+def supabase_signup(email: str, password: str):
+    url = f"{SUPABASE_URL}/auth/v1/signup"
+    headers = {"apikey": SUPABASE_ANON_KEY, "Content-Type": "application/json"}
+    return requests.post(url, headers=headers, json={"email": email, "password": password}, timeout=30)
+
+def supabase_upsert_profile(user_id: str, email: str, full_name: str = "", phone: str = "", role: str = "customer"):
+    url = f"{SUPABASE_URL}/rest/v1/profiles"
+    headers = {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "resolution=merge-duplicates",
+    }
+    payload = {
+        "id": user_id,
+        "email": email,
+        "full_name": full_name or None,
+        "phone": phone or None,
+        "role": role,
+    }
+    return requests.post(url, headers=headers, json=payload, timeout=30)
+
+def supabase_get_profile(user_id: str):
+    url = f"{SUPABASE_URL}/rest/v1/profiles"
+    headers = {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+    }
+    params = {"id": f"eq.{user_id}", "select": "id,email,full_name,phone,role,is_admin,mpin_hash,mpin_set_at"}
+    return requests.get(url, headers=headers, params=params, timeout=30)
+
+def supabase_set_mpin(user_id: str, mpin_hash: str):
+    url = f"{SUPABASE_URL}/rest/v1/profiles?id=eq.{user_id}"
+    headers = {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "mpin_hash": mpin_hash,
+        "mpin_set_at": datetime.now(timezone.utc).isoformat()
+    }
+    return requests.patch(url, headers=headers, json=payload, timeout=30)
 
 # Minimal translation helper using TRANSLATIONS dict
 @app.context_processor
