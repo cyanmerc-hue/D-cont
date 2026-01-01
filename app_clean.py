@@ -27,7 +27,9 @@ from werkzeug.security import generate_password_hash, check_password_hash
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-only-change-me")
 
+
 from functools import wraps
+from flask import redirect, url_for, session
 
 def require_login(fn):
     @wraps(fn)
@@ -75,45 +77,37 @@ def setup():
     return render_template("setup.html")
 
 
+
 # --- CUSTOMER TAB ROUTES ---
 @app.route("/home")
+@require_login
 def app_home():
-    guard = require_login()
-    if guard: return guard
     return render_template("home_tab.html", tab="home")
 
 @app.route("/groups")
+@require_login
 def groups():
-    guard = require_login()
-    if guard: return guard
     return render_template("groups_tab.html", tab="groups")
 
 @app.route("/payments")
+@require_login
 def payments():
-    guard = require_login()
-    if guard: return guard
     return render_template("payments_tab.html", tab="payments")
 
 @app.route("/rewards")
+@require_login
 def rewards():
-    guard = require_login()
-    if guard: return guard
     return render_template("rewards_tab.html", tab="rewards")
 
 @app.route("/chat")
+@require_login
 def chat():
-    guard = require_login()
-    if guard: return guard
     return render_template("chat.html", tab="support")
 
 @app.route("/profile")
+@require_login
 def profile():
-    guard = require_login()
-    if guard: return guard
-    # If your profile page is profile_tab.html (most likely), use that:
     return render_template("profile_tab.html", tab="profile")
-    # If you actually want templates/profile.html instead, swap to:
-    # return render_template("profile.html")
 
 
 # --- ADMIN GATE HELPER ---
