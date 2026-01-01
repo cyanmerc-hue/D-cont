@@ -46,6 +46,24 @@ def trust_band(score):
         return "Low"
     return "Very Low"
 
+@app.template_filter("trust_badge_class")
+def trust_badge_class(score):
+    try:
+        s = float(score or 0)
+    except (TypeError, ValueError):
+        s = 0
+
+    # return CSS class names that your template expects
+    if s >= 80:
+        return "badge badge-success"
+    if s >= 60:
+        return "badge badge-good"
+    if s >= 40:
+        return "badge badge-warn"
+    if s >= 20:
+        return "badge badge-low"
+    return "badge badge-danger"
+
 @app.route("/_routes")
 def _routes():
     return "<pre>" + str(app.url_map) + "</pre>"
