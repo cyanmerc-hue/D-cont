@@ -395,26 +395,30 @@ def login():
         return f"Missing env vars: {', '.join(missing)}", 500
 
     if request.method == "GET":
-        return render_template("login.html")
+        return render_template("login.html", asset_version="", lang=session.get("lang","en"))
 
-    identifier = (
-        request.form.get("username")
-        or request.form.get("identifier")
-        or request.form.get("email")
-        or request.form.get("phone")
-        or ""
-    ).strip()
+    try:
+        identifier = (
+            request.form.get("username")
+            or request.form.get("identifier")
+            or request.form.get("email")
+            or request.form.get("phone")
+            or ""
+        ).strip()
 
-    password = (request.form.get("password") or request.form.get("mpin") or "").strip()
+        password = (request.form.get("password") or request.form.get("mpin") or "").strip()
 
-    if not identifier or not password:
-        flash("Please enter email/phone and password.")
-        return redirect(url_for("login"))
+        if not identifier or not password:
+            flash("Please enter email and password.", "error")
+            return redirect(url_for("login"))
 
-    email = identifier if "@" in identifier else map_identifier_to_email(identifier)
-    resp = supabase_login(email, password)
+        email = identifier if "@" in identifier else map_identifier_to_email(identifier)
+        resp = supabase_login(email, password)
 
-    if resp.ok:
+        if not resp.ok:
+            flash("Invalid login. Please try again.", "error")
+            return redirect(url_for("login"))
+
         data = resp.json()
         user_id = data.get("user", {}).get("id")
         session.clear()
@@ -439,6 +443,13 @@ def login():
         if not mpin_set:
             return redirect("/mpin/setup")
         return redirect("/home")
+    except Exception as e:
+        app.logger.exception("Login failed")
+        flash("Login failed. Please try again.", "error")
+        return redirect(url_for("login"))
+
+    # Default return if all else fails
+    return render_template("login.html", asset_version="", lang=session.get("lang","en"))
 # --- LOGOUT ROUTE (ensure present) ---
 @app.route("/logout")
 def logout():
