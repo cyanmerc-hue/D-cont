@@ -388,14 +388,33 @@ def root():
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    from flask import abort
     # Safety: ensure env vars exist
     missing = [k for k in ["SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY"] if not os.getenv(k)]
     if missing:
         return f"Missing env vars: {', '.join(missing)}", 500
 
     if request.method == "GET":
-        return render_template("login.html", asset_version="", lang=session.get("lang","en"))
+        return render_template("login.html", asset_version="", lang=session.get("lang", "en"))
+
+    # ---- helpers local to this function (so it's self-contained) ----
+    def sb_auth_login(email: str, password: str):
+        url = f"{SUPABASE_URL}/auth/v1/token?grant_type=password"
+        headers = {
+            "apikey": SUPABASE_ANON_KEY,
+            "Authorization": f"Bearer {SUPABASE_ANON_KEY}",
+            "Content-Type": "application/json",
+        }
+        return requests.post(url, headers=headers, json={"email": email, "password": password}, timeout=30)
+
+    def sb_rest(method: str, path: str, *, params=None, json=None):
+        # Use SERVICE ROLE for server-side access to profiles
+        url = f"{SUPABASE_URL}{path}"
+        headers = {
+            "apikey": SUPABASE_SERVICE_ROLE_KEY,
+            "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+            "Content-Type": "application/json",
+        }
+        return requests.request(method, url, headers=headers, params=params, json=json, timeout=30)
 
     try:
         identifier = (
@@ -412,44 +431,87 @@ def login():
             flash("Please enter email and password.", "error")
             return redirect(url_for("login"))
 
-        email = identifier if "@" in identifier else map_identifier_to_email(identifier)
-        resp = supabase_login(email, password)
+        email = identifier.lower()
+        if "@" not in email:
+            # your existing helper (keep it in your file)
+            email = map_identifier_to_email(identifier)
+
+        resp = sb_auth_login(email, password)
 
         if not resp.ok:
+            # optional: show supabase message in logs only
+            try:
+                app.logger.warning("Login failed: %s", resp.text)
+            except Exception:
+                pass
             flash("Invalid login. Please try again.", "error")
             return redirect(url_for("login"))
 
         data = resp.json()
-        user_id = data.get("user", {}).get("id")
+        user_id = (data.get("user") or {}).get("id")
+        if not user_id:
+            app.logger.error("Supabase login OK but no user id. Payload: %s", data)
+            flash("Login failed. Please try again.", "error")
+            return redirect(url_for("login"))
+
+        # ---- load profile ----
+        # NOTE: select only columns that exist in your table to avoid 42703 errors
+        prof_resp = sb_rest(
+            "GET",
+            "/rest/v1/profiles",
+            params={
+                "id": f"eq.{user_id}",
+                "select": "id,email,full_name,phone,role,is_admin,created_at",
+            },
+        )
+
+        profile = None
+        if prof_resp.ok:
+            rows = prof_resp.json()
+            profile = rows[0] if rows else None
+
+        # ---- create profile if missing ----
+        if not profile:
+            ins = {
+                "id": user_id,
+                "email": email,
+                "full_name": request.form.get("full_name") or "",
+                "phone": request.form.get("phone") or "",
+                "role": "customer",
+                "is_admin": False,
+            }
+            create_resp = sb_rest(
+                "POST",
+                "/rest/v1/profiles",
+                params={"select": "id,email,full_name,phone,role,is_admin,created_at"},
+                json=ins,
+            )
+            if create_resp.ok:
+                rows = create_resp.json()
+                profile = rows[0] if rows else ins
+            else:
+                # not fatal — continue with minimal session
+                app.logger.warning("Profile create failed: %s", create_resp.text)
+                profile = ins
+
+        # ---- decide role ----
+        is_admin = bool(profile.get("is_admin")) or (profile.get("role") in ["admin", "owner"])
         session.clear()
         session["user_id"] = user_id
-        session["email"] = data.get("user", {}).get("email")
-        session["username"] = identifier
+        session["email"] = profile.get("email") or email
+        session["full_name"] = profile.get("full_name") or ""
+        session["phone"] = profile.get("phone") or ""
+        session["role"] = "admin" if is_admin else "customer"
 
-        is_admin = supabase_is_admin(user_id)
+        # ---- redirect ----
         if is_admin:
-            session["role"] = "admin"
-            return redirect("/owner/dashboard")
+            return redirect(url_for("owner_dashboard"))
+        return redirect(url_for("app_home"))
 
-        # customer
-        session["role"] = "customer"
-        # Check if MPIN is set in profiles
-        prof = supabase_get_profile(session["user_id"])
-        mpin_set = False
-        if prof.ok:
-            rows = prof.json()
-            if rows and rows[0].get("mpin_hash"):
-                mpin_set = True
-        if not mpin_set:
-            return redirect("/mpin/setup")
-        return redirect("/home")
-    except Exception as e:
-        app.logger.exception("Login failed")
+    except Exception:
+        app.logger.exception("Exception during /login POST")
         flash("Login failed. Please try again.", "error")
         return redirect(url_for("login"))
-
-    # Default return if all else fails
-    return render_template("login.html", asset_version="", lang=session.get("lang","en"))
 # --- LOGOUT ROUTE (ensure present) ---
 @app.route("/logout")
 def logout():
