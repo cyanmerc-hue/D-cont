@@ -74,54 +74,46 @@ def how_it_works():
 def setup():
     return render_template("setup.html")
 
-# --- CUSTOMER ROUTES (minimal, working) ---
-@app.route("/home")
-@app.route("/app")
-@require_login
-def app_home():
-    return render_template("home_tab.html", tab="home")
 
-@app.route("/profile")
-def profile():
-    guard = login_required()
+# --- CUSTOMER TAB ROUTES ---
+@app.route("/home")
+def app_home():
+    guard = require_login()
     if guard: return guard
-    return render_template("profile_tab.html", tab="profile")
+    return render_template("home_tab.html", tab="home")
 
 @app.route("/groups")
 def groups():
-    guard = login_required()
+    guard = require_login()
     if guard: return guard
     return render_template("groups_tab.html", tab="groups")
 
 @app.route("/payments")
 def payments():
-    guard = login_required()
+    guard = require_login()
     if guard: return guard
     return render_template("payments_tab.html", tab="payments")
 
 @app.route("/rewards")
 def rewards():
-    guard = login_required()
+    guard = require_login()
     if guard: return guard
     return render_template("rewards_tab.html", tab="rewards")
 
 @app.route("/chat")
 def chat():
-    guard = login_required()
+    guard = require_login()
     if guard: return guard
     return render_template("chat.html", tab="support")
 
-@app.route("/transactions")
-def transactions():
-    guard = login_required()
+@app.route("/profile")
+def profile():
+    guard = require_login()
     if guard: return guard
-    return render_template("transactions.html")
-
-@app.route("/support/whatsapp")
-def support_whatsapp():
-    guard = login_required()
-    if guard: return guard
-    return redirect("https://wa.me/")  # TODO: put your number here
+    # If your profile page is profile_tab.html (most likely), use that:
+    return render_template("profile_tab.html", tab="profile")
+    # If you actually want templates/profile.html instead, swap to:
+    # return render_template("profile.html")
 
 
 # --- ADMIN GATE HELPER ---
