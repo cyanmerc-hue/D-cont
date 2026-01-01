@@ -230,6 +230,7 @@ TRANSLATIONS = {
         "login_no_account": "Don't have an account?",
         "login_register": "Register",
         "terms": "Terms & Conditions",
+        "home_greeting": "Hello, {name} 👋",
     }
 }
 
@@ -238,11 +239,15 @@ def inject_t():
     def t(key, default=None, **kwargs):
         lang = (session.get("lang") or "en").lower()
         text = TRANSLATIONS.get(lang, {}).get(key, default or key)
-        try:
-            return text.format(**kwargs) if kwargs else text
-        except Exception:
-            return text
-    return {"t": t}
+
+        # allow t('home_greeting', name=full_name) using {name}
+        if kwargs and isinstance(text, str):
+            try:
+                text = text.format(**kwargs)
+            except Exception:
+                pass
+        return text
+
     return {"t": t}
 
 # --- ADMIN OWNER ROUTES (risk, payments, settings, transactions, referrals) ---
@@ -363,14 +368,6 @@ def supabase_set_mpin(user_id: str, mpin_hash: str):
         "mpin_set_at": datetime.now(timezone.utc).isoformat()
     }
     return requests.patch(url, headers=headers, json=payload, timeout=30)
-
-# Minimal translation helper using TRANSLATIONS dict
-@app.context_processor
-def inject_t():
-    def t(key, default=None):
-        lang = (session.get("lang") or "en").lower()
-        return TRANSLATIONS.get(lang, {}).get(key, default or key)
-    return {"t": t}
 
 # Optional: Language switch route
 @app.route("/set-lang/<lang>")
