@@ -24,8 +24,13 @@ from datetime import datetime, timezone
 from werkzeug.security import generate_password_hash, check_password_hash
 
 
+
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-only-change-me")
+
+@app.route("/_routes")
+def _routes():
+    return "<pre>" + str(app.url_map) + "</pre>"
 
 
 from functools import wraps
