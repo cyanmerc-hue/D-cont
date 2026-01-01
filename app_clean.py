@@ -1,3 +1,24 @@
+@app.template_filter("trust_band")
+def trust_band(score):
+    """
+    Convert a numeric trust score into a label for the UI.
+    Used in templates/profile_tab.html as: {{ trust_score|trust_band }}
+    """
+    try:
+        s = float(score or 0)
+    except (TypeError, ValueError):
+        s = 0
+
+    # Adjust ranges however you want:
+    if s >= 80:
+        return "Excellent"
+    if s >= 60:
+        return "Good"
+    if s >= 40:
+        return "Fair"
+    if s >= 20:
+        return "Low"
+    return "Very Low"
 from functools import wraps
 from flask import redirect, url_for, session
 
@@ -112,7 +133,7 @@ def chat():
 @app.route("/profile")
 @require_login
 def profile():
-    return render_template("profile_tab.html", tab="profile")
+    return render_template("profile_tab.html", tab="profile", trust_score=0)
 
 
 # --- ADMIN GATE HELPER ---
