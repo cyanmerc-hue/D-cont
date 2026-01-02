@@ -29,6 +29,13 @@ from werkzeug.security import generate_password_hash, check_password_hash
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-only-change-me")
 
+from werkzeug.utils import secure_filename
+import os, uuid
+from datetime import datetime
+from flask import request, redirect, url_for, flash
+
+ALLOWED_DOCS = {"aadhaar", "pan", "passport"}
+ALLOWED_EXTS = {".png", ".jpg", ".jpeg", ".pdf"}
 @app.template_filter("trust_band")
 def trust_band(score):
     try:
@@ -150,6 +157,37 @@ def chat():
 def profile():
     return render_template("profile_tab.html", tab="profile", trust_score=0)
 
+@app.route("/profile/doc/<doc_type>/upload", methods=["POST"])
+@require_login
+def upload_profile_doc(doc_type):
+    if doc_type not in ALLOWED_DOCS:
+        flash("Invalid document type.", "error")
+        return redirect(url_for("profile") + "#docs")
+
+    file = request.files.get("file")
+    if not file or not file.filename:
+        flash("Please choose a file.", "error")
+        return redirect(url_for("profile") + "#docs")
+
+    ext = os.path.splitext(file.filename.lower())[1]
+    if ext not in ALLOWED_EXTS:
+        flash("Only PDF/JPG/PNG allowed.", "error")
+        return redirect(url_for("profile") + "#docs")
+
+    user_id = session.get("user_id")
+    filename = secure_filename(file.filename)
+
+    # Example: save locally (Render disk is ephemeral, but OK for testing)
+    os.makedirs("uploads", exist_ok=True)
+    stored_name = f"{user_id}_{doc_type}_{uuid.uuid4().hex}{ext}"
+    path = os.path.join("uploads", stored_name)
+    file.save(path)
+
+    # TODO: if you're using Supabase Storage, upload the bytes there instead
+    # TODO: update your DB row for this doc (stored_path/original_filename/etc)
+
+    flash(f"{doc_type.upper()} uploaded successfully.", "success")
+    return redirect(url_for("profile") + "#docs")
 
 # --- ADMIN GATE HELPER ---
 def admin_required():
