@@ -1,3 +1,14 @@
+import os
+import requests
+from flask import Flask, render_template, request, redirect, url_for, session, flash
+from datetime import datetime, timezone
+from werkzeug.security import generate_password_hash, check_password_hash
+from functools import wraps
+
+app = Flask(__name__)
+app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-only-change-me")
+
+# --- Owner document status route (moved for Flask registration) ---
 @app.route("/owner/docs/<doc_id>/status", methods=["POST"])
 @require_owner
 def owner_set_doc_status(doc_id):
@@ -19,114 +30,6 @@ def owner_set_doc_status(doc_id):
         flash("Status updated.", "success")
 
     return redirect(url_for("owner_docs"))
-from functools import wraps
-from flask import redirect, url_for, session
-
-def customer_required(fn):
-    @wraps(fn)
-    def wrapper(*args, **kwargs):
-        if not session.get("user_id"):
-            return redirect(url_for("login"))
-        # if admin logged in, block customer pages (optional)
-        if session.get("role") == "admin":
-            return redirect(url_for("admin_home"))
-        return fn(*args, **kwargs)
-    return wrapper
-# Helper: ensure_logged_in (not a decorator)
-def ensure_logged_in():
-    if not session.get("user_id"):
-        return redirect(url_for("login"))
-    return None
-
-import os
-import requests
-from flask import Flask, render_template, request, redirect, url_for, session, flash
-from datetime import datetime, timezone
-from werkzeug.security import generate_password_hash, check_password_hash
-
-
-
-
-app = Flask(__name__)
-app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-only-change-me")
-
-from werkzeug.utils import secure_filename
-import os, uuid
-from datetime import datetime
-from flask import request, redirect, url_for, flash
-
-ALLOWED_DOCS = {"aadhaar", "pan", "passport"}
-ALLOWED_EXTS = {".png", ".jpg", ".jpeg", ".pdf"}
-@app.template_filter("trust_band")
-def trust_band(score):
-    try:
-        s = float(score or 0)
-    except (TypeError, ValueError):
-        s = 0
-
-    if s >= 80:
-        return "Excellent"
-    if s >= 60:
-        return "Good"
-    if s >= 40:
-        return "Fair"
-    if s >= 20:
-        return "Low"
-    return "Very Low"
-
-@app.template_filter("trust_badge_class")
-def trust_badge_class(score):
-    try:
-        s = float(score or 0)
-    except (TypeError, ValueError):
-        s = 0
-
-    # return CSS class names that your template expects
-    if s >= 80:
-        return "badge badge-success"
-    if s >= 60:
-        return "badge badge-good"
-    if s >= 40:
-        return "badge badge-warn"
-    if s >= 20:
-        return "badge badge-low"
-    return "badge badge-danger"
-
-@app.route("/_routes")
-def _routes():
-    return "<pre>" + str(app.url_map) + "</pre>"
-
-
-from functools import wraps
-from flask import redirect, url_for, session
-
-def require_login(fn):
-    @wraps(fn)
-    def wrapper(*args, **kwargs):
-        if not session.get("user_id"):
-            return redirect(url_for("login"))
-        return fn(*args, **kwargs)
-    return wrapper
-
-def require_admin(fn):
-    @wraps(fn)
-    def wrapper(*args, **kwargs):
-        if not session.get("user_id"):
-            return redirect(url_for("login"))
-        if session.get("role") != "admin":
-            return redirect(url_for("login"))
-        return fn(*args, **kwargs)
-    return wrapper
-
-def require_customer(fn):
-    @wraps(fn)
-    def wrapper(*args, **kwargs):
-        if not session.get("user_id"):
-            return redirect(url_for("login"))
-        if session.get("role") == "admin":
-            return redirect(url_for("admin_home"))
-        return fn(*args, **kwargs)
-    return wrapper
 
 # --- PUBLIC PAGES ---
 @app.route("/welcome")
