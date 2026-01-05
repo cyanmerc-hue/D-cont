@@ -1,3 +1,24 @@
+@app.route("/owner/docs/<doc_id>/status", methods=["POST"])
+@require_owner
+def owner_set_doc_status(doc_id):
+    status = (request.form.get("status") or "").strip()
+    note = (request.form.get("admin_note") or "").strip()
+
+    if status not in ("verified", "rejected", "pending"):
+        abort(400)
+
+    url = f"{SUPABASE_URL}/rest/v1/user_documents?id=eq.{doc_id}"
+    headers = {**sb_headers(), "Content-Type": "application/json"}
+    payload = {"status": status, "admin_note": note}
+
+    r = requests.patch(url, headers=headers, json=payload, timeout=30)
+    if not r.ok:
+        app.logger.error("Status update failed: %s %s", r.status_code, r.text)
+        flash("Failed to update status.", "error")
+    else:
+        flash("Status updated.", "success")
+
+    return redirect(url_for("owner_docs"))
 from functools import wraps
 from flask import redirect, url_for, session
 
@@ -160,37 +181,132 @@ def profile():
 @app.route("/profile/doc/<doc_type>/upload", methods=["POST"])
 @require_login
 def upload_profile_doc(doc_type):
+
     if doc_type not in ALLOWED_DOCS:
-        flash("Invalid document type.", "error")
-        return redirect(url_for("profile") + "#docs")
-
-    file = request.files.get("file")
-    if not file or not file.filename:
-        flash("Please choose a file.", "error")
-        return redirect(url_for("profile") + "#docs")
-
-    ext = os.path.splitext(file.filename.lower())[1]
-    if ext not in ALLOWED_EXTS:
-        flash("Only PDF/JPG/PNG allowed.", "error")
-        return redirect(url_for("profile") + "#docs")
+        abort(404)
 
     user_id = session.get("user_id")
-    filename = secure_filename(file.filename)
+    if not user_id:
+        return redirect(url_for("login"))
 
-    # Example: save locally (Render disk is ephemeral, but OK for testing)
-    os.makedirs("uploads", exist_ok=True)
-    stored_name = f"{user_id}_{doc_type}_{uuid.uuid4().hex}{ext}"
-    path = os.path.join("uploads", stored_name)
-    file.save(path)
+    f = request.files.get("file")
+    if not f or f.filename == "":
+        flash("Please choose a file.", "error")
+        return redirect(url_for("profile"))
 
-    # TODO: if you're using Supabase Storage, upload the bytes there instead
-    # TODO: update your DB row for this doc (stored_path/original_filename/etc)
+    file_bytes = f.read()
+    if len(file_bytes) > MAX_DOC_BYTES:
+        flash("File too large. Max 8MB.", "error")
+        return redirect(url_for("profile"))
 
-    flash(f"{doc_type.upper()} uploaded successfully.", "success")
-    return redirect(url_for("profile") + "#docs")
+    original_name = secure_filename(f.filename)
+    mime_type = f.mimetype or mimetypes.guess_type(original_name)[0] or "application/octet-stream"
+
+    allowed_mimes = {"application/pdf", "image/jpeg", "image/png", "image/webp"}
+    if mime_type not in allowed_mimes:
+        flash("Only PDF/JPG/PNG/WebP allowed.", "error")
+        return redirect(url_for("profile"))
+
+    ts = int(time.time())
+    storage_path = f"{user_id}/{doc_type}/{ts}_{original_name}"
+
+    r = upload_to_supabase_storage(DOC_BUCKET, storage_path, file_bytes, mime_type)
+    if not r.ok:
+        app.logger.error("Storage upload failed: %s %s", r.status_code, r.text)
+        flash("Upload failed. Please try again.", "error")
+        return redirect(url_for("profile"))
+
+    ir = insert_document_row(user_id, doc_type, storage_path, original_name, mime_type, len(file_bytes))
+    if not ir.ok:
+        app.logger.error("DB insert failed: %s %s", ir.status_code, ir.text)
+        flash("Uploaded but failed to save record. Contact support.", "error")
+        return redirect(url_for("profile"))
+
+    flash(f"{doc_type.title()} uploaded successfully.", "success")
+    return redirect(url_for("profile"))
 
 # --- ADMIN GATE HELPER ---
 def admin_required():
+    pass
+
+# --- Owner/Admin gate helper ---
+def require_owner(fn):
+    from functools import wraps
+    @wraps(fn)
+    def w(*args, **kwargs):
+        if session.get("role") not in ("owner", "admin"):
+            return redirect(url_for("login"))
+        return fn(*args, **kwargs)
+    return w
+
+# --- Admin documents page route ---
+@app.route("/owner/docs", methods=["GET"])
+@require_owner
+def owner_docs():
+    url = f"{SUPABASE_URL}/rest/v1/user_documents"
+    headers = sb_headers()
+    params = {
+        "select": "*",
+        "order": "created_at.desc",
+        "limit": "200",
+    }
+    r = requests.get(url, headers=headers, params=params, timeout=30)
+    docs = r.json() if r.ok else []
+    return render_template("owner_docs.html", docs=docs)
+
+# --- Admin download document route ---
+@app.route("/owner/docs/<doc_id>/download", methods=["GET"])
+@require_owner
+def owner_download_doc(doc_id):
+    url = f"{SUPABASE_URL}/rest/v1/user_documents"
+    headers = sb_headers()
+    params = {"id": f"eq.{doc_id}", "select": "file_path", "limit": "1"}
+    r = requests.get(url, headers=headers, params=params, timeout=30)
+    if not r.ok or not r.json():
+        abort(404)
+
+    file_path = r.json()[0]["file_path"]
+    sr = create_signed_url(DOC_BUCKET, file_path, expires_in=300)
+    if not sr.ok:
+        abort(500)
+    return redirect(f"{SUPABASE_URL}{sr.json()['signedURL']}")
+    
+# --- Customer document download route ---
+@app.route("/profile/doc/<doc_type>", methods=["GET"])
+@require_login
+def download_profile_doc(doc_type):
+    if doc_type not in ALLOWED_DOCS:
+        abort(404)
+
+    user_id = session.get("user_id")
+    if not user_id:
+        return redirect(url_for("login"))
+
+    # get newest doc for this user+type
+    url = f"{SUPABASE_URL}/rest/v1/user_documents"
+    headers = sb_headers()
+    params = {
+        "user_id": f"eq.{user_id}",
+        "doc_type": f"eq.{doc_type}",
+        "select": "file_path,original_name",
+        "order": "created_at.desc",
+        "limit": "1",
+    }
+    r = requests.get(url, headers=headers, params=params, timeout=30)
+    if not r.ok or not r.json():
+        flash("No document uploaded yet.", "error")
+        return redirect(url_for("profile"))
+
+    file_path = r.json()[0]["file_path"]
+
+    sr = create_signed_url(DOC_BUCKET, file_path, expires_in=300)
+    if not sr.ok:
+        app.logger.error("Signed URL failed: %s %s", sr.status_code, sr.text)
+        flash("Could not generate download link.", "error")
+        return redirect(url_for("profile"))
+
+    signed = sr.json().get("signedURL")
+    return redirect(f"{SUPABASE_URL}{signed}")
     if not session.get("user_id") or session.get("role") != "admin":
         return redirect(url_for("login"))
     return None
@@ -269,6 +385,66 @@ def mpin_setup():
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+
+# --- Supabase Storage REST helpers ---
+import os, time, mimetypes, requests
+from werkzeug.utils import secure_filename
+from flask import request, redirect, url_for, flash, send_file, abort
+
+SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
+SERVICE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+DOC_BUCKET = os.getenv("SUPABASE_DOC_BUCKET", "profile-docs")
+
+ALLOWED_DOCS = {"aadhaar", "pan", "passport"}
+MAX_DOC_BYTES = 8 * 1024 * 1024  # 8MB
+
+def sb_headers():
+    return {
+        "Authorization": f"Bearer {SERVICE_KEY}",
+        "apikey": SERVICE_KEY,
+    }
+
+def upload_to_supabase_storage(bucket: str, path: str, file_bytes: bytes, content_type: str):
+    # Upsert=true so re-upload overwrites
+    url = f"{SUPABASE_URL}/storage/v1/object/{bucket}/{path}"
+    headers = sb_headers()
+    headers["Content-Type"] = content_type or "application/octet-stream"
+    # Supabase Storage supports x-upsert
+    headers["x-upsert"] = "true"
+
+    r = requests.post(url, headers=headers, data=file_bytes, timeout=60)
+    return r
+
+def create_signed_url(bucket: str, path: str, expires_in: int = 300):
+    url = f"{SUPABASE_URL}/storage/v1/object/sign/{bucket}/{path}"
+    r = requests.post(url, headers={**sb_headers(), "Content-Type": "application/json"},
+                      json={"expiresIn": expires_in}, timeout=30)
+    return r
+
+def insert_document_row(user_id: str, doc_type: str, file_path: str, original_name: str, mime_type: str, size_bytes: int):
+    # PostgREST insert
+    url = f"{SUPABASE_URL}/rest/v1/user_documents"
+    headers = {**sb_headers(), "Content-Type": "application/json", "Prefer": "return=representation"}
+    payload = [{
+        "user_id": user_id,
+        "doc_type": doc_type,
+        "file_path": file_path,
+        "original_name": original_name,
+        "mime_type": mime_type,
+        "size_bytes": size_bytes,
+        "status": "pending",
+    }]
+    return requests.post(url, headers=headers, json=payload, timeout=30)
+
+def get_user_documents(user_id: str):
+    url = f"{SUPABASE_URL}/rest/v1/user_documents"
+    headers = sb_headers()
+    params = {
+        "user_id": f"eq.{user_id}",
+        "select": "*",
+        "order": "created_at.desc",
+    }
+    return requests.get(url, headers=headers, params=params, timeout=30)
 
 # --- TRANSLATION DICTIONARY ---
 TRANSLATIONS = {
@@ -605,4 +781,8 @@ def owner_groups():
     if session.get("role") != "admin":
         return redirect(url_for("login"))
     return render_template("owner_groups.html")
+
+
+if __name__ == "__main__":
+    app.run(debug=True)
 

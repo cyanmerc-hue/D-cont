@@ -1,17 +1,391 @@
-<!-- Minimal MPIN Setup Page -->
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>MPIN Setup</title>
-</head>
-<body>
-    <h1>Set Your MPIN</h1>
-    <form method="post">
-        <label>MPIN: <input type="password" name="mpin" required></label><br>
-        <label>Confirm MPIN: <input type="password" name="mpin_confirm" required></label><br>
-        <button type="submit">Set MPIN</button>
-    </form>
-    <a href="{{ url_for('logout') }}">Logout</a>
-</body>
-</html>
+import os
+import requests
+from functools import wraps
+from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
+
+app = Flask(__name__)
+app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-only-change-me")
+
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+
+ASSET_VERSION = os.getenv("ASSET_VERSION", "")
+
+# -----------------------------
+# Translations
+# -----------------------------
+TRANSLATIONS = {
+    "en": {
+        "login_title": "Login",
+        "trust_notice_title": "Trust & Safety Notice",
+        "trust_notice_line1": "Never share your MPIN or password with anyone.",
+        "trust_notice_line2": "If someone asks, report it immediately.",
+        "login_language": "Language",
+        "login_mpin_title": "Login with MPIN",
+        "login_mpin_help": "Enter your MPIN to continue.",
+        "login_mpin_btn": "Login with MPIN",
+        "login_or": "OR",
+        "login_mobile_title": "Login with Mobile / Email",
+        "login_mobile_label": "Mobile / Email",
+        "login_password_label": "Password",
+        "login_btn": "Login",
+        "login_fingerprint_btn": "Login with Fingerprint",
+        "login_fingerprint_help": "Use your device fingerprint if set up.",
+        "login_admin_title": "Admin Login",
+        "login_admin_user": "Admin Email",
+        "login_admin_pw": "Admin Password",
+        "login_admin_btn": "Admin Login",
+        "login_no_account": "Don't have an account?",
+        "login_register": "Register",
+        "terms": "Terms & Conditions",
+    }
+}
+
+@app.context_processor
+def inject_globals():
+    def t(key, default=None):
+        lang = (session.get("lang") or "en").lower()
+        return TRANSLATIONS.get(lang, {}).get(key, default or key)
+
+    return {
+        "t": t,
+        "asset_version": ASSET_VERSION
+    }
+
+
+# -----------------------------
+# Small helpers
+# -----------------------------
+def sb_headers_anon():
+    return {"apikey": SUPABASE_ANON_KEY, "Authorization": f"Bearer {SUPABASE_ANON_KEY}"}
+
+def sb_headers_service():
+    return {"apikey": SUPABASE_SERVICE_ROLE_KEY, "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}"}
+
+def require_env():
+    missing = [k for k in ["SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY"] if not os.getenv(k)]
+    if missing:
+        return f"Missing env vars: {', '.join(missing)}", 500
+    return None
+
+def require_login(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not session.get("user_id"):
+            return redirect(url_for("login"))
+        return fn(*args, **kwargs)
+    return wrapper
+
+def require_admin(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not session.get("user_id"):
+            return redirect(url_for("login"))
+        if session.get("role") != "admin":
+            return redirect(url_for("app_home"))
+        return fn(*args, **kwargs)
+    return wrapper
+
+def safe_render(template_name, **ctx):
+    """
+    Render a template if it exists; otherwise show a simple message.
+    This prevents 404/500 when some templates are missing.
+    """
+    try:
+        return render_template(template_name, **ctx)
+    except Exception as e:
+        return f"Template error for {template_name}: {e}", 500
+
+
+# -----------------------------
+# Supabase helpers
+# -----------------------------
+def supabase_sign_in(email: str, password: str):
+    url = f"{SUPABASE_URL}/auth/v1/token?grant_type=password"
+    payload = {"email": email, "password": password}
+    r = requests.post(url, headers=sb_headers_anon(), json=payload, timeout=30)
+    return r
+
+def supabase_sign_up(email: str, password: str):
+    url = f"{SUPABASE_URL}/auth/v1/signup"
+    payload = {"email": email, "password": password}
+    r = requests.post(url, headers=sb_headers_anon(), json=payload, timeout=30)
+    return r
+
+def supabase_get_profile(user_id: str):
+    url = f"{SUPABASE_URL}/rest/v1/profiles?id=eq.{user_id}&select=id,email,full_name,phone,role,is_admin,created_at"
+    r = requests.get(url, headers=sb_headers_service(), timeout=30)
+    if r.status_code != 200:
+        return None
+    data = r.json()
+    return data[0] if data else None
+
+def supabase_upsert_profile(user_id: str, email: str, full_name: str = None, phone: str = None):
+    url = f"{SUPABASE_URL}/rest/v1/profiles"
+    payload = {
+        "id": user_id,
+        "email": email,
+        "full_name": full_name,
+        "phone": phone
+    }
+    headers = sb_headers_service()
+    headers["Content-Type"] = "application/json"
+    headers["Prefer"] = "resolution=merge-duplicates,return=representation"
+    r = requests.post(url, headers=headers, json=payload, timeout=30)
+    return r
+
+def supabase_is_admin(user_id: str) -> bool:
+    url = f"{SUPABASE_URL}/rest/v1/profiles?id=eq.{user_id}&select=is_admin"
+    r = requests.get(url, headers=sb_headers_service(), timeout=30)
+    if r.status_code != 200:
+        return False
+    rows = r.json()
+    return bool(rows and rows[0].get("is_admin") is True)
+
+
+# -----------------------------
+# Core routes (NO duplicates)
+# -----------------------------
+@app.route("/set-lang/<lang>")
+def set_lang(lang):
+    session["lang"] = (lang or "en").lower()
+    return redirect(request.referrer or url_for("login"))
+
+@app.route("/")
+def root():
+    if session.get("user_id"):
+        if session.get("role") == "admin":
+            return redirect(url_for("owner_dashboard"))
+        return redirect(url_for("app_home"))
+    return redirect(url_for("login"))
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    env_err = require_env()
+    if env_err:
+        return env_err
+
+    if request.method == "GET":
+        return safe_render("login.html")
+
+    email = (request.form.get("email") or request.form.get("mobile") or "").strip().lower()
+    password = (request.form.get("password") or "").strip()
+    if not email or not password:
+        flash("Email and password are required.")
+        return redirect(url_for("login"))
+
+    r = supabase_sign_in(email, password)
+    if r.status_code != 200:
+        flash("Invalid login. Please check email/password.")
+        return redirect(url_for("login"))
+
+    data = r.json()
+    user = (data.get("user") or {})
+    user_id = user.get("id")
+    if not user_id:
+        flash("Login failed: missing user id.")
+        return redirect(url_for("login"))
+
+    # session
+    session["user_id"] = user_id
+    session["email"] = email
+
+    # role
+    is_admin = supabase_is_admin(user_id)
+    session["role"] = "admin" if is_admin else "customer"
+
+    # ensure profile row exists (best-effort)
+    supabase_upsert_profile(user_id, email)
+
+    # first-login flows:
+    # For now: always send customers to /profile (and from there they can set MPIN/UPI later)
+    if is_admin:
+        return redirect(url_for("owner_dashboard"))
+    return redirect(url_for("app_home"))
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    env_err = require_env()
+    if env_err:
+        return env_err
+
+    if request.method == "GET":
+        return safe_render("register.html")
+
+    email = (request.form.get("email") or "").strip().lower()
+    password = (request.form.get("password") or "").strip()
+    full_name = (request.form.get("full_name") or "").strip() or None
+    phone = (request.form.get("phone") or "").strip() or None
+
+    if not email or not password:
+        flash("Email and password are required.")
+        return redirect(url_for("register"))
+
+    r = supabase_sign_up(email, password)
+    if r.status_code not in (200, 201):
+        # Supabase often returns a JSON error message
+        try:
+            msg = r.json().get("msg") or r.json().get("error_description") or "Registration failed."
+        except Exception:
+            msg = "Registration failed."
+        flash(msg)
+        return redirect(url_for("register"))
+
+    user = (r.json().get("user") or {})
+    user_id = user.get("id")
+
+    # Create/merge profile row
+    if user_id:
+        supabase_upsert_profile(user_id, email, full_name=full_name, phone=phone)
+
+    flash("Registration successful. Please login.")
+    return redirect(url_for("login"))
+
+# -----------------------------
+# Customer pages (to stop “URL not found”)
+# -----------------------------
+@app.route("/home")
+@require_login
+def app_home():
+    if session.get("role") == "admin":
+        return redirect(url_for("owner_dashboard"))
+    # Use your existing customer template(s)
+    # If you prefer customer_home.html instead, change it here.
+    return safe_render("home_tab.html", tab="home", nav_user_pill=True)
+
+@app.route("/profile")
+@require_login
+def profile():
+    if session.get("role") == "admin":
+        # admins can still view profile page if you want; otherwise redirect admin
+        return redirect(url_for("owner_dashboard"))
+
+    prof = supabase_get_profile(session["user_id"]) or {}
+    return safe_render("profile_tab.html", tab="profile", nav_user_pill=True, user=prof)
+
+@app.route("/groups")
+@require_login
+def groups():
+    if session.get("role") == "admin":
+        return redirect(url_for("owner_dashboard"))
+    return safe_render("groups_tab.html", tab="groups", nav_user_pill=True)
+
+@app.route("/payments")
+@require_login
+def payments():
+    if session.get("role") == "admin":
+        return redirect(url_for("owner_dashboard"))
+    return safe_render("payments_tab.html", tab="payments", nav_user_pill=True)
+
+@app.route("/rewards")
+@require_login
+def rewards():
+    if session.get("role") == "admin":
+        return redirect(url_for("owner_dashboard"))
+    return safe_render("rewards_tab.html", tab="rewards", nav_user_pill=True)
+
+@app.route("/chat")
+@require_login
+def chat():
+    if session.get("role") == "admin":
+        return redirect(url_for("owner_dashboard"))
+    return safe_render("chat.html", tab="support", nav_user_pill=True)
+
+@app.route("/terms")
+def terms():
+    return safe_render("terms.html")
+
+# -----------------------------
+# MPIN / UPI setup placeholders (won’t break templates)
+# -----------------------------
+@app.route("/mpin/setup", methods=["GET", "POST"])
+@require_login
+def mpin_setup():
+    # You said: first login user sets MPIN. For now we show a page (if exists).
+    # Later you can implement hashing + storing in profiles.
+    if request.method == "GET":
+        return safe_render("mpin_setup.html")
+    flash("MPIN setup not implemented yet.")
+    return redirect(url_for("profile"))
+
+@app.route("/upi/setup", methods=["GET", "POST"])
+@require_login
+def upi_setup():
+    prof = supabase_get_profile(session["user_id"]) or {}
+    # Your add_upi.html expects `user`, so we pass it to avoid 'user is undefined'
+    if request.method == "GET":
+        return safe_render("add_upi.html", user=prof)
+    flash("UPI saving not implemented yet.")
+    return redirect(url_for("profile"))
+
+# -----------------------------
+# Admin / Owner routes
+# -----------------------------
+@app.route("/admin")
+@require_admin
+def admin_redirect():
+    return redirect(url_for("owner_dashboard"))
+
+@app.route("/owner/dashboard")
+@require_admin
+def owner_dashboard():
+    return safe_render("owner_dashboard.html", t="dashboard")
+
+@app.route("/owner/users")
+@require_admin
+def owner_users():
+    return safe_render("owner_users.html", t="users")
+
+@app.route("/owner/groups")
+@require_admin
+def owner_groups():
+    return safe_render("owner_groups.html", t="groups")
+
+@app.route("/owner/payments")
+@require_admin
+def owner_payments():
+    return safe_render("owner_payments.html", t="payments")
+
+@app.route("/owner/referrals")
+@require_admin
+def owner_referrals():
+    return safe_render("owner_referrals.html", t="referrals")
+
+@app.route("/owner/risk")
+@require_admin
+def owner_risk():
+    return safe_render("owner_risk.html", t="risk")
+
+@app.route("/owner/settings")
+@require_admin
+def owner_settings():
+    return safe_render("owner_settings.html", t="settings")
+
+# -----------------------------
+# Debug helpers
+# -----------------------------
+@app.route("/debug/whoami")
+def debug_whoami():
+    return jsonify({
+        "user_id": session.get("user_id"),
+        "email": session.get("email"),
+        "role": session.get("role"),
+    })
+
+@app.route("/debug/isadmin")
+@require_login
+def debug_isadmin():
+    return jsonify({
+        "user_id": session.get("user_id"),
+        "is_admin": session.get("role") == "admin"
+    })
+
+
+if __name__ == "__main__":
+    app.run(debug=True)
